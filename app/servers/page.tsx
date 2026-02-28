@@ -66,7 +66,7 @@ export default function ServersPage() {
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="mb-4 text-lg font-medium text-zinc-300">Add server</h2>
         <p className="mb-4 text-sm text-zinc-500">
-          Use the server <strong>IP only</strong> in Host (e.g. 51.79.46.205). Use the <strong>RCON port</strong> from your host—not the game/join port (e.g. 21715 is usually the game port). Shockbyte: check Config, Console, or RCON in the panel for RCON port and password.
+          Use the server <strong>IP only</strong> in Host (e.g. 51.79.46.205). Use the <strong>RCON port</strong> from your host—not the game/join port (e.g. 21715 is game; Shockbyte RCON is often 21717).
         </p>
         <form onSubmit={handleAdd} className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -98,7 +98,7 @@ export default function ServersPage() {
               value={form.port}
               onChange={(e) => setForm((f) => ({ ...f, port: e.target.value }))}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
-              placeholder="28016"
+              placeholder="e.g. 21717 or 28016"
               min={1}
               max={65535}
               required
