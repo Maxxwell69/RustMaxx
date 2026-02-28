@@ -124,7 +124,7 @@ export async function ensureConnection(
         }
         done(
           false,
-          "Connection timeout (20s). This request is from Railway’s IP. Local RustAdmin works from your PC’s IP—so the host may allow your IP but not Railway’s. Use Railway Pro Static Outbound IP and ask the host to whitelist it, or run RustMaxx locally (npm run dev)."
+          "Connection timeout (20s). Host likely allows your PC’s IP (like RustAdmin) but not Railway’s. Run RustMaxx locally (npm run dev) so RCON connects from your PC."
         );
       }
     }, timeoutMs);
