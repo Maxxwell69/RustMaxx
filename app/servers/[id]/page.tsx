@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 type LogEntry = { id: string; type: string; message: string; created_at: string };
+type Player = { id: string; name: string };
 
 const QUICK_COMMANDS = [
   { label: "status", command: "status" },
@@ -24,6 +25,8 @@ export default function ServerDetailPage() {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [command, setCommand] = useState("");
   const [sending, setSending] = useState(false);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [playersLoading, setPlayersLoading] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -94,6 +97,20 @@ export default function ServerDetailPage() {
     };
   }, []);
 
+  async function refreshPlayers() {
+    if (!connected) return;
+    setPlayersLoading(true);
+    try {
+      const r = await fetch(`/api/servers/${id}/playerlist`);
+      const data = await r.json().catch(() => ({}));
+      setPlayers(Array.isArray(data.players) ? data.players : []);
+    } catch {
+      setPlayers([]);
+    } finally {
+      setPlayersLoading(false);
+    }
+  }
+
   async function sendCommand(cmd: string) {
     const c = (cmd || command).trim();
     if (!c) return;
@@ -146,6 +163,39 @@ export default function ServerDetailPage() {
       <p className="text-sm text-zinc-500">
         Uses <strong>WebRCON</strong> (WebSocket). If you get timeout on Railway, run RustMaxx locally (<code>npm run dev</code>) so the connection comes from your PC.
       </p>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+        <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
+          <span>Players</span>
+          <button
+            type="button"
+            onClick={refreshPlayers}
+            disabled={!connected || playersLoading}
+            className="rounded px-2 py-1 text-xs bg-zinc-700 text-zinc-200 hover:bg-zinc-600 disabled:opacity-50"
+          >
+            {playersLoading ? "Loading…" : "Refresh"}
+          </button>
+        </div>
+        <div className="max-h-32 overflow-y-auto p-2">
+          {players.length === 0 && !playersLoading ? (
+            <p className="text-sm text-zinc-500">Connect and click Refresh to load players.</p>
+          ) : (
+            <ul className="space-y-1">
+              {players.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/servers/${id}/players/${encodeURIComponent(p.id)}?name=${encodeURIComponent(p.name)}`}
+                    className="text-sm text-amber-400 hover:text-amber-300 hover:underline"
+                  >
+                    {p.name}
+                  </Link>
+                  <span className="text-zinc-500 text-xs ml-2">{p.id}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm text-zinc-400">

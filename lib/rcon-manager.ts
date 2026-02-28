@@ -26,6 +26,12 @@ const connectionByServerId = new Map<
   { client: WebRconInstance; config: { host: string; port: number; password: string } }
 >();
 
+let nextRequestId = 1;
+const pendingByServerId = new Map<
+  string,
+  Map<number, { resolve: (value: string) => void; timeout: ReturnType<typeof setTimeout> }>
+>();
+
 function emit(serverId: string, event: LogEvent) {
   const set = streamsByServerId.get(serverId);
   if (set) Array.from(set).forEach((fn) => fn(event));
@@ -90,8 +96,16 @@ export async function ensureConnection(
       done(true);
     });
     client.on("message", (...args: unknown[]) => {
-      const msg = args[0] as { message?: string } | undefined;
+      const msg = args[0] as { message?: string; identity?: number } | undefined;
+      const identity = msg?.identity;
       const text = String(msg?.message ?? "").trim();
+      const pending = identity != null ? pendingByServerId.get(serverId)?.get(identity) : undefined;
+      if (pending) {
+        clearTimeout(pending.timeout);
+        pendingByServerId.get(serverId)?.delete(identity!);
+        pending.resolve(text);
+        return;
+      }
       if (!text) return;
       const event: LogEvent = { type: "console", message: text, createdAt: new Date().toISOString() };
       emit(serverId, event);
@@ -107,6 +121,35 @@ export async function ensureConnection(
     });
 
     client.connect(password);
+  });
+}
+
+export function runAndWait(
+  serverId: string,
+  command: string,
+  timeoutMs: number = 8000
+): Promise<string> {
+  const conn = connectionByServerId.get(serverId);
+  if (!conn) return Promise.reject(new Error("Not connected"));
+  const id = nextRequestId++;
+  if (nextRequestId > 0x7ffffffe) nextRequestId = 1;
+  return new Promise((resolve, reject) => {
+    let map = pendingByServerId.get(serverId);
+    if (!map) {
+      map = new Map();
+      pendingByServerId.set(serverId, map);
+    }
+    const timeout = setTimeout(() => {
+      if (map!.delete(id)) reject(new Error("Command response timeout"));
+    }, timeoutMs);
+    map.set(id, { resolve, timeout });
+    try {
+      conn.client.run(command, id);
+    } catch (err) {
+      map.delete(id);
+      clearTimeout(timeout);
+      reject(err);
+    }
   });
 }
 
