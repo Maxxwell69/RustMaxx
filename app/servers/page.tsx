@@ -66,7 +66,7 @@ export default function ServersPage() {
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="mb-4 text-lg font-medium text-zinc-300">Add server</h2>
         <p className="mb-4 text-sm text-zinc-500">
-          Use the server <strong>IP only</strong> in Host (e.g. 51.79.46.205). Use the <strong>RCON port</strong> from your host—not the game/join port (e.g. 21715 is game; Shockbyte RCON is often 21717).
+          Use the server <strong>IP only</strong> in Host (e.g. 51.79.46.205). For port, use <strong>RCON</strong> only—not Main (21715), Query (21716), or RUSTPLUS (21782). Shockbyte: Server Ports → RCON = <strong>21717</strong>.
         </p>
         <form onSubmit={handleAdd} className="grid gap-4 sm:grid-cols-2">
           <div>
