@@ -1,6 +1,6 @@
 /**
  * Server-side RCON connection manager.
- * Maintains one connection per server id; reconnect with backoff on failure.
+ * Tries TCP RCON first; if TCP connects but auth has no response, falls back to WebRCON (WebSocket).
  * Never expose RCON password to the browser.
  */
 
@@ -8,6 +8,8 @@
 const Rcon = require("rcon");
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const net = require("net");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const WebRcon = require("webrconjs");
 
 type LogEvent = { type: "console" | "chat"; message: string; createdAt: string };
 
@@ -41,11 +43,20 @@ interface RconClient {
   _tcpSocket?: { writable?: boolean };
 }
 
+interface WebRconInstance {
+  connect: (password: string) => void;
+  run: (command: string, id?: number) => void;
+  disconnect: () => boolean;
+  on: (ev: string, fn: (...args: unknown[]) => void) => void;
+  once: (ev: string, fn: (...args: unknown[]) => void) => void;
+}
+
+type Connection =
+  | { type: "tcp"; client: RconClient; config: { host: string; port: number; password: string } }
+  | { type: "web"; client: WebRconInstance; config: { host: string; port: number; password: string } };
+
 const streamsByServerId = new Map<string, Set<Listener>>();
-const connectionByServerId = new Map<
-  string,
-  { client: RconClient; config: { host: string; port: number; password: string } }
->();
+const connectionByServerId = new Map<string, Connection>();
 
 function emit(serverId: string, event: LogEvent) {
   const set = streamsByServerId.get(serverId);
@@ -65,6 +76,63 @@ export function subscribe(serverId: string, listener: Listener): () => void {
   };
 }
 
+const AUTH_NO_RESPONSE = "TCP connected but RCON auth had no response";
+
+async function tryWebRcon(
+  serverId: string,
+  host: string,
+  port: number,
+  password: string,
+  onLog: (serverId: string, type: "console" | "chat", message: string) => Promise<void>
+): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    const config = { host, port, password };
+    const client: WebRconInstance = new WebRcon(host, port);
+
+    let resolved = false;
+    const done = (ok: boolean, error?: string) => {
+      if (resolved) return;
+      resolved = true;
+      if (ok) connectionByServerId.set(serverId, { type: "web", client, config });
+      resolve({ ok, error });
+    };
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        try {
+          client.disconnect();
+        } catch {
+          //
+        }
+        done(false, "WebRCON connection timeout (10s).");
+      }
+    }, 10000);
+
+    client.once("connect", () => {
+      clearTimeout(timeout);
+      done(true);
+    });
+    client.on("message", (...args: unknown[]) => {
+      const msg = args[0] as { message?: string } | undefined;
+      const text = String(msg?.message ?? "").trim();
+      if (!text) return;
+      const event: LogEvent = { type: "console", message: text, createdAt: new Date().toISOString() };
+      emit(serverId, event);
+      onLog(serverId, "console", text).catch(() => {});
+    });
+    client.once("error", (...args: unknown[]) => {
+      clearTimeout(timeout);
+      const err = args[0] as Error | undefined;
+      done(false, err?.message ?? String(err));
+    });
+    client.once("disconnect", () => {
+      connectionByServerId.delete(serverId);
+    });
+
+    client.connect(password);
+  });
+}
+
 export async function ensureConnection(
   serverId: string,
   host: string,
@@ -74,8 +142,13 @@ export async function ensureConnection(
 ): Promise<{ ok: boolean; error?: string }> {
   const existing = connectionByServerId.get(serverId);
   if (existing) {
-    const s = existing.client._tcpSocket;
-    if (s?.writable) return { ok: true };
+    if (existing.type === "tcp") {
+      const s = existing.client._tcpSocket;
+      if (s?.writable) return { ok: true };
+    } else {
+      const ws = (existing.client as WebRconInstance & { socket?: { readyState?: number } }).socket;
+      if (ws?.readyState === 1) return { ok: true };
+    }
     connectionByServerId.delete(serverId);
     try {
       existing.client.disconnect();
@@ -89,7 +162,7 @@ export async function ensureConnection(
     return { ok: false, error: tcpError };
   }
 
-  return new Promise((resolve) => {
+  const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
     const config = { host, port, password };
     const client: RconClient = new Rcon(host, port, password, {
       tcp: true,
@@ -101,7 +174,7 @@ export async function ensureConnection(
     const done = (ok: boolean, error?: string) => {
       if (resolved) return;
       resolved = true;
-      if (ok) connectionByServerId.set(serverId, { client, config });
+      if (ok) connectionByServerId.set(serverId, { type: "tcp", client, config });
       resolve({ ok, error });
     };
 
@@ -155,23 +228,30 @@ export async function ensureConnection(
         }
         const isLocal = process.env.NODE_ENV !== "production";
         const detail = tcpConnected
-          ? "TCP connected but RCON auth had no response. Wrong password, or host may use WebRCON (browser-only) on this port."
+          ? AUTH_NO_RESPONSE
           : isLocal
             ? "RCON timeout. Check host, port (e.g. 21717), and password; ensure the server is running."
             : "Host likely allows your PC's IP but not Railway's. Run RustMaxx locally (npm run dev).";
-        done(false, `Connection timeout (15s). ${detail}`);
+        resolve({ ok: false, error: `Connection timeout (15s). ${detail}` });
       }
     }, timeoutMs);
     client.once("auth", () => clearTimeout(t));
     client.once("error", () => clearTimeout(t));
   });
+
+  if (result.ok) return result;
+  if (result.error?.includes(AUTH_NO_RESPONSE)) {
+    return tryWebRcon(serverId, host, port, password, onLog);
+  }
+  return result;
 }
 
 export function sendCommand(serverId: string, command: string): { ok: boolean; error?: string } {
   const conn = connectionByServerId.get(serverId);
   if (!conn) return { ok: false, error: "Not connected" };
   try {
-    conn.client.send(command);
+    if (conn.type === "tcp") conn.client.send(command);
+    else conn.client.run(command, 0);
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
