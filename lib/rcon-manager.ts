@@ -122,9 +122,12 @@ export async function ensureConnection(
         } catch {
           //
         }
+        const isLocal = process.env.NODE_ENV !== "production";
         done(
           false,
-          "Connection timeout (20s). Host likely allows your PC’s IP (like RustAdmin) but not Railway’s. Run RustMaxx locally (npm run dev) so RCON connects from your PC."
+          isLocal
+            ? "Connection timeout (20s). Check host IP, RCON port (e.g. 21717), and RCON password. Ensure the game server is running and the port is open."
+            : "Connection timeout (20s). Host likely allows your PC's IP (like RustAdmin) but not Railway's. Run RustMaxx locally (npm run dev) so RCON connects from your PC."
         );
       }
     }, timeoutMs);
