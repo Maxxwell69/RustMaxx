@@ -144,7 +144,7 @@ export default function ServerDetailPage() {
       </div>
 
       <p className="text-sm text-zinc-500">
-        RCON runs from <strong>Railway’s servers</strong>. If you get timeout but local RustAdmin works, the host (e.g. Shockbyte) allows your PC’s IP but not Railway’s—and most hosts won’t whitelist Railway. <strong>Run RustMaxx locally</strong>: clone the repo, <code>npm run dev</code>, then connect; the RCON connection will come from your PC, same as RustAdmin.
+        Uses <strong>WebRCON</strong> (WebSocket). If you get timeout on Railway, run RustMaxx locally (<code>npm run dev</code>) so the connection comes from your PC.
       </p>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
