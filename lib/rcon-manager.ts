@@ -124,7 +124,7 @@ export async function ensureConnection(
         }
         done(
           false,
-          "Connection timeout (20s). Hosted servers (e.g. Shockbyte) often allow RCON only from their panel—external apps like RustMaxx on Railway may be blocked. Check with your host for 'external RCON' or run RustMaxx locally to test."
+          "Connection timeout (20s). If another app (e.g. RustAdmin) connects to this server, the host may allow only certain IPs. Use Railway Pro Static Outbound IP and ask the host to whitelist it, or run RustMaxx locally."
         );
       }
     }, timeoutMs);

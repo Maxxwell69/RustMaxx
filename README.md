@@ -117,7 +117,7 @@ If **Connect** fails with 502 or an error message:
 3. **Firewall** – The machine hosting the Rust server must allow **inbound TCP** on the RCON port from the internet (or at least from Railway’s egress IPs).
 4. **Password** – Double-check the RCON password in the server config and in RustMaxx (they must match).
 5. **Error text** – The UI shows the exact error (e.g. `Connection timeout`, `Authentication failed`, `ECONNREFUSED`). Use it to narrow down the cause.
-6. **Connection timeout with hosted servers (Shockbyte, etc.)** – Many hosts allow RCON only from their own web console (same network), not from external IPs like Railway. If you always get timeout, ask your host whether &quot;external RCON&quot; or &quot;remote RCON&quot; is supported. As a workaround, run RustMaxx locally on your PC and connect to the same server IP:port to confirm the host allows external RCON at all.
+6. **Connection timeout but RustAdmin (or similar) connects** – The host may allow only certain IPs for RCON. Railway uses dynamic egress IPs by default. Fix: enable **Railway Pro → Static Outbound IP** (Settings → Networking), then ask your host (e.g. Shockbyte) to whitelist that IP for the RCON port. Alternatively, run RustMaxx locally from a network the host already allows.
 
 ## How to add a server and connect
 
