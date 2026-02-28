@@ -1,5 +1,6 @@
 import Link from "next/link";
 import LogoutButton from "./logout-button";
+import { Logo } from "@/components/marketing/Logo";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -21,14 +22,8 @@ export default function ServersLayout({
       <header className="border-b border-zinc-800 bg-zinc-900/80 px-3 py-1.5 sm:px-6">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Link href="/servers" className="shrink-0">
-              <img
-                src="/rustmaxx-logo.png"
-                alt="RustMaxx"
-                className="h-40 w-auto sm:h-48"
-                width={960}
-                height={192}
-              />
+            <Link href="/servers" className="flex shrink-0 items-center">
+              <Logo className="h-40 w-auto sm:h-48" width={960} height={192} fallbackClassName="text-2xl font-bold text-rust-cyan sm:text-3xl" />
             </Link>
             <span className="text-sm text-zinc-600">|</span>
             <nav className="flex flex-wrap items-center gap-4" aria-label="Site navigation">

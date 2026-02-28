@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "./Logo";
 
 const FOOTER_LINKS = [
   { href: "/server-list", label: "Servers" },
@@ -17,13 +18,7 @@ export function Footer() {
         <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
           <div>
             <Link href="/" className="inline-block">
-              <img
-                src="/rustmaxx-logo.png"
-                alt="RustMaxx"
-                className="h-7 w-auto"
-                width={140}
-                height={28}
-              />
+              <Logo className="h-7 w-auto" width={140} height={28} fallbackClassName="text-lg font-bold text-rust-cyan" />
             </Link>
             <p className="mt-2 max-w-sm text-sm text-zinc-500">
               One command center for Rust servers. Admin tools, stream interaction, and live map intel.
