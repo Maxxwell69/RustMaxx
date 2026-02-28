@@ -2,7 +2,50 @@ import { NextRequest, NextResponse } from "next/server";
 import { runAndWait } from "@/lib/rcon-manager";
 
 function parsePlayerlist(raw: string): { id: string; name: string }[] {
-  const lines = raw.trim().split(/\r?\n/).filter((l) => l.trim());
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  // Rust `playerlist` often returns JSON. Try JSON first.
+  try {
+    const json = JSON.parse(trimmed) as unknown;
+    const out: { id: string; name: string }[] = [];
+
+    const push = (id: unknown, name: unknown) => {
+      const sid = typeof id === "string" ? id : typeof id === "number" ? String(id) : "";
+      const sname = typeof name === "string" ? name : typeof name === "number" ? String(name) : "";
+      const cleanId = sid.trim();
+      const cleanName = (sname.trim() || cleanId).trim();
+      if (cleanId) out.push({ id: cleanId, name: cleanName });
+    };
+
+    if (Array.isArray(json)) {
+      for (const row of json) {
+        if (row && typeof row === "object") {
+          const r = row as Record<string, unknown>;
+          push(
+            r.SteamID ?? r.steamid ?? r.UserID ?? r.userid ?? r.id,
+            r.DisplayName ?? r.displayName ?? r.Username ?? r.username ?? r.Name ?? r.name
+          );
+        } else {
+          push(row, row);
+        }
+      }
+      if (out.length) return out;
+    }
+
+    if (json && typeof json === "object") {
+      const obj = json as Record<string, unknown>;
+      // Handle edge cases where JSON is a map of ids -> names
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === "string") push(k, v);
+      }
+      if (out.length) return out;
+    }
+  } catch {
+    // fall back to line parsing
+  }
+
+  const lines = trimmed.split(/\r?\n/).filter((l) => l.trim());
   const players: { id: string; name: string }[] = [];
   for (const line of lines) {
     const t = line.trim();

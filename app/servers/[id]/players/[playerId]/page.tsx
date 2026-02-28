@@ -53,15 +53,15 @@ function PlayerContent() {
     setMessage(null);
     setGiving(shortname);
     try {
-      const cmd = `giveid ${playerId} ${shortname} ${amount}`;
-      const res = await fetch(`/api/servers/${serverId}/command`, {
+      const cmd = `inventory.giveto ${playerId} \"${shortname}\" ${amount}`;
+      const res = await fetch(`/api/servers/${serverId}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: cmd }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setMessage({ type: "ok", text: `Sent: ${shortname} x${amount}` });
+        setMessage({ type: "ok", text: data.response ? String(data.response) : `Sent: ${shortname} x${amount}` });
       } else {
         setMessage({ type: "error", text: data.error ?? "Failed" });
       }
@@ -84,7 +84,7 @@ function PlayerContent() {
       </div>
 
       <p className="text-sm text-zinc-500">
-        Give items to this player. Uses <code className="rounded bg-zinc-800 px-1">giveid</code> (Rust). Server must be connected.
+        Give items to this player. Uses <code className="rounded bg-zinc-800 px-1">inventory.giveto</code> (Rust). Server must be connected.
       </p>
 
       {message && (

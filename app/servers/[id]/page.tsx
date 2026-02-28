@@ -64,6 +64,10 @@ export default function ServerDetailPage() {
         }
         setConnected(!!data.ok);
         setConnectError(data.ok ? null : (data.error ?? "Connection failed"));
+        if (data.ok) {
+          // Auto-load players immediately after connecting.
+          refreshPlayers(true);
+        }
         if (data.ok && !eventSourceRef.current) {
           const es = new EventSource(`/api/servers/${id}/stream`);
           eventSourceRef.current = es;
@@ -97,8 +101,8 @@ export default function ServerDetailPage() {
     };
   }, []);
 
-  async function refreshPlayers() {
-    if (!connected) return;
+  async function refreshPlayers(force: boolean = false) {
+    if (!connected && !force) return;
     setPlayersLoading(true);
     try {
       const r = await fetch(`/api/servers/${id}/playerlist`);
@@ -169,7 +173,7 @@ export default function ServerDetailPage() {
           <span>Players</span>
           <button
             type="button"
-            onClick={refreshPlayers}
+            onClick={() => refreshPlayers()}
             disabled={!connected || playersLoading}
             className="rounded px-2 py-1 text-xs bg-zinc-700 text-zinc-200 hover:bg-zinc-600 disabled:opacity-50"
           >
