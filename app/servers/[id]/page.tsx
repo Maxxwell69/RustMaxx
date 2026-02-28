@@ -50,6 +50,81 @@ export default function ServerDetailPage() {
       .catch(() => setLogs([]));
   }, [id]);
 
+  // Restore "connected" for this server from session and verify with a ping
+  useEffect(() => {
+    const key = `rcon_${id}`;
+    const wasConnected = typeof window !== "undefined" && sessionStorage.getItem(key) === "1";
+    if (!wasConnected) return;
+
+    fetch(`/api/servers/${id}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: "status" }),
+    })
+      .then((r) => {
+        if (r.ok) {
+          setConnected(true);
+          setConnectError(null);
+        } else {
+          sessionStorage.removeItem(key);
+        }
+      })
+      .catch(() => sessionStorage.removeItem(key));
+  }, [id]);
+
+  // When connected (from Connect or restore), open SSE for live logs if not already
+  useEffect(() => {
+    if (!connected || !id || eventSourceRef.current) return;
+    const es = new EventSource(`/api/servers/${id}/stream`);
+    eventSourceRef.current = es;
+    es.addEventListener("log", (e: MessageEvent) => {
+      try {
+        const ev = JSON.parse(e.data) as { type: string; message: string; createdAt: string };
+        setLogs((prev) => [...prev, { id: "", type: ev.type, message: ev.message, created_at: ev.createdAt }]);
+      } catch {
+        //
+      }
+    });
+    es.onerror = () => {
+      es.close();
+      eventSourceRef.current = null;
+      setConnected(false);
+      try {
+        sessionStorage.removeItem(`rcon_${id}`);
+      } catch {
+        //
+      }
+    };
+    return () => {
+      es.close();
+      eventSourceRef.current = null;
+    };
+  }, [connected, id]);
+
+  // Keepalive: while connected, ping every 45s so connection stays up
+  useEffect(() => {
+    if (!connected || !id) return;
+    const key = `rcon_${id}`;
+    sessionStorage.setItem(key, "1");
+
+    const t = setInterval(() => {
+      fetch(`/api/servers/${id}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "status" }),
+      }).then((r) => {
+        if (!r.ok) {
+          setConnected(false);
+          setConnectError("Connection lost");
+          sessionStorage.removeItem(key);
+          eventSourceRef.current?.close();
+          eventSourceRef.current = null;
+        }
+      });
+    }, 45000);
+    return () => clearInterval(t);
+  }, [connected, id]);
+
   const connect = useCallback(() => {
     if (connecting || connected) return;
     setConnectError(null);
@@ -65,27 +140,9 @@ export default function ServerDetailPage() {
         setConnected(!!data.ok);
         setConnectError(data.ok ? null : (data.error ?? "Connection failed"));
         if (data.ok) {
-          // Auto-load players immediately after connecting.
           refreshPlayers(true);
         }
-        if (data.ok && !eventSourceRef.current) {
-          const es = new EventSource(`/api/servers/${id}/stream`);
-          eventSourceRef.current = es;
-          es.addEventListener("open", () => {});
-          es.addEventListener("log", (e) => {
-            try {
-              const ev = JSON.parse((e as MessageEvent).data) as { type: string; message: string; createdAt: string };
-              setLogs((prev) => [...prev, { id: "", type: ev.type, message: ev.message, created_at: ev.createdAt }]);
-            } catch {
-              //
-            }
-          });
-          es.onerror = () => {
-            es.close();
-            eventSourceRef.current = null;
-            setConnected(false);
-          };
-        }
+        // SSE is opened by the useEffect when connected becomes true
       })
       .catch((e) => {
         setConnected(false);
@@ -120,14 +177,24 @@ export default function ServerDetailPage() {
     if (!c) return;
     setSending(true);
     try {
-      const res = await fetch(`/api/servers/${id}/command`, {
+      const res = await fetch(`/api/servers/${id}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: c }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      if (res.ok) {
+        if (data.response) {
+          setLogs((prev) => [...prev, { id: "", type: "console", message: String(data.response).trim(), created_at: new Date().toISOString() }]);
+        }
+      } else {
         setLogs((prev) => [...prev, { id: "", type: "console", message: `[Error] ${data.error ?? "Failed"}`, created_at: new Date().toISOString() }]);
+        setConnected(false);
+        try {
+          sessionStorage.removeItem(`rcon_${id}`);
+        } catch {
+          //
+        }
       }
       if (c === command) setCommand("");
     } finally {
@@ -149,6 +216,10 @@ export default function ServerDetailPage() {
       <div className="flex flex-wrap items-center gap-4">
         <Link href="/servers" className="text-amber-500 hover:underline">← Servers</Link>
         <h1 className="text-xl font-semibold text-zinc-100">{server.name}</h1>
+        <nav className="flex gap-2">
+          <Link href={`/servers/${id}/environment`} className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-600">Environment</Link>
+          <Link href={`/servers/${id}/events`} className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-600">Events</Link>
+        </nav>
         <button
           type="button"
           onClick={connect}

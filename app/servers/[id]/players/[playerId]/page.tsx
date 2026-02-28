@@ -40,6 +40,7 @@ function PlayerContent() {
   const name = searchParams.get("name") || playerId;
   const [server, setServer] = useState<{ name: string } | null>(null);
   const [giving, setGiving] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -72,6 +73,34 @@ function PlayerContent() {
     }
   }
 
+  async function runPlayerAction(command: string, actionLabel: string) {
+    setMessage(null);
+    setActionLoading(actionLabel);
+    try {
+      const res = await fetch(`/api/servers/${serverId}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMessage({
+          type: "ok",
+          text: data.response ? String(data.response).trim() || "Done." : "Done.",
+        });
+      } else {
+        setMessage({
+          type: "error",
+          text: data.error ?? "Failed.",
+        });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -92,6 +121,47 @@ function PlayerContent() {
           {message.text}
         </p>
       )}
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+        <h2 className="mb-2 text-lg font-medium text-zinc-300">Player heal &amp; vitals</h2>
+        <p className="mb-3 text-xs text-zinc-500">
+          <code className="rounded bg-zinc-800 px-1">refillvitals</code> uses player name; <code className="rounded bg-zinc-800 px-1">killplayer</code> uses SteamID. Heal / Fill water / Fill food all run refillvitals (health + hunger + hydration).
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => runPlayerAction(`refillvitals "${name.replace(/"/g, '\\"')}"`, "heal")}
+            disabled={actionLoading !== null}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {actionLoading === "heal" ? "…" : "Heal"}
+          </button>
+          <button
+            type="button"
+            onClick={() => runPlayerAction(`killplayer ${playerId}`, "kill")}
+            disabled={actionLoading !== null}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50"
+          >
+            {actionLoading === "kill" ? "…" : "Kill"}
+          </button>
+          <button
+            type="button"
+            onClick={() => runPlayerAction(`refillvitals "${name.replace(/"/g, '\\"')}"`, "water")}
+            disabled={actionLoading !== null}
+            className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+          >
+            {actionLoading === "water" ? "…" : "Fill water"}
+          </button>
+          <button
+            type="button"
+            onClick={() => runPlayerAction(`refillvitals "${name.replace(/"/g, '\\"')}"`, "food")}
+            disabled={actionLoading !== null}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+          >
+            {actionLoading === "food" ? "…" : "Fill food"}
+          </button>
+        </div>
+      </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="mb-3 text-lg font-medium text-zinc-300">Give items</h2>

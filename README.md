@@ -14,7 +14,7 @@ Rust server web admin panel (RustAdmin Core MVP). Connects to Rust game servers 
 
 - Admin login using `ADMIN_PASSWORD` from env
 - Session cookie signed with `SESSION_SECRET`, 12h expiry
-- All pages except `/login` require auth
+- Marketing routes (`/`, `/features`, `/pricing`, `/docs`, `/about`, `/contact`) are public; `/login`, `/servers`, and API require auth
 
 **TODO (Phase 2):** Encrypt RCON password in DB; MVP stores plaintext.
 
@@ -126,6 +126,32 @@ If **Connect** fails with 502 or an error message:
 3. Open the server row to go to **Server detail** (`/servers/[id]`).
 4. Click **Connect** to open a backend RCON connection for that server.
 5. Use the command input or quick buttons (**status**, **players**, **say test**, **oxide.plugins**) to send commands. Live console and chat lines appear in the log area and are stored in Postgres (last 7 days retention with cleanup job).
+
+## Marketing site (landing pages)
+
+The app includes a public marketing site at the root and under `/features`, `/pricing`, `/docs`, `/about`, `/contact`. These routes are **public** (no login). The dashboard (e.g. `/servers`, `/login`) remains behind auth.
+
+### Where to edit copy
+
+- **Home** – `app/page.tsx`: hero, trust strip, pillar sections, integrations, testimonials, CTA.
+- **Features** – `app/features/page.tsx`: Admin, Stream, and Map feature lists and Roadmap chips.
+- **Pricing** – `app/pricing/page.tsx`: tier names, prices (placeholders), features, FAQ.
+- **Docs** – `app/docs/page.tsx`: getting started steps, env and plugin config examples, security model.
+- **About** – `app/about/page.tsx`: mission, who it’s for, disclaimer.
+- **Contact** – `app/contact/page.tsx`: form labels and the `MAILTO` link (replace with your support email).
+
+Shared UI lives in `components/marketing/`: `Header`, `Footer`, `TerminalCard`, `FeatureCard`, `PillarTabs`, `RoadmapChip`, `MarketingLayout`, `LiveConsole`, and placeholders in `components/marketing/placeholders/` (e.g. `DashboardFrame`, `MapFrame`).
+
+### Adding real screenshots
+
+1. Replace the **hero screenshot** on the home page: in `app/page.tsx`, swap the `<DashboardFrame />` (or the whole placeholder div) for an `<Image />` or `<img />` pointing to your dashboard screenshot (e.g. in `public/`).
+2. **Features / other pages**: add images under `public/` (e.g. `public/screens/console.png`) and use Next.js `Image` or a normal `img` with `src="/screens/console.png"`.
+
+### SEO
+
+- Each page exports `metadata` (title, description, openGraph). Edit in the page file or in a `layout.tsx` in that route.
+- `app/sitemap.ts` – sitemap entries. Set `NEXT_PUBLIC_BASE_URL` in env to your production URL so the sitemap uses correct absolute URLs.
+- `app/robots.ts` – allows crawlers on marketing routes, disallows `/login`, `/servers`, `/api/`.
 
 ## Scripts
 
