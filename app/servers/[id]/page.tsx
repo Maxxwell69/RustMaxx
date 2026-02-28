@@ -144,7 +144,7 @@ export default function ServerDetailPage() {
       </div>
 
       <p className="text-sm text-zinc-500">
-        RCON runs from Railway (cloud). Your Rust server must be reachable from the internet: use its public IP or hostname, open the RCON port in firewall, and ensure RCON is enabled in server config.
+        RCON runs from Railway (cloud). If you get <strong>Connection timeout</strong>: many hosts (e.g. Shockbyte) only allow RCON from their own panel, not from external apps. Ask your host if &quot;external RCON&quot; is supported, or run RustMaxx locally (<code>npm run dev</code>) and use the same IP/port to test.
       </p>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">

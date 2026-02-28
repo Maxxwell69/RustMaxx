@@ -124,7 +124,7 @@ export async function ensureConnection(
         }
         done(
           false,
-          "Connection timeout (20s). Ensure the Rust server has a public IP, RCON port is open, and firewall allows inbound TCP."
+          "Connection timeout (20s). Hosted servers (e.g. Shockbyte) often allow RCON only from their panel—external apps like RustMaxx on Railway may be blocked. Check with your host for 'external RCON' or run RustMaxx locally to test."
         );
       }
     }, timeoutMs);
