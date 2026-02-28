@@ -1,6 +1,16 @@
 import Link from "next/link";
 import LogoutButton from "./logout-button";
 
+const NAV_LINKS = [
+  { href: "/", label: "Home" },
+  { href: "/server-list", label: "Server list" },
+  { href: "/features", label: "Features" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/docs", label: "Docs" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
+];
+
 export default function ServersLayout({
   children,
 }: {
@@ -8,11 +18,37 @@ export default function ServersLayout({
 }) {
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-zinc-800 bg-zinc-900/80 px-4 py-3">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <Link href="/servers" className="text-lg font-semibold text-amber-500">
-            RustMaxx
-          </Link>
+      <header className="border-b border-zinc-800 bg-zinc-900/80 px-3 py-1.5 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/servers" className="shrink-0">
+              <img
+                src="/rustmaxx-logo.png"
+                alt="RustMaxx"
+                className="h-40 w-auto sm:h-48"
+                width={960}
+                height={192}
+              />
+            </Link>
+            <span className="text-sm text-zinc-600">|</span>
+            <nav className="flex flex-wrap items-center gap-4" aria-label="Site navigation">
+              <Link
+                href="/servers"
+                className="rounded px-2 py-1 text-sm font-medium text-rust-cyan bg-rust-cyan/10"
+              >
+                Dashboard
+              </Link>
+              {NAV_LINKS.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="rounded px-2 py-1 text-sm text-rust-cyan hover:bg-zinc-800 opacity-90 hover:opacity-100"
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          </div>
           <LogoutButton />
         </div>
       </header>

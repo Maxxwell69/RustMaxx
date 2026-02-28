@@ -20,6 +20,11 @@ const config: Config = {
           danger: "#ef4444",
         },
       },
+      boxShadow: {
+        "rust-glow": "0 0 20px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.2)",
+        "rust-glow-lg": "0 0 25px rgba(6, 182, 212, 0.6), 0 0 50px rgba(6, 182, 212, 0.25)",
+        "rust-glow-subtle": "0 0 12px rgba(6, 182, 212, 0.35)",
+      },
     },
   },
   plugins: [],

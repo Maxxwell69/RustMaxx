@@ -25,6 +25,24 @@ export type ServerRow = {
   rcon_port: number;
   rcon_password: string;
   created_at: Date;
+  listed?: boolean;
+  listing_name?: string | null;
+  listing_description?: string | null;
+  game_host?: string | null;
+  game_port?: number | null;
+  location?: string | null;
+  logo_url?: string | null;
+};
+
+export type PublicServerRow = {
+  id: string;
+  name: string;
+  listing_name: string | null;
+  listing_description: string | null;
+  game_host: string | null;
+  game_port: number | null;
+  location: string | null;
+  logo_url: string | null;
 };
 
 export type LogRow = {

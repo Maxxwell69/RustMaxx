@@ -90,7 +90,7 @@ export default function PricingPage() {
                   href="/login"
                   className={`mt-6 block w-full rounded-lg py-2.5 text-center text-sm font-medium ${
                     t.highlighted
-                      ? "bg-rust-cyan text-rust-panel hover:opacity-90"
+                      ? "bg-rust-cyan text-rust-panel shadow-rust-glow hover:opacity-90 hover:shadow-rust-glow-lg"
                       : "border border-rust-border text-zinc-200 hover:border-rust-mute"
                   }`}
                 >

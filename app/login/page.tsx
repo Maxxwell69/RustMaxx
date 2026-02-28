@@ -38,7 +38,9 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl">
-        <h1 className="mb-2 text-xl font-semibold text-zinc-100">RustMaxx</h1>
+        <div className="mb-6 flex justify-center">
+          <img src="/rustmaxx-logo.png" alt="RustMaxx" className="h-36 w-auto" width={720} height={144} />
+        </div>
         <p className="mb-6 text-sm text-zinc-400">Admin login</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -50,7 +52,7 @@ function LoginForm() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:border-rust-cyan focus:outline-none focus:ring-1 focus:ring-rust-cyan"
               placeholder="Admin password"
               required
               autoFocus
@@ -62,7 +64,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+            className="w-full rounded-lg bg-rust-cyan px-4 py-2 font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>

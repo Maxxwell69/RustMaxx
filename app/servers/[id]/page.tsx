@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { LogoUpload } from "../logo-upload";
 
 type LogEntry = { id: string; type: string; message: string; created_at: string };
 type Player = { id: string; name: string };
@@ -18,7 +19,26 @@ export default function ServerDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const [server, setServer] = useState<{ name: string } | null>(null);
+  const [server, setServer] = useState<{
+    name: string;
+    listed?: boolean;
+    listing_name?: string | null;
+    listing_description?: string | null;
+    game_host?: string | null;
+    game_port?: number | null;
+    location?: string | null;
+    logo_url?: string | null;
+  } | null>(null);
+  const [listingForm, setListingForm] = useState({
+    listed: false,
+    listing_name: "",
+    listing_description: "",
+    game_host: "",
+    game_port: "",
+    location: "",
+    logo_url: "",
+  });
+  const [listingSaving, setListingSaving] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -40,7 +60,20 @@ export default function ServerDetailPage() {
   useEffect(() => {
     fetch(`/api/servers/${id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then(setServer)
+      .then((s) => {
+        setServer(s);
+        if (s) {
+          setListingForm({
+            listed: Boolean(s.listed),
+            listing_name: s.listing_name ?? "",
+            listing_description: s.listing_description ?? "",
+            game_host: s.game_host ?? "",
+            game_port: s.game_port != null ? String(s.game_port) : "",
+            location: s.location ?? "",
+            logo_url: s.logo_url ?? "",
+          });
+        }
+      })
       .catch(() => setServer(null));
   }, [id]);
   useEffect(() => {
@@ -172,6 +205,31 @@ export default function ServerDetailPage() {
     }
   }
 
+  async function saveListing() {
+    setListingSaving(true);
+    try {
+      const res = await fetch(`/api/servers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listed: listingForm.listed,
+          listing_name: listingForm.listing_name.trim() || null,
+          listing_description: listingForm.listing_description.trim() || null,
+          game_host: listingForm.game_host.trim() || null,
+          game_port: listingForm.game_port ? parseInt(listingForm.game_port, 10) || null : null,
+          location: listingForm.location.trim() || null,
+          logo_url: listingForm.logo_url.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setServer((prev) => (prev ? { ...prev, ...data } : null));
+      }
+    } finally {
+      setListingSaving(false);
+    }
+  }
+
   async function sendCommand(cmd: string) {
     const c = (cmd || command).trim();
     if (!c) return;
@@ -205,7 +263,7 @@ export default function ServerDetailPage() {
   if (!server) {
     return (
       <div className="space-y-4">
-        <Link href="/servers" className="text-amber-500 hover:underline">← Servers</Link>
+        <Link href="/servers" className="text-rust-cyan hover:underline">← Servers</Link>
         <p className="text-zinc-500">Server not found.</p>
       </div>
     );
@@ -214,17 +272,17 @@ export default function ServerDetailPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="flex flex-wrap items-center gap-4">
-        <Link href="/servers" className="text-amber-500 hover:underline">← Servers</Link>
+        <Link href="/servers" className="text-rust-cyan hover:underline">← Servers</Link>
         <h1 className="text-xl font-semibold text-zinc-100">{server.name}</h1>
         <nav className="flex gap-2">
-          <Link href={`/servers/${id}/environment`} className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-600">Environment</Link>
-          <Link href={`/servers/${id}/events`} className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-600">Events</Link>
+          <Link href={`/servers/${id}/environment`} className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle">Environment</Link>
+          <Link href={`/servers/${id}/events`} className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle">Events</Link>
         </nav>
         <button
           type="button"
           onClick={connect}
           disabled={connecting || connected}
-          className={`rounded-lg px-4 py-2 text-sm font-medium ${connected ? "bg-emerald-600/80 text-white" : "bg-zinc-700 text-zinc-200 hover:bg-zinc-600"} disabled:opacity-70`}
+          className={`rounded-lg px-4 py-2 text-sm font-medium ${connected ? "bg-emerald-600/80 text-white shadow-rust-glow-subtle" : "bg-zinc-700 text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle"} disabled:opacity-70`}
         >
           {connecting ? "Connecting…" : connected ? "Connected" : "Connect"}
         </button>
@@ -246,7 +304,7 @@ export default function ServerDetailPage() {
             type="button"
             onClick={() => refreshPlayers()}
             disabled={!connected || playersLoading}
-            className="rounded px-2 py-1 text-xs bg-zinc-700 text-zinc-200 hover:bg-zinc-600 disabled:opacity-50"
+            className="rounded px-2 py-1 text-xs bg-zinc-700 text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle disabled:opacity-50"
           >
             {playersLoading ? "Loading…" : "Refresh"}
           </button>
@@ -260,7 +318,7 @@ export default function ServerDetailPage() {
                 <li key={p.id}>
                   <Link
                     href={`/servers/${id}/players/${encodeURIComponent(p.id)}?name=${encodeURIComponent(p.name)}`}
-                    className="text-sm text-amber-400 hover:text-amber-300 hover:underline"
+                    className="text-sm text-rust-cyan hover:underline"
                   >
                     {p.name}
                   </Link>
@@ -269,6 +327,99 @@ export default function ServerDetailPage() {
               ))}
             </ul>
           )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+        <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
+          <span>Public server list</span>
+        </div>
+        <div className="p-4 space-y-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={listingForm.listed}
+              onChange={(e) => setListingForm((f) => ({ ...f, listed: e.target.checked }))}
+              className="rounded border-zinc-600 bg-zinc-800 text-rust-cyan focus:ring-rust-cyan"
+            />
+            <span className="text-sm text-zinc-300">Show on public server list</span>
+          </label>
+          <p className="text-xs text-zinc-500">
+            When enabled, this server appears on the public <a href="/server-list" target="_blank" rel="noopener noreferrer" className="text-rust-cyan hover:underline">/server-list</a> page so players can find and connect to it.
+          </p>
+          {listingForm.listed && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-zinc-400">Listing name (optional)</label>
+                <input
+                  type="text"
+                  value={listingForm.listing_name}
+                  onChange={(e) => setListingForm((f) => ({ ...f, listing_name: e.target.value }))}
+                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                  placeholder={server?.name ?? "Display name"}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-400">Listing description (optional)</label>
+                <input
+                  type="text"
+                  value={listingForm.listing_description}
+                  onChange={(e) => setListingForm((f) => ({ ...f, listing_description: e.target.value }))}
+                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                  placeholder="Short description"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-400">Game host (for Connect)</label>
+                <input
+                  type="text"
+                  value={listingForm.game_host}
+                  onChange={(e) => setListingForm((f) => ({ ...f, game_host: e.target.value }))}
+                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                  placeholder="IP or hostname"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-400">Game port (join port)</label>
+                <input
+                  type="number"
+                  value={listingForm.game_port}
+                  onChange={(e) => setListingForm((f) => ({ ...f, game_port: e.target.value }))}
+                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                  placeholder="28015"
+                  min={1}
+                  max={65535}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-400">Location</label>
+                <input
+                  type="text"
+                  value={listingForm.location}
+                  onChange={(e) => setListingForm((f) => ({ ...f, location: e.target.value }))}
+                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                  placeholder="e.g. Quebec"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-400">Logo</label>
+                <LogoUpload
+                  value={listingForm.logo_url}
+                  onChange={(url) => setListingForm((f) => ({ ...f, logo_url: url }))}
+                  disabled={listingSaving}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={saveListing}
+            disabled={listingSaving}
+            className="rounded bg-rust-cyan px-3 py-1.5 text-sm font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
+          >
+            {listingSaving ? "Saving…" : "Save listing"}
+          </button>
         </div>
       </div>
 
@@ -299,7 +450,7 @@ export default function ServerDetailPage() {
             type="button"
             onClick={() => sendCommand(cmd)}
             disabled={!connected || sending}
-            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-700 hover:shadow-rust-glow-subtle disabled:opacity-50"
           >
             {label}
           </button>
@@ -324,7 +475,7 @@ export default function ServerDetailPage() {
         <button
           type="submit"
           disabled={!connected || sending}
-          className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+          className="rounded-lg bg-rust-cyan px-4 py-2 text-sm font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
         >
           Send
         </button>

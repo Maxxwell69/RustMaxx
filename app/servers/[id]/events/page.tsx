@@ -42,7 +42,7 @@ function EventButton({
         type="button"
         onClick={() => onRun(command)}
         disabled={running}
-        className="shrink-0 rounded bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+        className="shrink-0 rounded bg-rust-cyan px-3 py-1.5 text-sm font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
       >
         {running ? "…" : "Trigger"}
       </button>
@@ -92,7 +92,7 @@ export default function EventsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={`/servers/${id}`} className="text-amber-500 hover:underline">
+        <Link href={`/servers/${id}`} className="text-rust-cyan hover:underline">
           ← {server?.name ?? "Server"}
         </Link>
         <span className="text-zinc-500">/</span>

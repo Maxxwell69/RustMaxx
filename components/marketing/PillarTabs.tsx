@@ -30,8 +30,8 @@ export function PillarTabs({
           onClick={() => onChange(id)}
           className={`rounded-lg border px-4 py-3 text-left transition-colors ${
             active === id
-              ? "border-rust-cyan bg-rust-cyan/10 text-rust-cyan"
-              : "border-rust-border bg-rust-surface text-zinc-400 hover:border-rust-mute hover:text-zinc-200"
+              ? "border-rust-cyan bg-rust-cyan/10 text-rust-cyan shadow-rust-glow-subtle"
+              : "border-rust-border bg-rust-surface text-rust-cyan opacity-85 hover:border-rust-cyan hover:opacity-100 hover:shadow-rust-glow-subtle"
           }`}
         >
           <span className="block font-medium">{label}</span>

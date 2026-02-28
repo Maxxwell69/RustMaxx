@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 const FOOTER_LINKS = [
+  { href: "/server-list", label: "Servers" },
+  { href: "/streamer-interaction", label: "Streamer Interaction" },
   { href: "/features", label: "Features" },
   { href: "/pricing", label: "Pricing" },
   { href: "/docs", label: "Docs" },
@@ -14,8 +16,14 @@ export function Footer() {
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
           <div>
-            <Link href="/" className="font-semibold text-zinc-100">
-              RustMaxx
+            <Link href="/" className="inline-block">
+              <img
+                src="/rustmaxx-logo.png"
+                alt="RustMaxx"
+                className="h-7 w-auto"
+                width={140}
+                height={28}
+              />
             </Link>
             <p className="mt-2 max-w-sm text-sm text-zinc-500">
               One command center for Rust servers. Admin tools, stream interaction, and live map intel.
@@ -26,7 +34,7 @@ export function Footer() {
               <Link
                 key={href}
                 href={href}
-                className="text-sm text-zinc-400 transition-colors hover:text-rust-cyan"
+                className="text-base text-rust-cyan transition-colors opacity-90 hover:opacity-100"
               >
                 {label}
               </Link>

@@ -49,7 +49,7 @@ function EnvButton({
       type="button"
       onClick={() => onRun(command)}
       disabled={running}
-      className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+      className="rounded-lg border border-rust-cyan/50 bg-zinc-800 px-3 py-2 text-sm font-medium text-rust-cyan hover:bg-zinc-700 hover:shadow-rust-glow-subtle disabled:opacity-50"
     >
       {running ? "…" : label}
     </button>
@@ -98,7 +98,7 @@ export default function EnvironmentPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={`/servers/${id}`} className="text-amber-500 hover:underline">
+        <Link href={`/servers/${id}`} className="text-rust-cyan hover:underline">
           ← {server?.name ?? "Server"}
         </Link>
         <span className="text-zinc-500">/</span>

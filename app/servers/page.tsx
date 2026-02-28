@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { LogoUpload } from "./logo-upload";
 
 type Server = {
   id: string;
@@ -9,12 +10,31 @@ type Server = {
   rcon_host: string;
   rcon_port: number;
   created_at: string;
+  listed?: boolean;
+  listing_name?: string | null;
+  listing_description?: string | null;
+  game_host?: string | null;
+  game_port?: number | null;
+  location?: string | null;
+  logo_url?: string | null;
 };
 
 export default function ServersPage() {
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: "", host: "", port: "28016", password: "" });
+  const [form, setForm] = useState({
+    name: "",
+    host: "",
+    port: "28016",
+    password: "",
+    listed: false,
+    listing_name: "",
+    listing_description: "",
+    game_host: "",
+    game_port: "",
+    location: "",
+    logo_url: "",
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -43,6 +63,13 @@ export default function ServersPage() {
           host: form.host.trim(),
           port: parseInt(form.port, 10) || 28016,
           password: form.password,
+          listed: form.listed,
+          listing_name: form.listing_name.trim() || undefined,
+          listing_description: form.listing_description.trim() || undefined,
+          game_host: form.game_host.trim() || undefined,
+          game_port: form.game_port ? parseInt(form.game_port, 10) || undefined : undefined,
+          location: form.location.trim() || undefined,
+          logo_url: form.logo_url.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -50,7 +77,19 @@ export default function ServersPage() {
         setError(data.error ?? "Failed to add server");
         return;
       }
-      setForm({ name: "", host: "", port: "28016", password: "" });
+      setForm({
+        name: "",
+        host: "",
+        port: "28016",
+        password: "",
+        listed: false,
+        listing_name: "",
+        listing_description: "",
+        game_host: "",
+        game_port: "",
+        location: "",
+        logo_url: "",
+      });
       load();
     } catch {
       setError("Network error");
@@ -115,12 +154,89 @@ export default function ServersPage() {
               required
             />
           </div>
+          <div className="sm:col-span-2 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="listed"
+              checked={form.listed}
+              onChange={(e) => setForm((f) => ({ ...f, listed: e.target.checked }))}
+              className="rounded border-zinc-600 bg-zinc-800 text-amber-600 focus:ring-amber-500"
+            />
+            <label htmlFor="listed" className="text-sm text-zinc-400">
+              List on public server list (players can find this server on /server-list)
+            </label>
+          </div>
+          {form.listed && (
+            <>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm text-zinc-400">Listing name (optional)</label>
+                <input
+                  type="text"
+                  value={form.listing_name}
+                  onChange={(e) => setForm((f) => ({ ...f, listing_name: e.target.value }))}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
+                  placeholder="Display name on server list (defaults to server name)"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm text-zinc-400">Listing description (optional)</label>
+                <input
+                  type="text"
+                  value={form.listing_description}
+                  onChange={(e) => setForm((f) => ({ ...f, listing_description: e.target.value }))}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
+                  placeholder="Short description for the list"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-zinc-400">Game host (for &quot;Connect&quot;)</label>
+                <input
+                  type="text"
+                  value={form.game_host}
+                  onChange={(e) => setForm((f) => ({ ...f, game_host: e.target.value }))}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
+                  placeholder="IP or hostname players use to join"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-zinc-400">Game port (join port)</label>
+                <input
+                  type="number"
+                  value={form.game_port}
+                  onChange={(e) => setForm((f) => ({ ...f, game_port: e.target.value }))}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
+                  placeholder="e.g. 28015"
+                  min={1}
+                  max={65535}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-zinc-400">Location (optional)</label>
+                <input
+                  type="text"
+                  value={form.location}
+                  onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
+                  placeholder="e.g. Quebec, US East"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm text-zinc-400">Logo (optional)</label>
+                <LogoUpload
+                  value={form.logo_url}
+                  onChange={(url) => setForm((f) => ({ ...f, logo_url: url }))}
+                  disabled={submitting}
+                  className="mt-1"
+                />
+              </div>
+            </>
+          )}
           <div className="sm:col-span-2">
             {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+              className="rounded-lg bg-rust-cyan px-4 py-2 font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
             >
               {submitting ? "Adding…" : "Add server"}
             </button>
@@ -143,9 +259,14 @@ export default function ServersPage() {
               >
                 <Link
                   href={`/servers/${s.id}`}
-                  className="min-w-0 flex-1 text-zinc-100 hover:text-amber-400"
+                  className="min-w-0 flex-1 text-zinc-100 hover:text-rust-cyan"
                 >
                   <span className="font-medium">{s.name}</span>
+                  {s.listed && (
+                    <span className="ml-2 rounded bg-rust-green/20 px-1.5 py-0.5 text-xs text-rust-green">
+                      On list
+                    </span>
+                  )}
                   <span className="ml-2 text-sm text-zinc-500">
                     {s.rcon_host}:{s.rcon_port}
                   </span>

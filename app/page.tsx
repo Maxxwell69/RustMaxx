@@ -247,13 +247,13 @@ function CTASection() {
         <div className="mt-8 flex flex-wrap justify-center gap-4">
           <Link
             href="/login"
-            className="rounded-lg bg-rust-cyan px-6 py-3 font-medium text-rust-panel hover:opacity-90"
+            className="rounded-lg bg-rust-cyan px-6 py-3 font-medium text-rust-panel shadow-rust-glow hover:opacity-90 hover:shadow-rust-glow-lg"
           >
             Get early access
           </Link>
           <Link
             href="/contact"
-            className="rounded-lg border border-rust-border bg-rust-surface px-6 py-3 font-medium text-zinc-200 hover:border-rust-mute"
+            className="rounded-lg border border-rust-cyan/50 bg-rust-surface px-6 py-3 font-medium text-rust-cyan hover:border-rust-cyan hover:shadow-rust-glow-subtle"
           >
             Contact us
           </Link>

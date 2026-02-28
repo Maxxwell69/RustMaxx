@@ -11,8 +11,10 @@ const PUBLIC_PATHS = [
   "/docs",
   "/about",
   "/contact",
+  "/server-list",
   "/sitemap.xml",
   "/robots.txt",
+  "/api/server-list",
 ];
 
 function isPublic(pathname: string): boolean {

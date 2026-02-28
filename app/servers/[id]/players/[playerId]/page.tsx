@@ -104,7 +104,7 @@ function PlayerContent() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={`/servers/${serverId}`} className="text-amber-500 hover:underline">
+        <Link href={`/servers/${serverId}`} className="text-rust-cyan hover:underline">
           ← {server?.name ?? "Server"}
         </Link>
         <span className="text-zinc-500">/</span>
@@ -132,7 +132,7 @@ function PlayerContent() {
             type="button"
             onClick={() => runPlayerAction(`refillvitals "${name.replace(/"/g, '\\"')}"`, "heal")}
             disabled={actionLoading !== null}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-rust-glow-subtle hover:shadow-rust-glow disabled:opacity-50"
           >
             {actionLoading === "heal" ? "…" : "Heal"}
           </button>
@@ -140,7 +140,7 @@ function PlayerContent() {
             type="button"
             onClick={() => runPlayerAction(`killplayer ${playerId}`, "kill")}
             disabled={actionLoading !== null}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50"
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-rust-glow-subtle hover:shadow-rust-glow disabled:opacity-50"
           >
             {actionLoading === "kill" ? "…" : "Kill"}
           </button>
@@ -148,7 +148,7 @@ function PlayerContent() {
             type="button"
             onClick={() => runPlayerAction(`refillvitals "${name.replace(/"/g, '\\"')}"`, "water")}
             disabled={actionLoading !== null}
-            className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+            className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-rust-glow-subtle hover:shadow-rust-glow disabled:opacity-50"
           >
             {actionLoading === "water" ? "…" : "Fill water"}
           </button>
@@ -156,7 +156,7 @@ function PlayerContent() {
             type="button"
             onClick={() => runPlayerAction(`refillvitals "${name.replace(/"/g, '\\"')}"`, "food")}
             disabled={actionLoading !== null}
-            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+            className="rounded-lg bg-rust-cyan px-4 py-2 text-sm font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
           >
             {actionLoading === "food" ? "…" : "Fill food"}
           </button>
@@ -178,7 +178,7 @@ function PlayerContent() {
                 type="button"
                 onClick={() => giveItem(item.shortname, item.amount)}
                 disabled={giving !== null}
-                className="rounded bg-amber-600 px-3 py-1 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+                className="rounded bg-rust-cyan px-3 py-1 text-sm font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
               >
                 {giving === item.shortname ? "…" : "Give"}
               </button>

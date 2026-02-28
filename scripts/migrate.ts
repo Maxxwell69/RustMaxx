@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { Pool } from "pg";
