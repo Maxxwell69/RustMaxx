@@ -113,6 +113,7 @@ export async function ensureConnection(
       connectionByServerId.delete(serverId);
     });
 
+    const timeoutMs = 20000; // 20s for slow or distant servers
     client.connect();
     const t = setTimeout(() => {
       if (!resolved) {
@@ -121,9 +122,12 @@ export async function ensureConnection(
         } catch {
           //
         }
-        done(false, "Connection timeout");
+        done(
+          false,
+          "Connection timeout (20s). Ensure the Rust server has a public IP, RCON port is open, and firewall allows inbound TCP."
+        );
       }
-    }, 10000);
+    }, timeoutMs);
     client.once("auth", () => clearTimeout(t));
     client.once("error", () => clearTimeout(t));
   });

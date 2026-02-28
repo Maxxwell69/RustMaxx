@@ -143,6 +143,10 @@ export default function ServerDetailPage() {
         )}
       </div>
 
+      <p className="text-sm text-zinc-500">
+        RCON runs from Railway (cloud). Your Rust server must be reachable from the internet: use its public IP or hostname, open the RCON port in firewall, and ensure RCON is enabled in server config.
+      </p>
+
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm text-zinc-400">
           Console & chat (last 200 + live)
