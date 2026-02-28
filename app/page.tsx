@@ -72,9 +72,9 @@ function PillarTabsClient() {
 
 function HeroScreenshotPlaceholder() {
   return (
-    <div className="relative">
-      <div className="absolute inset-0 flex items-center justify-center bg-rust-surface">
-        <DashboardFrame className="h-auto w-full max-h-[320px]" />
+    <div className="relative min-h-[280px] sm:min-h-[320px]">
+      <div className="absolute inset-0 flex items-center justify-center bg-rust-surface p-2">
+        <DashboardFrame className="h-auto w-full max-h-[280px] sm:max-h-[320px]" />
       </div>
       <div className="absolute bottom-2 right-2 rounded bg-rust-panel/90 px-2 py-1 font-mono text-xs text-zinc-500">
         Dashboard preview
