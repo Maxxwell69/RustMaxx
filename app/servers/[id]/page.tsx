@@ -21,6 +21,7 @@ export default function ServerDetailPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [command, setCommand] = useState("");
   const [sending, setSending] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -48,11 +49,18 @@ export default function ServerDetailPage() {
 
   const connect = useCallback(() => {
     if (connecting || connected) return;
+    setConnectError(null);
     setConnecting(true);
     fetch(`/api/servers/${id}/connect`, { method: "POST" })
-      .then((r) => r.json())
-      .then((data) => {
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          setConnectError(data.error ?? `Error ${r.status}`);
+          setConnected(false);
+          return;
+        }
         setConnected(!!data.ok);
+        setConnectError(data.ok ? null : (data.error ?? "Connection failed"));
         if (data.ok && !eventSourceRef.current) {
           const es = new EventSource(`/api/servers/${id}/stream`);
           eventSourceRef.current = es;
@@ -72,7 +80,10 @@ export default function ServerDetailPage() {
           };
         }
       })
-      .catch(() => setConnected(false))
+      .catch((e) => {
+        setConnected(false);
+        setConnectError(e?.message ?? "Network error");
+      })
       .finally(() => setConnecting(false));
   }, [id, connecting, connected]);
 
@@ -125,6 +136,11 @@ export default function ServerDetailPage() {
         >
           {connecting ? "Connecting…" : connected ? "Connected" : "Connect"}
         </button>
+        {connectError && (
+          <p className="text-sm text-red-400" title={connectError}>
+            {connectError}
+          </p>
+        )}
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">

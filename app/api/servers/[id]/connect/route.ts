@@ -14,23 +14,34 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: serverId } = await params;
-  const { rows } = await query<ServerRow>(
-    "SELECT id, rcon_host, rcon_port, rcon_password FROM servers WHERE id = $1",
-    [serverId]
-  );
-  const server = rows[0];
-  if (!server) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  try {
+    const { id: serverId } = await params;
+    const { rows } = await query<ServerRow>(
+      "SELECT id, rcon_host, rcon_port, rcon_password FROM servers WHERE id = $1",
+      [serverId]
+    );
+    const server = rows[0];
+    if (!server) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const result = await ensureConnection(
-    server.id,
-    server.rcon_host,
-    server.rcon_port,
-    server.rcon_password,
-    persistLog
-  );
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error ?? "Connection failed" }, { status: 502 });
+    const result = await ensureConnection(
+      server.id,
+      server.rcon_host,
+      server.rcon_port,
+      server.rcon_password,
+      persistLog
+    );
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error ?? "Connection failed" },
+        { status: 502 }
+      );
+    }
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { ok: false, error: message || "Connection failed" },
+      { status: 502 }
+    );
   }
-  return NextResponse.json({ ok: true });
 }

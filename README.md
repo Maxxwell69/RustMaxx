@@ -49,6 +49,37 @@ Rust server web admin panel (RustAdmin Core MVP). Connects to Rust game servers 
 
    Open [http://localhost:3000](http://localhost:3000), go to `/login`, sign in, then add a server and connect.
 
+## Railway CLI – migrations and DB
+
+The Railway CLI is installed globally (`@railway/cli`). Use it to run migrations against your Railway Postgres.
+
+**One-time setup (run in your terminal):**
+
+1. **Log in** (opens browser):
+
+   ```bash
+   railway login
+   ```
+
+2. **Link this folder to your Railway project** (pick the project and environment that has your Postgres):
+
+   ```bash
+   cd path/to/rustmaxx
+   railway link
+   ```
+
+3. **Run migrations** (uses `DATABASE_URL` from the linked project):
+
+   ```bash
+   railway run npm run migrate
+   ```
+
+To run the 7-day log cleanup later:
+
+```bash
+railway run npm run cleanup
+```
+
 ## Railway deploy
 
 1. **Create a project** on [Railway](https://railway.app) and add a **Postgres** service.
@@ -76,6 +107,16 @@ Rust server web admin panel (RustAdmin Core MVP). Connects to Rust game servers 
    ```
 
    Use Railway cron if available, or document for manual/scheduled run.
+
+## Troubleshooting: Connect returns 502 / "Connection failed"
+
+If **Connect** fails with 502 or an error message:
+
+1. **Reachability** – RustMaxx on Railway runs in the cloud. It can only reach your Rust server if the server has a **public IP** (or a hostname that resolves to one). It cannot reach `localhost` or a server on your home LAN unless you expose it (e.g. port forward + dynamic DNS).
+2. **RCON port** – Use the server’s **RCON port** (in Rust server config, often `rcon.port` or game port + 1). Default is often `28016` (same as query) or `28017`.
+3. **Firewall** – The machine hosting the Rust server must allow **inbound TCP** on the RCON port from the internet (or at least from Railway’s egress IPs).
+4. **Password** – Double-check the RCON password in the server config and in RustMaxx (they must match).
+5. **Error text** – After the change above, the UI shows the exact error (e.g. `Connection timeout`, `Authentication failed`, `ECONNREFUSED`). Use it to narrow down the cause.
 
 ## How to add a server and connect
 
