@@ -137,16 +137,33 @@ export default function ServersPage() {
         ) : (
           <ul className="space-y-2">
             {servers.map((s) => (
-              <li key={s.id}>
+              <li
+                key={s.id}
+                className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
+              >
                 <Link
                   href={`/servers/${s.id}`}
-                  className="block rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-zinc-100 hover:border-zinc-700 hover:bg-zinc-800/50"
+                  className="min-w-0 flex-1 text-zinc-100 hover:text-amber-400"
                 >
                   <span className="font-medium">{s.name}</span>
                   <span className="ml-2 text-sm text-zinc-500">
                     {s.rcon_host}:{s.rcon_port}
                   </span>
                 </Link>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
+                    fetch(`/api/servers/${s.id}`, { method: "DELETE" })
+                      .then((r) => r.ok && load())
+                      .catch(() => {});
+                  }}
+                  className="shrink-0 rounded px-2 py-1 text-sm text-zinc-400 hover:bg-red-900/40 hover:text-red-400"
+                  title="Delete server"
+                >
+                  Delete
+                </button>
               </li>
             ))}
           </ul>
