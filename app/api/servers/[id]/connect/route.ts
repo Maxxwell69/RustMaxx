@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, pool } from "@/lib/db";
 import { ensureConnection } from "@/lib/rcon-manager";
 import type { ServerRow } from "@/lib/db";
 
 async function persistLog(serverId: string, type: "console" | "chat", message: string) {
-  await query(
+  if (!pool) return;
+  query(
     "INSERT INTO logs (server_id, type, message) VALUES ($1, $2, $3)",
     [serverId, type, message]
-  );
+  ).catch(() => {});
 }
 
 export async function POST(
@@ -15,6 +16,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!pool) {
+      return NextResponse.json(
+        { ok: false, error: "DATABASE_URL is not set. Add it to .env to use servers and RCON." },
+        { status: 503 }
+      );
+    }
     const { id: serverId } = await params;
     const { rows } = await query<ServerRow>(
       "SELECT id, rcon_host, rcon_port, rcon_password FROM servers WHERE id = $1",
@@ -31,14 +38,17 @@ export async function POST(
       persistLog
     );
     if (!result.ok) {
+      const msg = result.error ?? "Connection failed";
+      console.error("[RCON connect]", serverId, msg);
       return NextResponse.json(
-        { ok: false, error: result.error ?? "Connection failed" },
+        { ok: false, error: msg },
         { status: 502 }
       );
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    console.error("[RCON connect]", message);
     return NextResponse.json(
       { ok: false, error: message || "Connection failed" },
       { status: 502 }
