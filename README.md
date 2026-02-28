@@ -113,7 +113,7 @@ railway run npm run cleanup
 If **Connect** fails with 502 or an error message:
 
 1. **Reachability** – RustMaxx on Railway runs in the cloud. It can only reach your Rust server if the server has a **public IP** (or a hostname that resolves to one). It cannot reach `localhost` or a server on your home LAN unless you expose it (e.g. port forward + dynamic DNS).
-2. **RCON port** – Use the **RCON port** from your host, not the game/join port (e.g. `21715` is usually the game port). On **Shockbyte**: look in Config, Console, or the RCON section for the RCON port and password. Other hosts: check server config or panel for `rcon.port` (often `28016` or game port + 1).
+2. **RCON port** – Use the **RCON port** from your host, not the game/join port (e.g. `21715` is usually the game port). On **Shockbyte**: look in Config, Console, or the RCON section for the RCON port and password. Other hosts: check server config or panel for `rcon.port` (often `28016` or game port + 1). If you see "TCP connected but RCON auth had no response", the host may expose **WebRCON** (WebSocket) only on that port—RustMaxx uses TCP RCON; ask the host for a **TCP RCON** port or try their WebRCON in a browser.
 3. **Firewall** – The machine hosting the Rust server must allow **inbound TCP** on the RCON port from the internet (or at least from Railway’s egress IPs).
 4. **Password** – Double-check the RCON password in the server config and in RustMaxx (they must match).
 5. **Error text** – The UI shows the exact error (e.g. `Connection timeout`, `Authentication failed`, `ECONNREFUSED`). Use it to narrow down the cause.

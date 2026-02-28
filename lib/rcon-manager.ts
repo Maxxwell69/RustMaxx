@@ -6,8 +6,29 @@
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Rcon = require("rcon");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const net = require("net");
 
 type LogEvent = { type: "console" | "chat"; message: string; createdAt: string };
+
+/** Quick TCP check: can we reach host:port? Returns error message or null if OK. */
+function tcpReachable(host: string, port: number, timeoutMs: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port }, () => {
+      socket.destroy();
+      resolve(null);
+    });
+    socket.on("error", (err: Error) => {
+      const msg = (err as NodeJS.ErrnoException).code ?? err.message;
+      resolve(`TCP connection failed: ${msg}`);
+    });
+    const t = setTimeout(() => {
+      socket.destroy();
+      resolve("TCP connection timeout (no response from server)");
+    }, timeoutMs);
+    socket.on("connect", () => clearTimeout(t));
+  });
+}
 
 type Listener = (event: LogEvent) => void;
 
@@ -63,6 +84,11 @@ export async function ensureConnection(
     }
   }
 
+  const tcpError = await tcpReachable(host, port, 8000);
+  if (tcpError) {
+    return { ok: false, error: tcpError };
+  }
+
   return new Promise((resolve) => {
     const config = { host, port, password };
     const client: RconClient = new Rcon(host, port, password, {
@@ -71,6 +97,7 @@ export async function ensureConnection(
     });
 
     let resolved = false;
+    let tcpConnected = false;
     const done = (ok: boolean, error?: string) => {
       if (resolved) return;
       resolved = true;
@@ -80,6 +107,10 @@ export async function ensureConnection(
 
     client.on("auth", () => {
       done(true);
+    });
+
+    client.on("connect", () => {
+      tcpConnected = true;
     });
 
     client.on("response", (...args: unknown[]) => {
@@ -113,7 +144,7 @@ export async function ensureConnection(
       connectionByServerId.delete(serverId);
     });
 
-    const timeoutMs = 20000; // 20s for slow or distant servers
+    const timeoutMs = 15000;
     client.connect();
     const t = setTimeout(() => {
       if (!resolved) {
@@ -123,12 +154,12 @@ export async function ensureConnection(
           //
         }
         const isLocal = process.env.NODE_ENV !== "production";
-        done(
-          false,
-          isLocal
-            ? "Connection timeout (20s). Check host IP, RCON port (e.g. 21717), and RCON password. Ensure the game server is running and the port is open."
-            : "Connection timeout (20s). Host likely allows your PC's IP (like RustAdmin) but not Railway's. Run RustMaxx locally (npm run dev) so RCON connects from your PC."
-        );
+        const detail = tcpConnected
+          ? "TCP connected but RCON auth had no response. Wrong password, or host may use WebRCON (browser-only) on this port."
+          : isLocal
+            ? "RCON timeout. Check host, port (e.g. 21717), and password; ensure the server is running."
+            : "Host likely allows your PC's IP but not Railway's. Run RustMaxx locally (npm run dev).";
+        done(false, `Connection timeout (15s). ${detail}`);
       }
     }, timeoutMs);
     client.once("auth", () => clearTimeout(t));
