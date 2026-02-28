@@ -144,7 +144,7 @@ export default function ServerDetailPage() {
       </div>
 
       <p className="text-sm text-zinc-500">
-        RCON runs from Railway (cloud). If you get <strong>Connection timeout</strong> but another app (e.g. RustAdmin) connects to the same server, the host may allow only certain IPs. Enable <strong>Railway Pro → Static Outbound IP</strong>, then ask your host (e.g. Shockbyte) to whitelist that IP for RCON. Or run RustMaxx locally (<code>npm run dev</code>) from a network the host allows.
+        RCON runs from <strong>Railway’s servers</strong>, not your browser. Local RustAdmin works because the connection comes from <strong>your PC</strong>. Here the connection comes from <strong>Railway’s IP</strong>—so if you get timeout, the host may allow your IP but not Railway’s. Fix: <strong>Railway Pro → Static Outbound IP</strong>, then ask the host to whitelist that IP for RCON; or run RustMaxx locally (<code>npm run dev</code>) so the connection comes from your PC like RustAdmin.
       </p>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
