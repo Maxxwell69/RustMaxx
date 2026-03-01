@@ -1,5 +1,6 @@
 import Link from "next/link";
 import LogoutButton from "./logout-button";
+import UserProfile from "./user-profile";
 import { Logo } from "@/components/marketing/Logo";
 
 const NAV_LINKS = [
@@ -44,7 +45,10 @@ export default function ServersLayout({
               ))}
             </nav>
           </div>
-          <LogoutButton />
+          <div className="flex items-center gap-4">
+            <UserProfile />
+            <LogoutButton />
+          </div>
         </div>
       </header>
       <main className="flex-1 p-4">{children}</main>

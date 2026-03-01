@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LogoUpload } from "./logo-upload";
 
+const CAN_MANAGE_SERVERS_ROLES = ["admin", "super_admin"];
+function canManageServers(role: string) {
+  return CAN_MANAGE_SERVERS_ROLES.includes(role);
+}
+
 type Server = {
   id: string;
   name: string;
@@ -22,6 +27,7 @@ type Server = {
 export default function ServersPage() {
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
     host: "",
@@ -48,6 +54,13 @@ export default function ServersPage() {
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => setUserRole(p?.role ?? null))
+      .catch(() => setUserRole(null));
   }, []);
 
   async function handleAdd(e: React.FormEvent) {
@@ -102,6 +115,7 @@ export default function ServersPage() {
     <div className="mx-auto max-w-4xl space-y-8">
       <h1 className="text-2xl font-semibold text-zinc-100">Servers</h1>
 
+      {userRole !== null && canManageServers(userRole) && (
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="mb-4 text-lg font-medium text-zinc-300">Add server</h2>
         <p className="mb-4 text-sm text-zinc-500">
@@ -243,13 +257,18 @@ export default function ServersPage() {
           </div>
         </form>
       </section>
+      )}
 
       <section>
         <h2 className="mb-4 text-lg font-medium text-zinc-300">Your servers</h2>
         {loading ? (
           <p className="text-zinc-500">Loading…</p>
         ) : servers.length === 0 ? (
-          <p className="text-zinc-500">No servers yet. Add one above.</p>
+          <p className="text-zinc-500">
+            {userRole !== null && canManageServers(userRole)
+              ? "No servers yet. Add one above."
+              : "No servers yet."}
+          </p>
         ) : (
           <ul className="space-y-2">
             {servers.map((s) => (
@@ -271,6 +290,7 @@ export default function ServersPage() {
                     {s.rcon_host}:{s.rcon_port}
                   </span>
                 </Link>
+                {userRole !== null && canManageServers(userRole) && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -285,6 +305,7 @@ export default function ServersPage() {
                 >
                   Delete
                 </button>
+                )}
               </li>
             ))}
           </ul>

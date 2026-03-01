@@ -5,6 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LogoUpload } from "../logo-upload";
 
+const CAN_MANAGE_SERVERS_ROLES = ["admin", "super_admin"];
+function canManageServers(role: string) {
+  return CAN_MANAGE_SERVERS_ROLES.includes(role);
+}
+
 type LogEntry = { id: string; type: string; message: string; created_at: string };
 type Player = { id: string; name: string };
 
@@ -47,6 +52,7 @@ export default function ServerDetailPage() {
   const [sending, setSending] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [playersLoading, setPlayersLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -82,6 +88,12 @@ export default function ServerDetailPage() {
       .then((data) => setLogs(Array.isArray(data) ? data : []))
       .catch(() => setLogs([]));
   }, [id]);
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => setUserRole(p?.role ?? null))
+      .catch(() => setUserRole(null));
+  }, []);
 
   // Restore "connected" for this server from session and verify with a ping
   useEffect(() => {
@@ -330,6 +342,7 @@ export default function ServerDetailPage() {
         </div>
       </div>
 
+      {userRole !== null && canManageServers(userRole) && (
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
           <span>Public server list</span>
@@ -422,6 +435,7 @@ export default function ServerDetailPage() {
           </button>
         </div>
       </div>
+      )}
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm text-zinc-400">

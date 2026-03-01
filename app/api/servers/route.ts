@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { audit } from "@/lib/audit";
+import { requireCanManageServers, getSessionFromRequest } from "@/lib/api-auth";
 import type { ServerRow } from "@/lib/db";
 
 export async function GET() {
@@ -22,6 +23,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authErr = requireCanManageServers(request);
+  if (authErr) return authErr;
+  const session = getSessionFromRequest(request)!;
+
   let body: {
     name?: string;
     host?: string;
@@ -69,7 +74,7 @@ export async function POST(request: NextRequest) {
     );
     const server = rows[0];
     if (!server) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
-    await audit("admin", "server.create", { serverId: server.id, name: server.name });
+    await audit(session.userId, "server.create", { serverId: server.id, name: server.name });
     return NextResponse.json(server);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -84,7 +89,7 @@ export async function POST(request: NextRequest) {
         );
         const server = rows[0];
         if (!server) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
-        await audit("admin", "server.create", { serverId: server.id, name: server.name });
+        await audit(session.userId, "server.create", { serverId: server.id, name: server.name });
         return NextResponse.json({ ...server, location: null, logo_url: null });
       } catch {
         //
@@ -98,7 +103,7 @@ export async function POST(request: NextRequest) {
         );
         const server = rows[0];
         if (!server) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
-        await audit("admin", "server.create", { serverId: server.id, name: server.name });
+        await audit(session.userId, "server.create", { serverId: server.id, name: server.name });
         return NextResponse.json({
           ...server,
           listed: false,

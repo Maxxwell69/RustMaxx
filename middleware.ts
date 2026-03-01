@@ -5,7 +5,10 @@ import { verifySessionCookieEdge } from "@/lib/auth-edge";
 // Routes and APIs that do not require login (public marketing, server list, early-access)
 const PUBLIC_PATHS = [
   "/login",
+  "/register",
   "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/me",
   "/",
   "/features",
   "/pricing",

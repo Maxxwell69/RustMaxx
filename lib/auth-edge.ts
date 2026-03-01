@@ -3,7 +3,19 @@
  * Used by middleware; do not import Node "crypto" here.
  */
 
+import type { UserRole } from "./permissions";
+
 const COOKIE_NAME = "rustmaxx_session";
+
+const VALID_ROLES: UserRole[] = [
+  "super_admin",
+  "admin",
+  "moderator",
+  "support",
+  "streamer",
+  "player",
+  "guest",
+];
 
 function getSecret(): string | null {
   const secret = process.env.SESSION_SECRET;
@@ -21,7 +33,8 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
 function hexToBytes(hex: string): Uint8Array {
   const len = hex.length / 2;
   const out = new Uint8Array(len);
-  for (let i = 0; i < len; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < len; i++)
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
 }
 
@@ -38,7 +51,9 @@ function base64UrlDecode(str: string): string {
   return atob(padded);
 }
 
-export async function verifySessionCookieEdge(cookieHeader: string | null): Promise<boolean> {
+export async function verifySessionCookieEdge(
+  cookieHeader: string | null
+): Promise<boolean> {
   const secret = getSecret();
   if (!secret) return false;
   if (!cookieHeader) return false;
@@ -76,12 +91,20 @@ export async function verifySessionCookieEdge(cookieHeader: string | null): Prom
   } catch {
     return false;
   }
-  let data: { exp?: number; auth?: string };
+  let data: { userId?: string; email?: string; role?: string; exp?: number };
   try {
     data = JSON.parse(payload);
   } catch {
     return false;
   }
-  if (data.exp == null || Math.floor(Date.now() / 1000) > data.exp) return false;
-  return data.auth === "admin";
+  if (data.exp == null || Math.floor(Date.now() / 1000) > data.exp)
+    return false;
+  if (
+    typeof data.userId !== "string" ||
+    typeof data.email !== "string" ||
+    typeof data.role !== "string"
+  )
+    return false;
+  if (!VALID_ROLES.includes(data.role as UserRole)) return false;
+  return true;
 }

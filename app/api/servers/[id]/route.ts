@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { disconnect } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
+import { requireCanManageServers, getSessionFromRequest } from "@/lib/api-auth";
 import type { ServerRow } from "@/lib/db";
 
 export async function GET(
@@ -22,6 +23,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = requireCanManageServers(request);
+  if (authErr) return authErr;
+  const session = getSessionFromRequest(request)!;
   const { id: serverId } = await params;
   let body: {
     listed?: boolean;
@@ -84,19 +88,22 @@ export async function PATCH(
     `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url`,
     values
   );
-  await audit("admin", "server.update", { serverId, fields: Object.keys(body) });
+  await audit(session.userId, "server.update", { serverId, fields: Object.keys(body) });
   return NextResponse.json(rows[0]);
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = requireCanManageServers(request);
+  if (authErr) return authErr;
+  const session = getSessionFromRequest(request)!;
   const { id: serverId } = await params;
   const { rows } = await query<ServerRow>("SELECT id FROM servers WHERE id = $1", [serverId]);
   if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
   disconnect(serverId);
   await query("DELETE FROM servers WHERE id = $1", [serverId]);
-  await audit("admin", "server.delete", { serverId });
+  await audit(session.userId, "server.delete", { serverId });
   return NextResponse.json({ ok: true });
 }
