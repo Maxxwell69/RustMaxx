@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySessionCookieEdge } from "@/lib/auth-edge";
 
+// Routes and APIs that do not require login (public marketing, server list, early-access)
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
@@ -11,10 +12,13 @@ const PUBLIC_PATHS = [
   "/docs",
   "/about",
   "/contact",
-  "/server-list",
+  "/server-list",       // public list of opted-in Rust servers
+  "/api/server-list",
+  "/streamer-interaction",
+  "/early-access",
+  "/api/early-access",
   "/sitemap.xml",
   "/robots.txt",
-  "/api/server-list",
 ];
 
 function isPublic(pathname: string): boolean {
