@@ -44,15 +44,7 @@ export default function ProfilePage() {
     return null;
   }
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <header className="border-b border-zinc-800 bg-zinc-900/80 px-4 py-3">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <Link href="/servers" className="flex items-center gap-2 text-rust-cyan hover:underline">
-            ← Dashboard
-          </Link>
-        </div>
-      </header>
-      <main className="mx-auto max-w-2xl p-6">
+    <div className="mx-auto max-w-2xl p-6">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-6">
           <h1 className="mb-6 text-2xl font-bold text-zinc-100">Your profile</h1>
           <dl className="space-y-4">
@@ -90,7 +82,6 @@ export default function ProfilePage() {
               "Access to dashboard and server list."}
           </p>
         </div>
-      </main>
     </div>
   );
 }
