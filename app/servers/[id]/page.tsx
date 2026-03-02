@@ -11,10 +11,15 @@ type Player = { id: string; name: string };
 
 const QUICK_COMMANDS = [
   { label: "status", command: "status" },
-  { label: "players", command: "players" },
-  { label: "say test", command: "say test" },
+  { label: "groups", command: "oxide.show groups" },
   { label: "oxide.plugins", command: "oxide.plugins" },
 ];
+
+type ProfiledPlayer = {
+  player_id: string;
+  player_name: string | null;
+  active: boolean;
+};
 
 export default function ServerDetailPage() {
   const params = useParams();
@@ -51,6 +56,8 @@ export default function ServerDetailPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [playersLoading, setPlayersLoading] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [profiledPlayers, setProfiledPlayers] = useState<ProfiledPlayer[]>([]);
+  const [inactiveLoading, setInactiveLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -79,6 +86,18 @@ export default function ServerDetailPage() {
         }
       })
       .catch(() => setServer(null));
+  }, [id]);
+
+  // Load RustMaxx profiled players (inactive/active) for this server
+  useEffect(() => {
+    setInactiveLoading(true);
+    fetch(`/api/servers/${id}/inactive-players`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        setProfiledPlayers(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setProfiledPlayers([]))
+      .finally(() => setInactiveLoading(false));
   }, [id]);
   useEffect(() => {
     fetch(`/api/servers/${id}/logs?limit=200`)
@@ -290,8 +309,30 @@ export default function ServerDetailPage() {
         <Link href="/servers" className="text-rust-cyan hover:underline">← Servers</Link>
         <h1 className="text-xl font-semibold text-zinc-100">{server.name}</h1>
         <nav className="flex gap-2">
-          <Link href={`/servers/${id}/environment`} className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle">Environment</Link>
-          <Link href={`/servers/${id}/events`} className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle">Events</Link>
+          <Link
+            href={`/servers/${id}/environment`}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle"
+          >
+            Environment
+          </Link>
+          <Link
+            href={`/servers/${id}/events`}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle"
+          >
+            Events
+          </Link>
+          <Link
+            href={`/servers/${id}/permissions`}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle"
+          >
+            Permissions
+          </Link>
+          <Link
+            href={`/servers/${id}/items`}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle"
+          >
+            Items
+          </Link>
         </nav>
         <button
           type="button"
@@ -330,6 +371,50 @@ export default function ServerDetailPage() {
           ))}
           <div ref={logEndRef} />
         </div>
+      </div>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+        <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
+          <span>RustMaxx player profiles on this server</span>
+        </div>
+        {inactiveLoading ? (
+          <div className="p-3 text-sm text-zinc-500">Loading profiles…</div>
+        ) : profiledPlayers.length === 0 ? (
+          <div className="p-3 text-sm text-zinc-500">
+            No saved player profiles yet. Players will appear here when you add them to groups.
+          </div>
+        ) : (
+          <div className="p-3 text-sm">
+            <p className="mb-2 text-xs text-zinc-500">
+              Inactive players are ones that have a RustMaxx profile here but are not currently
+              reported in any Oxide group on this server.
+            </p>
+            <ul className="space-y-1">
+              {profiledPlayers.map((p) => (
+                <li key={p.player_id} className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/servers/${id}/players/${encodeURIComponent(
+                      p.player_id
+                    )}?name=${encodeURIComponent(p.player_name || p.player_id)}`}
+                    className="text-rust-cyan hover:underline"
+                  >
+                    {p.player_name || p.player_id}
+                  </Link>
+                  <span className="text-xs text-zinc-500">{p.player_id}</span>
+                  <span
+                    className={`ml-2 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                      p.active
+                        ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700/60"
+                        : "bg-zinc-800 text-zinc-300 border border-zinc-600"
+                    }`}
+                  >
+                    {p.active ? "Active" : "Inactive"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -372,7 +457,7 @@ export default function ServerDetailPage() {
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
-          <span>Players</span>
+          <span>Online players</span>
           <button
             type="button"
             onClick={() => refreshPlayers()}
