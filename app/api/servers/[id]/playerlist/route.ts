@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAndWait } from "@/lib/rcon-manager";
+import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
+import { getServerIfAccessible } from "@/lib/server-access";
 
 function parsePlayerlist(raw: string): { id: string; name: string }[] {
   const trimmed = raw.trim();
@@ -63,10 +65,15 @@ function parsePlayerlist(raw: string): { id: string; name: string }[] {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = requireSession(request);
+  if (authErr) return authErr;
+  const session = getSessionFromRequest(request)!;
   const { id: serverId } = await params;
+  const server = await getServerIfAccessible(serverId, session.userId, session.role);
+  if (!server) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
     const raw = await runAndWait(serverId, "playerlist", 8000);
     const players = parsePlayerlist(raw);

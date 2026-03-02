@@ -4,17 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LogoUpload } from "./logo-upload";
 
-const CAN_MANAGE_SERVERS_ROLES = ["admin", "super_admin"];
-function canManageServers(role: string) {
-  return CAN_MANAGE_SERVERS_ROLES.includes(role);
-}
-
 type Server = {
   id: string;
   name: string;
   rcon_host: string;
   rcon_port: number;
   created_at: string;
+  myRole?: "owner" | "admin" | "moderator";
   listed?: boolean;
   listing_name?: string | null;
   listing_description?: string | null;
@@ -115,7 +111,7 @@ export default function ServersPage() {
     <div className="mx-auto max-w-4xl space-y-8">
       <h1 className="text-2xl font-semibold text-zinc-100">Servers</h1>
 
-      {userRole !== null && canManageServers(userRole) && (
+      {userRole !== null && (
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="mb-4 text-lg font-medium text-zinc-300">Add server</h2>
         <p className="mb-4 text-sm text-zinc-500">
@@ -265,7 +261,7 @@ export default function ServersPage() {
           <p className="text-zinc-500">Loading…</p>
         ) : servers.length === 0 ? (
           <p className="text-zinc-500">
-            {userRole !== null && canManageServers(userRole)
+            {userRole !== null
               ? "No servers yet. Add one above."
               : "No servers yet."}
           </p>
@@ -286,11 +282,14 @@ export default function ServersPage() {
                       On list
                     </span>
                   )}
+                  {(s.myRole === "owner" || s.myRole === "admin") && (
+                    <span className="ml-2 text-xs text-zinc-500">(you can manage access)</span>
+                  )}
                   <span className="ml-2 text-sm text-zinc-500">
                     {s.rcon_host}:{s.rcon_port}
                   </span>
                 </Link>
-                {userRole !== null && canManageServers(userRole) && (
+                {(s.myRole === "owner" || s.myRole === "admin") && (
                 <button
                   type="button"
                   onClick={(e) => {

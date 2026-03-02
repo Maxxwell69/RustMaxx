@@ -28,8 +28,14 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
+// Static assets in public/ must load for everyone (e.g. logo for logged-out visitors)
+const STATIC_EXT = /\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|css|js)$/i;
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (STATIC_EXT.test(pathname)) {
+    return NextResponse.next();
+  }
   if (isPublic(pathname)) {
     return NextResponse.next();
   }

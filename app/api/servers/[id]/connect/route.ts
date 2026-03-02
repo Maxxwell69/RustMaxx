@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, pool } from "@/lib/db";
+import { pool } from "@/lib/db";
+import { query } from "@/lib/db";
 import { ensureConnection } from "@/lib/rcon-manager";
-import type { ServerRow } from "@/lib/db";
+import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
+import { getServerIfAccessible } from "@/lib/server-access";
 
 async function persistLog(serverId: string, type: "console" | "chat", message: string) {
   if (!pool) return;
@@ -12,10 +14,13 @@ async function persistLog(serverId: string, type: "console" | "chat", message: s
 }
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authErr = requireSession(request);
+    if (authErr) return authErr;
+    const session = getSessionFromRequest(request)!;
     if (!pool) {
       return NextResponse.json(
         { ok: false, error: "DATABASE_URL is not set. Add it to .env to use servers and RCON." },
@@ -23,11 +28,7 @@ export async function POST(
       );
     }
     const { id: serverId } = await params;
-    const { rows } = await query<ServerRow>(
-      "SELECT id, rcon_host, rcon_port, rcon_password FROM servers WHERE id = $1",
-      [serverId]
-    );
-    const server = rows[0];
+    const server = await getServerIfAccessible(serverId, session.userId, session.role);
     if (!server) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const result = await ensureConnection(

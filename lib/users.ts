@@ -81,3 +81,32 @@ export function toProfile(row: UserRow): UserProfile {
     created_at: row.created_at.toISOString(),
   };
 }
+
+export async function listUsers(): Promise<UserProfile[]> {
+  const { rows } = await query<UserRow>(
+    "SELECT id, email, password_hash, role, display_name, created_at, updated_at FROM users ORDER BY created_at ASC"
+  );
+  return rows.map(toProfile);
+}
+
+const ALLOWED_ROLES: UserRole[] = [
+  "guest",
+  "player",
+  "streamer",
+  "support",
+  "moderator",
+  "admin",
+  "super_admin",
+];
+
+export async function updateUserRole(
+  userId: string,
+  newRole: UserRole
+): Promise<UserRow | null> {
+  if (!ALLOWED_ROLES.includes(newRole)) return null;
+  const { rows } = await query<UserRow>(
+    "UPDATE users SET role = $1, updated_at = now() WHERE id = $2 RETURNING id, email, password_hash, role, display_name, created_at, updated_at",
+    [newRole, userId]
+  );
+  return rows[0] ?? null;
+}

@@ -4,11 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LogoUpload } from "../logo-upload";
-
-const CAN_MANAGE_SERVERS_ROLES = ["admin", "super_admin"];
-function canManageServers(role: string) {
-  return CAN_MANAGE_SERVERS_ROLES.includes(role);
-}
+import ServerAccessSection from "./server-access-section";
 
 type LogEntry = { id: string; type: string; message: string; created_at: string };
 type Player = { id: string; name: string };
@@ -26,6 +22,7 @@ export default function ServerDetailPage() {
   const id = params.id as string;
   const [server, setServer] = useState<{
     name: string;
+    myRole?: "owner" | "admin" | "moderator";
     listed?: boolean;
     listing_name?: string | null;
     listing_description?: string | null;
@@ -34,6 +31,7 @@ export default function ServerDetailPage() {
     location?: string | null;
     logo_url?: string | null;
   } | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [listingForm, setListingForm] = useState({
     listed: false,
     listing_name: "",
@@ -91,7 +89,12 @@ export default function ServerDetailPage() {
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then((p) => setUserRole(p?.role ?? null))
+      .then((p) => {
+        if (p) {
+          setUserRole(p.role ?? null);
+          setCurrentUserId(p.id ?? null);
+        }
+      })
       .catch(() => setUserRole(null));
   }, []);
 
@@ -310,6 +313,64 @@ export default function ServerDetailPage() {
       </p>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+        <div className="border-b border-zinc-800 px-3 py-2 text-sm text-zinc-400">
+          Console & chat (last 200 + live)
+        </div>
+        <div className="h-[400px] overflow-y-auto p-3 font-mono text-sm">
+          {logs.map((log, i) => (
+            <div
+              key={log.id || `live-${i}`}
+              className={`mb-1 ${log.type === "chat" ? "text-amber-200" : "text-zinc-300"}`}
+            >
+              <span className="text-zinc-500 select-none">
+                {new Date(log.created_at).toLocaleTimeString()}
+              </span>{" "}
+              {log.message}
+            </div>
+          ))}
+          <div ref={logEndRef} />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {QUICK_COMMANDS.map(({ label, command: cmd }) => (
+          <button
+            key={cmd}
+            type="button"
+            onClick={() => sendCommand(cmd)}
+            disabled={!connected || sending}
+            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-700 hover:shadow-rust-glow-subtle disabled:opacity-50"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          sendCommand(command);
+        }}
+        className="flex gap-2"
+      >
+        <input
+          type="text"
+          value={command}
+          onChange={(e) => setCommand(e.target.value)}
+          placeholder="Enter RCON command…"
+          disabled={!connected || sending}
+          className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-500 disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={!connected || sending}
+          className="rounded-lg bg-rust-cyan px-4 py-2 text-sm font-medium text-rust-panel disabled:opacity-50"
+        >
+          Run
+        </button>
+      </form>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
           <span>Players</span>
           <button
@@ -342,7 +403,11 @@ export default function ServerDetailPage() {
         </div>
       </div>
 
-      {userRole !== null && canManageServers(userRole) && (
+      {(server.myRole === "owner" || server.myRole === "admin") && (
+      <ServerAccessSection serverId={id} currentUserId={currentUserId ?? ""} />
+      )}
+
+      {userRole !== null && (server.myRole === "owner" || server.myRole === "admin") && (
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
           <span>Public server list</span>
@@ -436,64 +501,6 @@ export default function ServerDetailPage() {
         </div>
       </div>
       )}
-
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-        <div className="border-b border-zinc-800 px-3 py-2 text-sm text-zinc-400">
-          Console & chat (last 200 + live)
-        </div>
-        <div className="h-[400px] overflow-y-auto p-3 font-mono text-sm">
-          {logs.map((log, i) => (
-            <div
-              key={log.id || `live-${i}`}
-              className={`mb-1 ${log.type === "chat" ? "text-amber-200" : "text-zinc-300"}`}
-            >
-              <span className="text-zinc-500 select-none">
-                {new Date(log.created_at).toLocaleTimeString()}
-              </span>{" "}
-              {log.message}
-            </div>
-          ))}
-          <div ref={logEndRef} />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {QUICK_COMMANDS.map(({ label, command: cmd }) => (
-          <button
-            key={cmd}
-            type="button"
-            onClick={() => sendCommand(cmd)}
-            disabled={!connected || sending}
-            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-700 hover:shadow-rust-glow-subtle disabled:opacity-50"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          sendCommand(command);
-        }}
-        className="flex gap-2"
-      >
-        <input
-          type="text"
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          placeholder="Enter RCON command…"
-          disabled={!connected || sending}
-          className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-500 disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={!connected || sending}
-          className="rounded-lg bg-rust-cyan px-4 py-2 text-sm font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
-        >
-          Send
-        </button>
-      </form>
     </div>
   );
 }

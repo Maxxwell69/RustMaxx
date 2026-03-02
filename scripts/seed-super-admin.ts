@@ -4,7 +4,6 @@ import { query } from "../lib/db";
 
 const SUPER_ADMINS: { email: string; password: string }[] = [
   { email: "maxx@rustmaxx.com", password: "ShogunMaxx1969!" },
-  { email: "williskemp@rustmaxx.com", password: "rustmaxx2026!" },
 ];
 
 const ROLE = "super_admin";

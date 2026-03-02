@@ -25,6 +25,7 @@ export type ServerRow = {
   rcon_port: number;
   rcon_password: string;
   created_at: Date;
+  owner_id?: string | null;
   listed?: boolean;
   listing_name?: string | null;
   listing_description?: string | null;

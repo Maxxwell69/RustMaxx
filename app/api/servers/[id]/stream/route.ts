@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { query } from "@/lib/db";
 import { subscribe } from "@/lib/rcon-manager";
-import type { ServerRow } from "@/lib/db";
+import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
+import { getServerIfAccessible } from "@/lib/server-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,9 +14,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = requireSession(request);
+  if (authErr) return authErr;
+  const session = getSessionFromRequest(request)!;
   const { id: serverId } = await params;
-  const { rows } = await query<ServerRow>("SELECT id FROM servers WHERE id = $1", [serverId]);
-  if (!rows[0]) {
+  const server = await getServerIfAccessible(serverId, session.userId, session.role);
+  if (!server) {
     return new Response("Not found", { status: 404 });
   }
 

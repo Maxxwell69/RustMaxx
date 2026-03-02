@@ -2,31 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { disconnect } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
-import { requireCanManageServers, getSessionFromRequest } from "@/lib/api-auth";
+import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
+import { getServerWithRole, getServerIfAccessible, canEditServer, canDeleteServer } from "@/lib/server-access";
 import type { ServerRow } from "@/lib/db";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = requireSession(request);
+  if (authErr) return authErr;
+  const session = getSessionFromRequest(request)!;
   const { id } = await params;
-  const { rows } = await query<ServerRow>(
-    "SELECT id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url FROM servers WHERE id = $1",
-    [id]
-  );
-  const server = rows[0];
-  if (!server) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(server);
+  const result = await getServerWithRole(id, session.userId, session.role);
+  if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ ...result.server, myRole: result.serverRole });
 }
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authErr = requireCanManageServers(request);
+  const authErr = requireSession(request);
   if (authErr) return authErr;
   const session = getSessionFromRequest(request)!;
   const { id: serverId } = await params;
+  const result = await getServerWithRole(serverId, session.userId, session.role);
+  if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!canEditServer(result.serverRole)) return NextResponse.json({ error: "Only owner or server admin can edit" }, { status: 403 });
+  const existing = result.server;
   let body: {
     listed?: boolean;
     listing_name?: string | null;
@@ -41,8 +45,6 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { rows: existing } = await query<ServerRow>("SELECT id FROM servers WHERE id = $1", [serverId]);
-  if (!existing[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -77,11 +79,7 @@ export async function PATCH(
     values.push(typeof body.logo_url === "string" ? body.logo_url.trim() || null : null);
   }
   if (updates.length === 0) {
-    const { rows } = await query<ServerRow>(
-      "SELECT id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url FROM servers WHERE id = $1",
-      [serverId]
-    );
-    return NextResponse.json(rows[0]);
+    return NextResponse.json(existing);
   }
   values.push(serverId);
   const { rows } = await query<ServerRow>(
@@ -96,12 +94,13 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authErr = requireCanManageServers(request);
+  const authErr = requireSession(request);
   if (authErr) return authErr;
   const session = getSessionFromRequest(request)!;
   const { id: serverId } = await params;
-  const { rows } = await query<ServerRow>("SELECT id FROM servers WHERE id = $1", [serverId]);
-  if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const result = await getServerWithRole(serverId, session.userId, session.role);
+  if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!canDeleteServer(result.serverRole)) return NextResponse.json({ error: "Only owner or server admin can delete" }, { status: 403 });
   disconnect(serverId);
   await query("DELETE FROM servers WHERE id = $1", [serverId]);
   await audit(session.userId, "server.delete", { serverId });

@@ -1,29 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireCanManageServers, getSessionFromRequest } from "@/lib/api-auth";
+import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
 import type { ServerRow } from "@/lib/db";
 
-export async function GET() {
+type ServerWithRole = ServerRow & { myRole?: "owner" | "admin" | "moderator" };
+
+export async function GET(request: NextRequest) {
+  const authErr = requireSession(request);
+  if (authErr) return authErr;
+  const session = getSessionFromRequest(request)!;
+  const isSuperAdmin = session.role === "super_admin";
   try {
-    const { rows } = await query<ServerRow>(
-      "SELECT id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url FROM servers ORDER BY created_at DESC"
-    );
+    let rows: ServerWithRole[];
+    if (isSuperAdmin) {
+      const r = await query<ServerRow>(
+        "SELECT id, name, rcon_host, rcon_port, created_at, owner_id, listed, listing_name, listing_description, game_host, game_port, location, logo_url FROM servers ORDER BY created_at DESC"
+      );
+      rows = r.rows.map((s) => ({ ...s, myRole: "owner" as const }));
+    } else {
+      const r = await query<
+        ServerRow & { my_role: string }
+      >(
+        `SELECT s.id, s.name, s.rcon_host, s.rcon_port, s.created_at, s.listed, s.listing_name, s.listing_description, s.game_host, s.game_port, s.location, s.logo_url,
+                CASE WHEN s.owner_id = $1 THEN 'owner' WHEN su.role = 'admin' THEN 'admin' ELSE 'moderator' END AS my_role
+         FROM servers s
+         LEFT JOIN server_users su ON su.server_id = s.id AND su.user_id = $1 AND su.role IN ('admin', 'moderator')
+         WHERE s.owner_id = $1 OR su.user_id IS NOT NULL
+         ORDER BY s.created_at DESC`,
+        [session.userId]
+      );
+      rows = r.rows.map(({ my_role, ...s }) => ({ ...s, myRole: my_role as "owner" | "admin" | "moderator" }));
+    }
     return NextResponse.json(rows);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("location") || msg.includes("logo_url") || msg.includes("does not exist")) {
+    if (msg.includes("owner_id") || msg.includes("server_users") || msg.includes("does not exist")) {
       const { rows } = await query<ServerRow>(
-        "SELECT id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port FROM servers ORDER BY created_at DESC"
+        "SELECT id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url FROM servers WHERE owner_id = $1 ORDER BY created_at DESC",
+        [session.userId]
       );
-      return NextResponse.json(rows.map((r) => ({ ...r, location: null, logo_url: null })));
+      return NextResponse.json(rows.map((s) => ({ ...s, myRole: "owner" as const })));
+    }
+    if (msg.includes("location") || msg.includes("logo_url")) {
+      const r = await query<ServerRow>(
+        "SELECT id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port FROM servers WHERE owner_id = $1 ORDER BY created_at DESC",
+        [session.userId]
+      );
+      return NextResponse.json(r.rows.map((s) => ({ ...s, location: null, logo_url: null, myRole: "owner" as const })));
     }
     throw err;
   }
 }
 
 export async function POST(request: NextRequest) {
-  const authErr = requireCanManageServers(request);
+  const authErr = requireSession(request);
   if (authErr) return authErr;
   const session = getSessionFromRequest(request)!;
 
@@ -67,10 +98,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const { rows } = await query<ServerRow>(
-      `INSERT INTO servers (name, rcon_host, rcon_port, rcon_password, listed, listing_name, listing_description, game_host, game_port, location, logo_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO servers (name, rcon_host, rcon_port, rcon_password, owner_id, listed, listing_name, listing_description, game_host, game_port, location, logo_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url`,
-      [name, host, portNum, password, listed, listingName, listingDesc, gameHost, gamePortNum, location, logoUrl]
+      [name, host, portNum, password, session.userId, listed, listingName, listingDesc, gameHost, gamePortNum, location, logoUrl]
     );
     const server = rows[0];
     if (!server) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
@@ -82,10 +113,10 @@ export async function POST(request: NextRequest) {
     if (missingColumn && (msg.includes("location") || msg.includes("logo_url"))) {
       try {
         const { rows } = await query<ServerRow>(
-          `INSERT INTO servers (name, rcon_host, rcon_port, rcon_password, listed, listing_name, listing_description, game_host, game_port)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO servers (name, rcon_host, rcon_port, rcon_password, owner_id, listed, listing_name, listing_description, game_host, game_port)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port`,
-          [name, host, portNum, password, listed, listingName, listingDesc, gameHost, gamePortNum]
+          [name, host, portNum, password, session.userId, listed, listingName, listingDesc, gameHost, gamePortNum]
         );
         const server = rows[0];
         if (!server) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
@@ -98,8 +129,8 @@ export async function POST(request: NextRequest) {
     if (missingColumn && (msg.includes("listed") || msg.includes("listing_name") || msg.includes("game_host"))) {
       try {
         const { rows } = await query<ServerRow>(
-          "INSERT INTO servers (name, rcon_host, rcon_port, rcon_password) VALUES ($1, $2, $3, $4) RETURNING id, name, rcon_host, rcon_port, created_at",
-          [name, host, portNum, password]
+          "INSERT INTO servers (name, rcon_host, rcon_port, rcon_password, owner_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, rcon_host, rcon_port, created_at",
+          [name, host, portNum, password, session.userId]
         );
         const server = rows[0];
         if (!server) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
