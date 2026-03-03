@@ -23,6 +23,7 @@ type ItemCategory =
   | "attire"
   | "food"
   | "fun"
+  | "traps"
   | "other";
 
 function mapCategory(jsonCategory: string): ItemCategory {
@@ -39,6 +40,7 @@ function mapCategory(jsonCategory: string): ItemCategory {
   if (c === "resources") return "resources";
   if (c === "attachment" || c === "attachments") return "attachments";
   if (c === "fun") return "fun";
+  if (c === "traps") return "traps";
   if (c === "items" || c === "misc") return "other";
   return "other";
 }
@@ -92,6 +94,7 @@ async function main() {
   | "attire"
   | "food"
   | "fun"
+  | "traps"
   | "other";
 
 export type ItemDefinition = {

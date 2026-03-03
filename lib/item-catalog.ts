@@ -11,6 +11,7 @@ export type ItemCategory =
   | "attire"
   | "food"
   | "fun"
+  | "traps"
   | "other";
 
 export type ItemDefinition = {
@@ -403,7 +404,7 @@ export const ITEM_CATALOG: ItemDefinition[] = [
   { shortname: "fishtrap.small", label: "Survival Fish Trap", amount: 5, category: "other" },
   { shortname: "fishtrophy", label: "Fish Trophy", amount: 1, category: "other" },
   { shortname: "flamethrower", label: "Flame Thrower", amount: 1, category: "weapons" },
-  { shortname: "flameturret", label: "Flame Turret", amount: 1, category: "other" },
+  { shortname: "flameturret", label: "Flame Turret", amount: 1, category: "traps" },
   { shortname: "flare", label: "Flare", amount: 5, category: "tools" },
   { shortname: "flashlight.held", label: "Flashlight", amount: 1, category: "tools" },
   { shortname: "floor.grill", label: "Floor grill", amount: 10, category: "building" },
@@ -488,7 +489,7 @@ export const ITEM_CATALOG: ItemDefinition[] = [
   { shortname: "gunrack_stand", label: "Weapon Rack Stand", amount: 10, category: "other" },
   { shortname: "gunrack_tall.horizontal", label: "Tall Weapon Rack", amount: 10, category: "other" },
   { shortname: "gunrack_wide.horizontal", label: "Wide Weapon Rack", amount: 10, category: "other" },
-  { shortname: "guntrap", label: "Shotgun Trap", amount: 1, category: "other" },
+  { shortname: "guntrap", label: "Shotgun Trap", amount: 1, category: "traps" },
   { shortname: "hab.armor", label: "Hot Air Balloon Armor", amount: 1, category: "attire" },
   { shortname: "hab", label: "Hot Air Balloon", amount: 1, category: "other" },
   { shortname: "habrepair", label: "Hot Air Balloon", amount: 1, category: "other" },
@@ -849,7 +850,7 @@ export const ITEM_CATALOG: ItemDefinition[] = [
   { shortname: "salvaged.bamboo.shelves", label: "Bamboo Salvaged Shelves", amount: 10, category: "other" },
   { shortname: "salvaged.cleaver", label: "Salvaged Cleaver", amount: 1, category: "weapons" },
   { shortname: "salvaged.sword", label: "Salvaged Sword", amount: 1, category: "weapons" },
-  { shortname: "samsite", label: "SAM Site", amount: 1, category: "other" },
+  { shortname: "samsite", label: "SAM Site", amount: 1, category: "traps" },
   { shortname: "santabeard", label: "Santa Beard", amount: 1, category: "attire" },
   { shortname: "santahat", label: "Santa Hat", amount: 1, category: "attire" },
   { shortname: "scarecrow", label: "Scarecrow", amount: 5, category: "other" },
@@ -994,8 +995,8 @@ export const ITEM_CATALOG: ItemDefinition[] = [
   { shortname: "speargun.spear", label: "Speargun Spear", amount: 64, category: "ammo" },
   { shortname: "speechbubbleballoon2025", label: "Speech Bubble Balloon", amount: 1, category: "other" },
   { shortname: "spiderweb", label: "Spider Webs", amount: 10, category: "other" },
-  { shortname: "spikes.floor", label: "Wooden Floor Spikes", amount: 10, category: "other" },
-  { shortname: "spikes.trap", label: "Small Spike Trap", amount: 5, category: "other" },
+  { shortname: "spikes.floor", label: "Wooden Floor Spikes", amount: 10, category: "traps" },
+  { shortname: "spikes.trap", label: "Small Spike Trap", amount: 5, category: "traps" },
   { shortname: "spinner.wheel", label: "Spinning Wheel", amount: 1, category: "other" },
   { shortname: "spoiled.produce", label: "Spoiled Produce", amount: 10, category: "food" },
   { shortname: "spookyspeaker", label: "Spooky Speaker", amount: 1, category: "other" },
@@ -1042,7 +1043,7 @@ export const ITEM_CATALOG: ItemDefinition[] = [
   { shortname: "tarp", label: "Tarp", amount: 20, category: "components" },
   { shortname: "techparts", label: "Tech Trash", amount: 50, category: "components" },
   { shortname: "telephone", label: "Telephone", amount: 1, category: "fun" },
-  { shortname: "tincan.alarm", label: "Tin Can Alarm", amount: 1, category: "other" },
+  { shortname: "tincan.alarm", label: "Tin Can Alarm", amount: 1, category: "traps" },
   { shortname: "tool.binoculars", label: "Binoculars", amount: 1, category: "tools" },
   { shortname: "tool.camera", label: "Camera", amount: 1, category: "tools" },
   { shortname: "tool.instant_camera", label: "Instant Camera", amount: 1, category: "tools" },
@@ -1050,8 +1051,8 @@ export const ITEM_CATALOG: ItemDefinition[] = [
   { shortname: "torch", label: "Torch", amount: 1, category: "tools" },
   { shortname: "torch.torch.skull", label: "Cultist Deer Torch", amount: 1, category: "tools" },
   { shortname: "torchholder", label: "Torch Holder", amount: 1, category: "other" },
-  { shortname: "trap.bear", label: "Snap Trap", amount: 3, category: "other" },
-  { shortname: "trap.landmine", label: "Homemade Landmine", amount: 5, category: "other" },
+  { shortname: "trap.bear", label: "Snap Trap", amount: 3, category: "traps" },
+  { shortname: "trap.landmine", label: "Homemade Landmine", amount: 5, category: "traps" },
   { shortname: "triangle.rail.road.planter", label: "Triangle Rail Road Planter", amount: 10, category: "other" },
   { shortname: "trike", label: "Trike", amount: 1, category: "other" },
   { shortname: "trophy", label: "Twitch Rivals Trophy", amount: 1, category: "other" },

@@ -26,6 +26,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   attire: "Attire",
   food: "Food",
   fun: "Fun",
+  traps: "Traps",
   other: "Misc",
 };
 
@@ -122,19 +123,11 @@ export default function ServerItemsPage() {
   }
 
   const searchLower = searchQuery.trim().toLowerCase();
-  const isTraps = selectedTab === "traps";
 
   const filteredItems = items.filter((item) => {
     if (showOnlyEnabled && !item.enabled) return false;
     const cat = item.category || "other";
-    if (selectedTab !== "all") {
-      if (isTraps) {
-        if (cat !== "building") return false;
-        const sn = (item.shortname || "").toLowerCase();
-        const lb = (item.label || "").toLowerCase();
-        if (!sn.includes("trap") && !lb.includes("trap")) return false;
-      } else if (cat !== selectedTab) return false;
-    }
+    if (selectedTab !== "all" && cat !== selectedTab) return false;
     if (searchLower) {
       const match =
         (item.label || "").toLowerCase().includes(searchLower) ||
@@ -219,8 +212,7 @@ export default function ServerItemsPage() {
             {filteredItems.length} item{filteredItems.length !== 1 ? "s" : ""}
             {showOnlyEnabled && " selected"}
             {searchLower && " matching search"}
-            {selectedTab !== "all" && !isTraps && ` in ${CATEGORY_LABELS[selectedTab] ?? selectedTab}`}
-            {isTraps && " (traps)"}
+            {selectedTab !== "all" && ` in ${CATEGORY_LABELS[selectedTab] ?? selectedTab}`}
           </p>
 
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
