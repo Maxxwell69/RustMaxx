@@ -1,5 +1,15 @@
 # Railway deploy checklist
 
+## If the website doesn’t update after a push
+
+Railway may be serving a **cached build**. Do this:
+
+1. **Clear cache and redeploy**
+   - In Railway: open your **RustMaxx** service → **Deployments**.
+   - Find the latest deployment → **⋮** (or "Redeploy") → **Clear build cache and redeploy** (or "Redeploy" then in Settings enable "Clear cache" if shown).
+2. **Or** set a one-off variable: **Variables** → add `NO_CACHE=1` → save (triggers a redeploy), then remove it after the deploy if you want.
+3. Confirm the deployment is from the correct repo and branch (e.g. `main` on GitHub) in the service **Settings** → **Source**.
+
 ## After each deploy
 
 ### 1. Run database migrations

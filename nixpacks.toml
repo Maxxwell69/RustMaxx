@@ -1,0 +1,3 @@
+# Railway/Nixpacks: use --omit=dev (avoids "Use `--omit-dev` instead" warning)
+[phases.install]
+cmds = ["npm install --omit=dev"]
