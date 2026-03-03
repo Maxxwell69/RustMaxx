@@ -157,7 +157,7 @@ export default function ServerItemsPage() {
         <p className="text-sm text-zinc-500">Loading items…</p>
       ) : (
         <div className="space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2">
             <div className="overflow-x-auto border-b border-zinc-800 -mb-px">
               <nav className="flex gap-0 min-w-0" aria-label="Item categories">
                 <button
@@ -187,7 +187,7 @@ export default function ServerItemsPage() {
                 ))}
               </nav>
             </div>
-            <div className="flex flex-wrap items-center gap-3 flex-shrink-0 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-sm text-zinc-400 hover:text-zinc-200">
                 <input
                   type="checkbox"
