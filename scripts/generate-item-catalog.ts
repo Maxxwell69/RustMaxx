@@ -13,6 +13,7 @@ const ITEMS_JSON_URL =
 type ItemCategory =
   | "resources"
   | "components"
+  | "electrical"
   | "weapons"
   | "ammo"
   | "medical"
@@ -21,6 +22,7 @@ type ItemCategory =
   | "attachments"
   | "attire"
   | "food"
+  | "fun"
   | "other";
 
 function mapCategory(jsonCategory: string): ItemCategory {
@@ -30,10 +32,14 @@ function mapCategory(jsonCategory: string): ItemCategory {
   if (c === "medical") return "medical";
   if (c === "tool") return "tools";
   if (c === "construction") return "building";
-  if (c === "component" || c === "electrical") return "components";
+  if (c === "component") return "components";
+  if (c === "electrical") return "electrical";
   if (c === "food") return "food";
   if (c === "attire") return "attire";
-  if (c === "items" || c === "fun" || c === "misc") return "other";
+  if (c === "resources") return "resources";
+  if (c === "attachment" || c === "attachments") return "attachments";
+  if (c === "fun") return "fun";
+  if (c === "items" || c === "misc") return "other";
   return "other";
 }
 
@@ -61,7 +67,9 @@ async function main() {
     if (!shortname || !name) continue;
     if (seen.has(shortname)) continue;
     seen.add(shortname);
-    const category = mapCategory(item.Category ?? "");
+    let category = mapCategory(item.Category ?? "");
+    // JSON has no "Attachment" category; weapon mods (scopes, silencers, etc.) are under Weapon — re-categorize
+    if (shortname.startsWith("weapon.mod.")) category = "attachments";
     const amount = typeof item.stackable === "number" && item.stackable > 0 ? item.stackable : 1;
     const amountClamped = Math.min(999999, Math.max(1, amount));
     const nameEscaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -74,6 +82,7 @@ async function main() {
   const header = `export type ItemCategory =
   | "resources"
   | "components"
+  | "electrical"
   | "weapons"
   | "ammo"
   | "medical"
@@ -82,6 +91,7 @@ async function main() {
   | "attachments"
   | "attire"
   | "food"
+  | "fun"
   | "other";
 
 export type ItemDefinition = {

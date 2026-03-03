@@ -16,6 +16,7 @@ type Item = {
 const CATEGORY_LABELS: Record<string, string> = {
   resources: "Resources",
   components: "Components",
+  electrical: "Electrical",
   weapons: "Weapons",
   ammo: "Ammunition",
   medical: "Medical",
@@ -24,6 +25,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   attachments: "Attachments",
   attire: "Attire",
   food: "Food",
+  fun: "Fun",
   other: "Misc",
 };
 
@@ -39,8 +41,10 @@ const TAB_ORDER = [
   "food",
   "ammo",
   "components",
+  "electrical",
   "attachments",
   "traps",
+  "fun",
   "other",
 ];
 
