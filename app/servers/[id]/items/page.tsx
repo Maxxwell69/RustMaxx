@@ -53,6 +53,7 @@ export default function ServerItemsPage() {
   const [error, setError] = useState("");
   const [selectedTab, setSelectedTab] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
 
   function load() {
     setLoading(true);
@@ -120,6 +121,7 @@ export default function ServerItemsPage() {
   const isTraps = selectedTab === "traps";
 
   const filteredItems = items.filter((item) => {
+    if (showOnlyEnabled && !item.enabled) return false;
     const cat = item.category || "other";
     if (selectedTab !== "all") {
       if (isTraps) {
@@ -188,13 +190,22 @@ export default function ServerItemsPage() {
                 ))}
               </nav>
             </div>
-            <div className="flex-shrink-0 w-full sm:w-56">
+            <div className="flex flex-wrap items-center gap-3 flex-shrink-0 w-full sm:w-auto">
+              <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap text-sm text-zinc-400 hover:text-zinc-200">
+                <input
+                  type="checkbox"
+                  checked={showOnlyEnabled}
+                  onChange={(e) => setShowOnlyEnabled(e.target.checked)}
+                  className="rounded border-zinc-600 bg-zinc-800 text-rust-cyan focus:ring-rust-cyan"
+                />
+                Only selected
+              </label>
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search items…"
-                className="w-full rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-rust-cyan focus:outline-none focus:ring-1 focus:ring-rust-cyan"
+                className="w-full min-w-[140px] sm:w-48 rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-rust-cyan focus:outline-none focus:ring-1 focus:ring-rust-cyan"
                 aria-label="Search items by name or shortname"
               />
             </div>
@@ -202,6 +213,7 @@ export default function ServerItemsPage() {
 
           <p className="text-xs text-zinc-500">
             {filteredItems.length} item{filteredItems.length !== 1 ? "s" : ""}
+            {showOnlyEnabled && " selected"}
             {searchLower && " matching search"}
             {selectedTab !== "all" && !isTraps && ` in ${CATEGORY_LABELS[selectedTab] ?? selectedTab}`}
             {isTraps && " (traps)"}
