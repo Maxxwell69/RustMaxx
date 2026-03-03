@@ -26,7 +26,7 @@ const COMMANDS_FALLBACK = [
 
 function parseSeed(raw: string): number | null {
   const t = raw.trim();
-  const num = parseInt(t.replace(/^[^0-9-]*([0-9-]+).*$/s, "$1"), 10);
+  const num = parseInt(t.replace(/^[^0-9-]*([0-9-]+)[\s\S]*$/, "$1"), 10);
   if (Number.isInteger(num)) return num;
   const direct = parseInt(t, 10);
   return Number.isInteger(direct) ? direct : null;
@@ -34,7 +34,7 @@ function parseSeed(raw: string): number | null {
 
 function parseWorldSize(raw: string): number | null {
   const t = raw.trim();
-  const num = parseInt(t.replace(/^[^0-9]*([0-9]+).*$/s, "$1"), 10);
+  const num = parseInt(t.replace(/^[^0-9]*([0-9]+)[\s\S]*$/, "$1"), 10);
   if (Number.isInteger(num) && num >= 1000 && num <= 6000) return num;
   const direct = parseInt(t, 10);
   return Number.isInteger(direct) && direct >= 1000 && direct <= 6000 ? direct : null;
