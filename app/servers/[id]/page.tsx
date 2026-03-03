@@ -333,6 +333,12 @@ export default function ServerDetailPage() {
           >
             Items
           </Link>
+          <Link
+            href={`/servers/${id}/plugins`}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle"
+          >
+            Plugins
+          </Link>
         </nav>
         <button
           type="button"

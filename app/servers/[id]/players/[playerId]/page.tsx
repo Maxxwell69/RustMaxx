@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 
 type GiveItem = { shortname: string; label: string; amount: number; category: string };
+type GroupSummaryItem = { id: string; name: string; permissions: string[] };
 
 function PlayerContent() {
   const params = useParams();
@@ -13,9 +14,7 @@ function PlayerContent() {
   const playerId = params.playerId as string;
   const name = searchParams.get("name") || playerId;
   const [server, setServer] = useState<{ name: string } | null>(null);
-  const [groupSummary, setGroupSummary] = useState<
-    { id: string; name: string; permissions: string[] }[]
-  >([]);
+  const [groupSummary, setGroupSummary] = useState<GroupSummaryItem[]>([] as GroupSummaryItem[]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [giveItems, setGiveItems] = useState<GiveItem[]>([]);
   const [giving, setGiving] = useState<string | null>(null);
