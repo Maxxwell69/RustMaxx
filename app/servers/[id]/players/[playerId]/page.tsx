@@ -14,7 +14,7 @@ function PlayerContent() {
   const name = searchParams.get("name") || playerId;
   const [server, setServer] = useState<{ name: string } | null>(null);
   const [groupSummary, setGroupSummary] = useState<
-    { id: string; name: string; permissions: string[] }
+    { id: string; name: string; permissions: string[] }[]
   >([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [giveItems, setGiveItems] = useState<GiveItem[]>([]);
