@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
+import { findUserById } from "@/lib/users";
 import type { ServerRow } from "@/lib/db";
 
 type ServerWithRole = ServerRow & { myRole?: "owner" | "admin" | "moderator" };
@@ -10,7 +11,8 @@ export async function GET(request: NextRequest) {
   const authErr = requireSession(request);
   if (authErr) return authErr;
   const session = getSessionFromRequest(request)!;
-  const isSuperAdmin = session.role === "super_admin";
+  const user = await findUserById(session.userId);
+  const isSuperAdmin = (user?.role ?? session.role) === "super_admin";
   try {
     let rows: ServerWithRole[];
     if (isSuperAdmin) {

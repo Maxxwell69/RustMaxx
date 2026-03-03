@@ -19,7 +19,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authErr = requireCanManageAdmins(request);
+  const authErr = await requireCanManageAdmins(request);
   if (authErr) return authErr;
   const session = getSessionFromRequest(request)!;
   const { id: userId } = await params;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { findUserById } from "@/lib/users";
 import type { UserRole } from "./permissions";
 import { canManageServers, canManageServerUsers, canManageAdmins } from "./permissions";
 
@@ -70,12 +71,20 @@ export function requireCanManageServerUsers(
   return null;
 }
 
-export function requireCanManageAdmins(request: NextRequest): NextResponse | null {
+/**
+ * Require super_admin. Uses the role from the database so a newly promoted
+ * super_admin gets access without re-login (session cookie still has old role).
+ */
+export async function requireCanManageAdmins(
+  request: NextRequest
+): Promise<NextResponse | null> {
   const session = getSessionFromRequest(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!canManageAdmins(session.role)) {
+  const user = await findUserById(session.userId);
+  const role = (user?.role ?? session.role) as UserRole;
+  if (!canManageAdmins(role)) {
     return NextResponse.json(
       { error: "Forbidden: only super_admin can manage admins" },
       { status: 403 }

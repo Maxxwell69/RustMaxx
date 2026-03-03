@@ -4,7 +4,7 @@ import { listUsers } from "@/lib/users";
 
 /** List all users (super_admin only). */
 export async function GET(request: NextRequest) {
-  const authErr = requireCanManageAdmins(request);
+  const authErr = await requireCanManageAdmins(request);
   if (authErr) return authErr;
   const users = await listUsers();
   return NextResponse.json(users);
