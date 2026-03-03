@@ -33,6 +33,11 @@ export type ServerRow = {
   game_port?: number | null;
   location?: string | null;
   logo_url?: string | null;
+  seed?: number | null;
+  world_size?: number | null;
+  level?: string | null;
+  map_preview_url?: string | null;
+  map_last_fetched_at?: Date | string | null;
 };
 
 export type PublicServerRow = {

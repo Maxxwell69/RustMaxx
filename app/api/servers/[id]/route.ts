@@ -16,7 +16,8 @@ export async function GET(
   const { id } = await params;
   const result = await getServerWithRole(id, session.userId, session.role);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ ...result.server, myRole: result.serverRole });
+  const { rcon_password: _pw, ...safe } = result.server as Record<string, unknown>;
+  return NextResponse.json({ ...safe, myRole: result.serverRole });
 }
 
 export async function PATCH(
@@ -39,6 +40,7 @@ export async function PATCH(
     game_port?: number | null;
     location?: string | null;
     logo_url?: string | null;
+    map_preview_url?: string | null;
   };
   try {
     body = await request.json();
@@ -78,12 +80,18 @@ export async function PATCH(
     updates.push(`logo_url = $${idx++}`);
     values.push(typeof body.logo_url === "string" ? body.logo_url.trim() || null : null);
   }
+  if (body.map_preview_url !== undefined) {
+    updates.push(`map_preview_url = $${idx++}`);
+    values.push(
+      typeof body.map_preview_url === "string" ? body.map_preview_url.trim() || null : null
+    );
+  }
   if (updates.length === 0) {
     return NextResponse.json(existing);
   }
   values.push(serverId);
   const { rows } = await query<ServerRow>(
-    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url`,
+    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at`,
     values
   );
   await audit(session.userId, "server.update", { serverId, fields: Object.keys(body) });

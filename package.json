@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "migrate": "npx tsx scripts/migrate.ts",
-    "cleanup": "npx tsx scripts/cleanup.ts"
+    "cleanup": "npx tsx scripts/cleanup.ts",
+    "generate:items": "npx tsx scripts/generate-item-catalog.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -42,7 +42,13 @@ Migrations use the `DATABASE_URL` from your Railway project. Ensure the app serv
 - `SESSION_SECRET` – long random string for session signing
 - `NODE_ENV=production`
 
-### 4. HTTPS / “Not secure” (custom domain e.g. rustmaxx.com)
+### 4. Map feature (optional)
+
+- `MAP_PREVIEW_PROVIDER` – `rustmaps` (default), `playrust`, or `custom`
+- `MAP_PREVIEW_URL_TEMPLATE` – for `custom`: URL with `{seed}`, `{size}`, `{level}`
+- For background map refresh: `MAP_REFRESH_ENABLED=true`, `CRON_SECRET=<secret>`. Call `POST /api/internal/refresh-maps` with `Authorization: Bearer <CRON_SECRET>` (e.g. from cron every 6 hours). See `docs/MAP_SETUP.md`.
+
+### 5. HTTPS / “Not secure” (custom domain e.g. rustmaxx.com)
 
 The “Not secure” warning appears when the site is loaded over **HTTP** instead of **HTTPS**. SSL is handled by **Railway**, not by the app code.
 

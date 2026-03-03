@@ -339,6 +339,12 @@ export default function ServerDetailPage() {
           >
             Plugins
           </Link>
+          <Link
+            href={`/servers/${id}/map`}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-sm text-rust-cyan hover:bg-zinc-600 hover:shadow-rust-glow-subtle"
+          >
+            Map
+          </Link>
         </nav>
         <button
           type="button"
