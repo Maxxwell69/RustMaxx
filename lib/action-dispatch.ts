@@ -5,6 +5,7 @@
 
 import { runAndWait, ensureConnection } from "@/lib/rcon-manager";
 import { getServerIfAccessible } from "@/lib/server-access";
+import type { UserRole } from "@/lib/permissions";
 
 const MAX_BROADCAST_LENGTH = 200;
 const ALLOWED_ACTION_IDS = ["broadcast"] as const;
@@ -29,7 +30,7 @@ function sanitizeBroadcastMessage(msg: string): string {
 export async function dispatchBroadcast(
   serverId: string,
   userId: string,
-  role: string,
+  role: UserRole,
   message: string
 ): Promise<{ ok: boolean; error?: string }> {
   const server = await getServerIfAccessible(serverId, userId, role);
@@ -80,7 +81,7 @@ export async function dispatchWhitelistAction(
   actionParams: Record<string, unknown> | null,
   serverId: string,
   userId: string,
-  role: string,
+  role: UserRole,
   event: { userLogin?: string; userName?: string; userId: string }
 ): Promise<{ ok: boolean; error?: string }> {
   if (!ALLOWED_ACTION_IDS.includes(actionId as (typeof ALLOWED_ACTION_IDS)[number])) {
