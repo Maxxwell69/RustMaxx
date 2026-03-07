@@ -120,6 +120,7 @@ function TwitchLinkServerBlock() {
 
       <div className="border-t border-zinc-700 pt-2">
         <p className="mb-1.5 text-xs text-zinc-500">In your Twitch chat, type <code className="rounded bg-zinc-700 px-1">!rust your message</code> (only you, the broadcaster) to send that message to the linked server&apos;s in-game chat. <code className="rounded bg-zinc-700 px-1">irust</code> also works. Rate limited to once per 10 seconds.</p>
+        <p className="mb-1.5 text-xs text-amber-500/90">If chat commands don&apos;t work: revoke RustMaxx at twitch.tv/settings/connections, then click Connect Twitch again below so the app can create the chat subscription.</p>
         <button
           type="button"
           onClick={runTestChat}

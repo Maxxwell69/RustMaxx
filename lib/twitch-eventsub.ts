@@ -123,7 +123,10 @@ export async function createChannelChatMessageSubscription(
     body: JSON.stringify({
       type: "channel.chat.message",
       version: "1",
-      condition: { broadcaster_user_id: broadcasterUserId },
+      condition: {
+        broadcaster_user_id: broadcasterUserId,
+        user_id: broadcasterUserId,
+      },
       transport: { method: "webhook", callback: callbackUrl, secret },
     }),
   });
