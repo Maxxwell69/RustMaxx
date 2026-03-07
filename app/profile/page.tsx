@@ -102,6 +102,9 @@ function TwitchLinkServerBlock() {
       {linkMsg === "err" && <p className="text-xs text-amber-400">Link failed. Check you have access to that server.</p>}
 
       <div className="border-t border-zinc-700 pt-2">
+        <p className="mb-1.5 text-xs text-zinc-500">In your Twitch chat, type <code className="rounded bg-zinc-700 px-1">!rust your message</code> (only you, the broadcaster) to send that message to the linked server&apos;s in-game chat. Rate limited to once per 10 seconds.</p>
+      </div>
+      <div className="border-t border-zinc-700 pt-2">
         <p className="mb-1.5 text-xs text-zinc-500">Verify connection without a real follow:</p>
         <button
           type="button"

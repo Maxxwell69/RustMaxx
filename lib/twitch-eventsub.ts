@@ -99,3 +99,42 @@ export async function createChannelFollowSubscription(
   if (!sub) throw new Error("EventSub create returned no subscription");
   return { id: sub.id };
 }
+
+/**
+ * Create EventSub subscription for channel.chat.message (version 1).
+ * Sends every chat message to the webhook; filter for commands in the handler.
+ */
+export async function createChannelChatMessageSubscription(
+  broadcasterUserId: string,
+  callbackUrl: string,
+  secret: string,
+  accessToken: string
+): Promise<{ id: string }> {
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  if (!clientId) throw new Error("TWITCH_CLIENT_ID is not set");
+
+  const res = await fetch(TWITCH_EVENTSUB_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      "Client-Id": clientId,
+    },
+    body: JSON.stringify({
+      type: "channel.chat.message",
+      version: "1",
+      condition: { broadcaster_user_id: broadcasterUserId },
+      transport: { method: "webhook", callback: callbackUrl, secret },
+    }),
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`EventSub chat subscribe failed: ${res.status} ${t}`);
+  }
+
+  const data = (await res.json()) as { data: Array<{ id: string }> };
+  const sub = data.data?.[0];
+  if (!sub) throw new Error("EventSub chat create returned no subscription");
+  return { id: sub.id };
+}

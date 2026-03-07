@@ -5,6 +5,7 @@ import {
 } from "@/lib/twitch-eventsub";
 import { normalizeEventSubEvent } from "@/lib/twitch-events-normalize";
 import { processNormalizedEvent } from "@/lib/event-rules-processor";
+import { processChatMessage } from "@/lib/chat-command-processor";
 
 const EVENTSUB_SECRET = process.env.TWITCH_EVENTSUB_SECRET;
 
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { type, payload: p } = parsed;
+  console.log("[twitch webhook] message type:", type, "subscription:", p.subscription?.type);
 
   if (type === "webhook_callback_verification") {
     const challenge = p.challenge;
@@ -64,16 +66,36 @@ export async function POST(request: NextRequest) {
 
   if (type === "notification" && p.event) {
     const subscriptionType = p.subscription?.type ?? "";
-    const normalized = normalizeEventSubEvent(subscriptionType, p.event as Record<string, unknown>);
-    if (normalized) {
-      const result = await processNormalizedEvent(normalized, messageId || null);
-      return NextResponse.json({
-        ok: true,
-        logged: result.logged,
-        duplicate: result.duplicate,
-        dispatched: result.dispatched,
-      });
+    const ev = p.event as Record<string, unknown>;
+
+    if (subscriptionType === "channel.chat.message") {
+      try {
+        const result = await processChatMessage(ev);
+        console.log("[twitch webhook] chat command", result.handled ? (result.broadcast ? "broadcast sent" : result.error) : "ignored");
+        return NextResponse.json({ ok: true, chat: { handled: result.handled, broadcast: result.broadcast } });
+      } catch (err) {
+        console.error("[twitch webhook] processChatMessage failed", err);
+        return NextResponse.json({ ok: false, error: "Chat processing failed" }, { status: 200 });
+      }
     }
+
+    const normalized = normalizeEventSubEvent(subscriptionType, ev);
+    if (normalized) {
+      try {
+        const result = await processNormalizedEvent(normalized, messageId || null);
+        console.log("[twitch webhook] notification", subscriptionType, "logged:", result.logged, "duplicate:", result.duplicate, "dispatched:", result.dispatched);
+        return NextResponse.json({
+          ok: true,
+          logged: result.logged,
+          duplicate: result.duplicate,
+          dispatched: result.dispatched,
+        });
+      } catch (err) {
+        console.error("[twitch webhook] processNormalizedEvent failed", err);
+        return NextResponse.json({ ok: false, error: "Processing failed" }, { status: 200 });
+      }
+    }
+    console.warn("[twitch webhook] notification type not handled:", subscriptionType);
   }
 
   return NextResponse.json({ ok: true });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
 import { exchangeCodeForTokens, getTwitchUserFromToken } from "@/lib/twitch-oauth";
 import { upsertTwitchAccount } from "@/lib/twitch-db";
-import { createChannelFollowSubscription } from "@/lib/twitch-eventsub";
+import { createChannelFollowSubscription, createChannelChatMessageSubscription } from "@/lib/twitch-eventsub";
 
 const STATE_COOKIE = "twitch_oauth_state";
 const FRONTEND_REDIRECT = "/profile"; // or /streamer-interaction
@@ -60,7 +60,18 @@ export async function GET(request: NextRequest) {
           tokens.access_token
         );
       } catch (subErr) {
-        console.error("[twitch callback] EventSub subscribe failed", subErr);
+        console.error("[twitch callback] EventSub follow subscribe failed", subErr);
+        eventsubFailed = true;
+      }
+      try {
+        await createChannelChatMessageSubscription(
+          twitchUser.id,
+          webhookUrl,
+          eventsubSecret,
+          tokens.access_token
+        );
+      } catch (chatErr) {
+        console.error("[twitch callback] EventSub chat subscribe failed (may need extra scope)", chatErr);
         eventsubFailed = true;
       }
     } else {
