@@ -32,6 +32,8 @@ function TwitchLinkServerBlock() {
   const [linkMsg, setLinkMsg] = useState<"ok" | "err" | null>(null);
   const [testBroadcast, setTestBroadcast] = useState<"idle" | "sending" | "ok" | "err">("idle");
   const [testError, setTestError] = useState<string | null>(null);
+  const [testChat, setTestChat] = useState<"idle" | "sending" | "ok" | "err">("idle");
+  const [testChatError, setTestChatError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/servers")
@@ -70,6 +72,21 @@ function TwitchLinkServerBlock() {
       });
   }
 
+  function runTestChat() {
+    setTestChat("sending");
+    setTestChatError(null);
+    fetch("/api/twitch/test-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, error: d.error })))
+      .then((d) => {
+        setTestChat(d.ok ? "ok" : "err");
+        if (!d.ok) setTestChatError(d.error ?? "Request failed");
+      })
+      .catch(() => {
+        setTestChat("err");
+        setTestChatError("Network error");
+      });
+  }
+
   if (servers.length === 0) return null;
 
   return (
@@ -102,7 +119,17 @@ function TwitchLinkServerBlock() {
       {linkMsg === "err" && <p className="text-xs text-amber-400">Link failed. Check you have access to that server.</p>}
 
       <div className="border-t border-zinc-700 pt-2">
-        <p className="mb-1.5 text-xs text-zinc-500">In your Twitch chat, type <code className="rounded bg-zinc-700 px-1">!rust your message</code> (only you, the broadcaster) to send that message to the linked server&apos;s in-game chat. <code className="rounded bg-zinc-700 px-1">irust</code> also works if the exclamation mark appears as I. Rate limited to once per 10 seconds.</p>
+        <p className="mb-1.5 text-xs text-zinc-500">In your Twitch chat, type <code className="rounded bg-zinc-700 px-1">!rust your message</code> (only you, the broadcaster) to send that message to the linked server&apos;s in-game chat. <code className="rounded bg-zinc-700 px-1">irust</code> also works. Rate limited to once per 10 seconds.</p>
+        <button
+          type="button"
+          onClick={runTestChat}
+          disabled={testChat === "sending"}
+          className="mt-1 rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {testChat === "sending" ? "Sending…" : "Test !rust (sends to game now)"}
+        </button>
+        {testChat === "ok" && <p className="mt-1.5 text-xs text-green-400">Sent. If you see it in-game, the pipeline works. If Twitch chat still doesn&apos;t trigger it, Twitch events may not be reaching the webhook—reconnect Twitch and check server logs.</p>}
+        {testChat === "err" && testChatError && <p className="mt-1.5 text-xs text-amber-400">{testChatError}</p>}
       </div>
       <div className="border-t border-zinc-700 pt-2">
         <p className="mb-1.5 text-xs text-zinc-500">Verify connection without a real follow:</p>

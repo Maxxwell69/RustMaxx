@@ -69,9 +69,10 @@ export async function POST(request: NextRequest) {
     const ev = p.event as Record<string, unknown>;
 
     if (subscriptionType === "channel.chat.message") {
+      console.log("[twitch webhook] channel.chat.message received");
       try {
         const result = await processChatMessage(ev);
-        console.log("[twitch webhook] chat command", result.handled ? (result.broadcast ? "broadcast sent" : result.error) : "ignored");
+        console.log("[twitch webhook] chat command", result.handled ? (result.broadcast ? "broadcast sent" : result.error) : "ignored (not from broadcaster or no !rust)");
         return NextResponse.json({ ok: true, chat: { handled: result.handled, broadcast: result.broadcast } });
       } catch (err) {
         console.error("[twitch webhook] processChatMessage failed", err);
