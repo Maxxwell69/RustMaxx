@@ -30,6 +30,8 @@ function TwitchLinkServerBlock() {
   const [serverId, setServerId] = useState("");
   const [linking, setLinking] = useState(false);
   const [linkMsg, setLinkMsg] = useState<"ok" | "err" | null>(null);
+  const [testBroadcast, setTestBroadcast] = useState<"idle" | "sending" | "ok" | "err">("idle");
+  const [testError, setTestError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/servers")
@@ -53,10 +55,25 @@ function TwitchLinkServerBlock() {
       .finally(() => setLinking(false));
   }
 
+  function runTestBroadcast() {
+    setTestBroadcast("sending");
+    setTestError(null);
+    fetch("/api/twitch/test-broadcast", { method: "POST" })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, error: d.error })))
+      .then((d) => {
+        setTestBroadcast(d.ok ? "ok" : "err");
+        if (!d.ok) setTestError(d.error ?? "Request failed");
+      })
+      .catch(() => {
+        setTestBroadcast("err");
+        setTestError("Network error");
+      });
+  }
+
   if (servers.length === 0) return null;
 
   return (
-    <div className="rounded border border-zinc-700 bg-zinc-800/50 p-3">
+    <div className="rounded border border-zinc-700 bg-zinc-800/50 p-3 space-y-3">
       <p className="mb-2 text-xs font-medium text-zinc-400">Follow → in-game broadcast</p>
       <p className="mb-2 text-xs text-zinc-500">
         Link a server to send &quot;New follower: username!&quot; to in-game chat when someone follows your channel.
@@ -81,8 +98,22 @@ function TwitchLinkServerBlock() {
           {linking ? "Linking…" : "Link server"}
         </button>
       </div>
-      {linkMsg === "ok" && <p className="mt-2 text-xs text-green-400">Server linked. Follow events will trigger in-game broadcast.</p>}
-      {linkMsg === "err" && <p className="mt-2 text-xs text-amber-400">Link failed. Check you have access to that server.</p>}
+      {linkMsg === "ok" && <p className="text-xs text-green-400">Server linked. Follow events will trigger in-game broadcast.</p>}
+      {linkMsg === "err" && <p className="text-xs text-amber-400">Link failed. Check you have access to that server.</p>}
+
+      <div className="border-t border-zinc-700 pt-2">
+        <p className="mb-1.5 text-xs text-zinc-500">Verify connection without a real follow:</p>
+        <button
+          type="button"
+          onClick={runTestBroadcast}
+          disabled={testBroadcast === "sending"}
+          className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {testBroadcast === "sending" ? "Sending…" : "Test follow broadcast"}
+        </button>
+        {testBroadcast === "ok" && <p className="mt-1.5 text-xs text-green-400">Sent. Check in-game chat and the server live console.</p>}
+        {testBroadcast === "err" && testError && <p className="mt-1.5 text-xs text-amber-400">{testError}</p>}
+      </div>
     </div>
   );
 }
