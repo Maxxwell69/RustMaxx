@@ -3,7 +3,7 @@
  * No raw RCON command execution from events.
  */
 
-import { runAndWait, ensureConnection } from "@/lib/rcon-manager";
+import { runAndWait, ensureConnection, pushLogEvent } from "@/lib/rcon-manager";
 import { getServerIfAccessible } from "@/lib/server-access";
 import type { UserRole } from "@/lib/permissions";
 
@@ -51,6 +51,7 @@ export async function dispatchBroadcast(
   const command = `say ${sanitized}`;
   try {
     await runAndWait(serverId, command, 8000);
+    pushLogEvent(serverId, "console", `[Twitch] ${sanitized}`);
     return { ok: true };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);

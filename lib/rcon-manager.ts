@@ -37,6 +37,11 @@ function emit(serverId: string, event: LogEvent) {
   if (set) Array.from(set).forEach((fn) => fn(event));
 }
 
+/** Push a synthetic log event to the server stream (e.g. Twitch follow broadcast so it shows in the live console). */
+export function pushLogEvent(serverId: string, type: "console" | "chat", message: string): void {
+  emit(serverId, { type, message, createdAt: new Date().toISOString() });
+}
+
 export function subscribe(serverId: string, listener: Listener): () => void {
   let set = streamsByServerId.get(serverId);
   if (!set) {
