@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
   const user = await findUserById(session.userId);
   const role = (user?.role ?? "guest") as UserRole;
   const serverId = linkedServerIds[0];
-  const message = "New follower: TestViewer!";
+  const broadcasterName = account.twitch_display_name ?? account.twitch_login ?? "Streamer";
+  const message = `New follower: TestViewer! — ${broadcasterName}`;
 
   const result = await dispatchBroadcast(serverId, session.userId, role, message);
   if (!result.ok) {
