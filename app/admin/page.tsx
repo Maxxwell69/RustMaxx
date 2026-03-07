@@ -321,7 +321,12 @@ export default function SuperAdminDashboardPage() {
         </div>
         <div className="overflow-x-auto max-h-64 overflow-y-auto">
           {twitchEvents.length === 0 ? (
-            <p className="p-4 text-sm text-zinc-500">No Twitch events yet. Connect Twitch on Profile and trigger a follow.</p>
+            <div className="p-4 text-sm text-zinc-500 space-y-2">
+              <p>No Twitch events yet. Connect Twitch on Profile and trigger a follow.</p>
+              <p className="text-xs text-zinc-600">
+                If you expected events: ensure TWITCH_WEBHOOK_CALLBACK_URL is your public HTTPS URL (e.g. https://www.rustmaxx.com/api/twitch/webhook), TWITCH_EVENTSUB_SECRET is set, and you connected Twitch from Profile after those were set. If you linked Twitch before configuring the webhook, disconnect and reconnect Twitch so the follow subscription is created.
+              </p>
+            </div>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 bg-zinc-900">

@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
+  let eventsubFailed = false;
   try {
     const tokens = await exchangeCodeForTokens(code, redirectUri);
     const twitchUser = await getTwitchUserFromToken(tokens.access_token);
@@ -60,7 +61,10 @@ export async function GET(request: NextRequest) {
         );
       } catch (subErr) {
         console.error("[twitch callback] EventSub subscribe failed", subErr);
+        eventsubFailed = true;
       }
+    } else {
+      eventsubFailed = true;
     }
   } catch (e) {
     console.error("[twitch callback]", e);
@@ -69,7 +73,10 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const res = NextResponse.redirect(new URL(`${FRONTEND_REDIRECT}?twitch=linked`, request.url));
+  const redirectUrl = new URL(FRONTEND_REDIRECT, request.url);
+  redirectUrl.searchParams.set("twitch", "linked");
+  if (eventsubFailed) redirectUrl.searchParams.set("eventsub", "failed");
+  const res = NextResponse.redirect(redirectUrl);
   res.cookies.delete(STATE_COOKIE);
   return res;
 }

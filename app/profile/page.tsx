@@ -213,6 +213,11 @@ function ProfilePageContent() {
             {searchParams.get("twitch") === "linked" && (
               <p className="mt-2 text-sm text-green-400">Twitch account linked successfully.</p>
             )}
+            {searchParams.get("twitch") === "linked" && searchParams.get("eventsub") === "failed" && (
+              <p className="mt-2 text-sm text-amber-400">
+                Follow notifications could not be enabled (Twitch EventSub failed). Check that TWITCH_WEBHOOK_CALLBACK_URL and TWITCH_EVENTSUB_SECRET are set and the webhook URL is reachable. Try disconnecting and reconnecting Twitch to retry.
+              </p>
+            )}
             {searchParams.get("twitch") === "state_invalid" && (
               <p className="mt-2 text-sm text-amber-400">Link expired or invalid. Try connecting again.</p>
             )}
