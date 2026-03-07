@@ -7,9 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "migrate": "npx tsx scripts/migrate.ts",
     "cleanup": "npx tsx scripts/cleanup.ts",
-    "generate:items": "npx tsx scripts/generate-item-catalog.ts"
+    "generate:items": "npx tsx scripts/generate-item-catalog.ts",
+    "build:packages": "pnpm --filter @rustmaxx/shared --filter @rustmaxx/config --filter @rustmaxx/database run build",
+    "dev:api": "pnpm --filter @rustmaxx/api dev",
+    "dev:gateway": "pnpm --filter @rustmaxx/realtime-gateway dev"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

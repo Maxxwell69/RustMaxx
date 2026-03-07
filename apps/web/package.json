@@ -1,0 +1,11 @@
+{
+  "name": "@rustmaxx/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Next.js web/admin app - migration target for current root app",
+  "scripts": {
+    "dev": "echo 'Run from repo root: pnpm dev'",
+    "build": "echo 'Run from repo root: pnpm build'",
+    "start": "echo 'Run from repo root: pnpm start'"
+  }
+}

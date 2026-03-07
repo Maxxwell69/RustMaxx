@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>RustMaxxCore</RootNamespace>
+    <AssemblyName>RustMaxxCore</AssemblyName>
+    <Description>RustMaxx uMod/Oxide plugin - WebSocket client for realtime gateway</Description>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <!-- Oxide/uMod: reference Oxide core if building in Oxide folder -->
+  <!-- <ItemGroup><Reference Include="Oxide.Core" /></ItemGroup> -->
+</Project>
