@@ -1,6 +1,7 @@
 /**
  * Process Twitch chat messages for the !rust command: send message to linked game server.
  * Only the broadcaster can use the command; rate limited per channel.
+ * Accepts "!rust " or "irust " (common typo when ! is typed as I).
  */
 
 import { getTwitchAccountByTwitchUserId } from "@/lib/twitch-db";
@@ -9,7 +10,7 @@ import { getStreamerLinkedServerIds } from "@/lib/twitch-db";
 import { dispatchBroadcast } from "@/lib/action-dispatch";
 import type { UserRole } from "@/lib/permissions";
 
-const CHAT_COMMAND = "!rust";
+const CHAT_PREFIXES = ["!rust ", "irust "];
 const RATE_LIMIT_MS = 10_000; // 10 seconds between broadcasts per broadcaster
 const lastBroadcastByBroadcaster = new Map<string, number>();
 
@@ -45,12 +46,13 @@ export async function processChatMessage(
   }
 
   const rawText = getMessageText(event).trim();
-  const prefix = `${CHAT_COMMAND} `;
-  if (!rawText.toLowerCase().startsWith(prefix.toLowerCase())) {
+  const lower = rawText.toLowerCase();
+  const matchedPrefix = CHAT_PREFIXES.find((p) => lower.startsWith(p));
+  if (!matchedPrefix) {
     return { handled: false, broadcast: false };
   }
 
-  const messageText = rawText.slice(prefix.length).trim();
+  const messageText = rawText.slice(matchedPrefix.length).trim();
   if (!messageText) {
     return { handled: true, broadcast: false, error: "Message is empty after command." };
   }
