@@ -24,6 +24,15 @@ type Stats = {
   usersByRole: Record<string, number>;
 };
 
+type TwitchEventLog = {
+  id: string;
+  event_kind: string;
+  twitch_message_id: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+  user_id: string | null;
+};
+
 export default function SuperAdminDashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -33,6 +42,7 @@ export default function SuperAdminDashboardPage() {
   const [addAdminEmail, setAddAdminEmail] = useState("");
   const [promoting, setPromoting] = useState(false);
   const [promoteError, setPromoteError] = useState("");
+  const [twitchEvents, setTwitchEvents] = useState<TwitchEventLog[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -51,11 +61,16 @@ export default function SuperAdminDashboardPage() {
         if (r.status === 403) return [];
         return r.ok ? r.json() : [];
       }),
+      fetch("/api/twitch/events?limit=20&all=true").then((r) => {
+        if (r.status === 403 || !r.ok) return [];
+        return r.json();
+      }),
     ])
-      .then(([s, u, srv]) => {
+      .then(([s, u, srv, ev]) => {
         if (s) setStats(s);
         setUsers(Array.isArray(u) ? u : []);
         setServers(Array.isArray(srv) ? srv : []);
+        setTwitchEvents(Array.isArray(ev) ? ev : []);
       })
       .catch(() => setAccessDenied(true))
       .finally(() => setLoading(false));
@@ -295,6 +310,43 @@ export default function SuperAdminDashboardPage() {
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      </section>
+
+      {/* Recent Twitch events */}
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+        <div className="border-b border-zinc-800 px-4 py-3">
+          <h2 className="text-lg font-medium text-zinc-200">Recent Twitch events</h2>
+        </div>
+        <div className="overflow-x-auto max-h-64 overflow-y-auto">
+          {twitchEvents.length === 0 ? (
+            <p className="p-4 text-sm text-zinc-500">No Twitch events yet. Connect Twitch on Profile and trigger a follow.</p>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-zinc-900">
+                <tr className="border-b border-zinc-800">
+                  <th className="px-4 py-2 font-medium text-zinc-400">Time</th>
+                  <th className="px-4 py-2 font-medium text-zinc-400">Event</th>
+                  <th className="px-4 py-2 font-medium text-zinc-400">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {twitchEvents.map((e) => (
+                  <tr key={e.id} className="border-b border-zinc-800/50">
+                    <td className="px-4 py-2 text-zinc-500 whitespace-nowrap">
+                      {new Date(e.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2 text-zinc-300">{e.event_kind}</td>
+                    <td className="px-4 py-2 text-zinc-400">
+                      {e.event_kind === "channel.follow" && typeof e.payload?.user_name === "string"
+                        ? `${e.payload.user_name} followed`
+                        : JSON.stringify(e.payload).slice(0, 80)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </section>

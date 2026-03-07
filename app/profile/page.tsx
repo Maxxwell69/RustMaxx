@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+
 type Profile = {
   id: string;
   email: string;
@@ -11,13 +12,86 @@ type Profile = {
   created_at: string;
 };
 
+type TwitchStatus = {
+  linked: boolean;
+  twitch_login?: string;
+  twitch_display_name?: string;
+  linked_at?: string;
+};
+
 function formatRole(role: string): string {
   return role.replace(/_/g, " ");
 }
 
+type ServerOption = { id: string; name: string };
+
+function TwitchLinkServerBlock() {
+  const [servers, setServers] = useState<ServerOption[]>([]);
+  const [serverId, setServerId] = useState("");
+  const [linking, setLinking] = useState(false);
+  const [linkMsg, setLinkMsg] = useState<"ok" | "err" | null>(null);
+
+  useEffect(() => {
+    fetch("/api/servers")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { id: string; name: string }[]) => setServers(Array.isArray(list) ? list : []));
+  }, []);
+
+  function linkServer() {
+    if (!serverId) return;
+    setLinking(true);
+    setLinkMsg(null);
+    fetch("/api/twitch/link-server", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ server_id: serverId, add_follow_broadcast_rule: true }),
+    })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, ...d })))
+      .then((d) => {
+        setLinkMsg(d.ok ? "ok" : "err");
+      })
+      .finally(() => setLinking(false));
+  }
+
+  if (servers.length === 0) return null;
+
+  return (
+    <div className="rounded border border-zinc-700 bg-zinc-800/50 p-3">
+      <p className="mb-2 text-xs font-medium text-zinc-400">Follow → in-game broadcast</p>
+      <p className="mb-2 text-xs text-zinc-500">
+        Link a server to send &quot;New follower: username!&quot; to in-game chat when someone follows your channel.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={serverId}
+          onChange={(e) => setServerId(e.target.value)}
+          className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+        >
+          <option value="">Select server</option>
+          {servers.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={linkServer}
+          disabled={linking || !serverId}
+          className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30 disabled:opacity-50"
+        >
+          {linking ? "Linking…" : "Link server"}
+        </button>
+      </div>
+      {linkMsg === "ok" && <p className="mt-2 text-xs text-green-400">Server linked. Follow events will trigger in-game broadcast.</p>}
+      {linkMsg === "err" && <p className="mt-2 text-xs text-amber-400">Link failed. Check you have access to that server.</p>}
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [twitch, setTwitch] = useState<TwitchStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,6 +106,13 @@ export default function ProfilePage() {
       .then(setProfile)
       .finally(() => setLoading(false));
   }, [router]);
+
+  useEffect(() => {
+    if (!profile) return;
+    fetch("/api/twitch/status")
+      .then((r) => (r.ok ? r.json() : { linked: false }))
+      .then(setTwitch);
+  }, [profile]);
 
   if (loading) {
     return (
@@ -97,6 +178,45 @@ export default function ProfilePage() {
               </Link>
             </div>
           )}
+
+          <div className="mt-8 border-t border-zinc-800 pt-6">
+            <h2 className="mb-3 text-lg font-semibold text-zinc-100">Twitch</h2>
+            {twitch?.linked ? (
+              <div className="space-y-4">
+                <p className="text-sm text-zinc-300">
+                  Connected as <strong className="text-rust-cyan">{twitch.twitch_display_name ?? twitch.twitch_login ?? "Twitch"}</strong>
+                  {twitch.linked_at && (
+                    <span className="ml-2 text-zinc-500">
+                      (linked {new Date(twitch.linked_at).toLocaleDateString()})
+                    </span>
+                  )}
+                </p>
+                <Link
+                  href="/streamer-interaction"
+                  className="inline-block text-sm text-rust-cyan hover:underline"
+                >
+                  Streamer interaction & events →
+                </Link>
+                <TwitchLinkServerBlock />
+              </div>
+            ) : (
+              <div>
+                <p className="mb-2 text-sm text-zinc-500">Connect Twitch to enable follow events and in-game broadcasts.</p>
+                <a
+                  href="/api/twitch/connect"
+                  className="inline-block rounded bg-[#9146ff] px-3 py-2 text-sm font-medium text-white hover:bg-[#7c3aed]"
+                >
+                  Connect Twitch
+                </a>
+              </div>
+            )}
+            {searchParams.get("twitch") === "linked" && (
+              <p className="mt-2 text-sm text-green-400">Twitch account linked successfully.</p>
+            )}
+            {searchParams.get("twitch") === "state_invalid" && (
+              <p className="mt-2 text-sm text-amber-400">Link expired or invalid. Try connecting again.</p>
+            )}
+          </div>
         </div>
     </div>
   );
