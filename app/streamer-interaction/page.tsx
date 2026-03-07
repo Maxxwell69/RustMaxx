@@ -1,5 +1,6 @@
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { PillarHero } from "@/components/marketing/streamer/PillarHero";
+import { StreamerConnectCTA } from "@/components/marketing/streamer/StreamerConnectCTA";
 import { HowItWorksSteps } from "@/components/marketing/streamer/HowItWorksSteps";
 import { FeatureCardGrid } from "@/components/marketing/streamer/FeatureCardGrid";
 import { ModeCards } from "@/components/marketing/streamer/ModeCards";
@@ -18,6 +19,7 @@ export default function StreamerInteractionPage() {
         <div className="absolute inset-0 bg-grid-subtle opacity-50" aria-hidden />
         <div className="relative">
           <PillarHero />
+          <StreamerConnectCTA />
 
           <HowItWorksSteps />
 

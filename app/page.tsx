@@ -53,11 +53,11 @@ function PillarTabsClient() {
         <span className="block text-xs text-zinc-500">RCON, presets, roles, audit logs</span>
       </Link>
       <Link
-        href="/#stream"
+        href="/streamer-interaction"
         className="rounded-lg border border-rust-border bg-rust-surface px-4 py-3 text-left transition-colors hover:border-rust-cyan"
       >
         <span className="block font-medium text-zinc-200">Stream Interaction</span>
-        <span className="block text-xs text-zinc-500">Rewards, cooldowns, overlays</span>
+        <span className="block text-xs text-zinc-500">Connect Twitch, rewards, cooldowns</span>
       </Link>
       <Link
         href="/#map"

@@ -20,9 +20,9 @@ export function PillarHero() {
         </p>
         <div className="mt-10 flex flex-wrap justify-center gap-4">
           <Link
-            href="/early-access"
+            href="/profile"
             className="rounded-lg bg-rust-cyan px-5 py-3 text-base font-medium text-rust-panel shadow-rust-glow transition-opacity hover:opacity-90 hover:shadow-rust-glow-lg focus:outline-none focus:ring-2 focus:ring-rust-cyan focus:ring-offset-2 focus:ring-offset-rust-panel"
-            aria-label="Connect your channel to RustMaxx"
+            aria-label="Go to profile to connect Twitch"
           >
             Connect Your Channel
           </Link>
