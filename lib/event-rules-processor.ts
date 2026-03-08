@@ -34,6 +34,7 @@ export async function processNormalizedEvent(
   );
 
   if (!rustmaxxUserId) {
+    console.warn("[twitch follow] no RustMaxx user for broadcaster Twitch id:", broadcasterTwitchId, "- is Twitch connected in Profile?");
     return { logged: true, duplicate: false, dispatched: 0 };
   }
 
@@ -42,17 +43,47 @@ export async function processNormalizedEvent(
 
   const rules = await getEventRulesForUser(rustmaxxUserId);
   const followRules = rules.filter((r) => r.event_kind === "channel.follow" && r.action_id === "broadcast");
-
   const linkedServerIds = await getStreamerLinkedServerIds(rustmaxxUserId);
+
+  if (followRules.length === 0 && linkedServerIds.length > 0) {
+    console.warn("[twitch follow] no follow->broadcast rule found; using first linked server (add rule via Profile if needed).");
+  }
+  if (linkedServerIds.length === 0) {
+    console.warn("[twitch follow] user has no linked servers. Link a server on Profile.");
+  }
+
+  const defaultParams = { message: "New follower: {user_name}!" };
   let dispatched = 0;
 
-  for (const rule of followRules) {
-    const serverId = rule.server_id ?? linkedServerIds[0];
-    if (!serverId) continue;
+  if (followRules.length > 0) {
+    for (const rule of followRules) {
+      const serverId = rule.server_id ?? linkedServerIds[0];
+      if (!serverId) continue;
 
+      const result = await dispatchWhitelistAction(
+        rule.action_id,
+        rule.action_params,
+        serverId,
+        rustmaxxUserId,
+        role,
+        {
+          userId: normalized.userId,
+          userLogin: normalized.userLogin,
+          userName: normalized.userName,
+        }
+      );
+      if (result.ok) {
+        dispatched++;
+        console.log("[twitch follow] broadcast dispatched to server", serverId, "for", normalized.userName ?? normalized.userLogin);
+      } else {
+        console.error("[twitch follow] dispatch failed for server", serverId, result.error);
+      }
+    }
+  } else if (linkedServerIds.length > 0) {
+    const serverId = linkedServerIds[0];
     const result = await dispatchWhitelistAction(
-      rule.action_id,
-      rule.action_params,
+      "broadcast",
+      defaultParams,
       serverId,
       rustmaxxUserId,
       role,
@@ -62,7 +93,12 @@ export async function processNormalizedEvent(
         userName: normalized.userName,
       }
     );
-    if (result.ok) dispatched++;
+    if (result.ok) {
+      dispatched++;
+      console.log("[twitch follow] broadcast dispatched to server (fallback)", serverId, "for", normalized.userName ?? normalized.userLogin);
+    } else {
+      console.error("[twitch follow] dispatch failed for server", serverId, result.error);
+    }
   }
 
   return { logged: true, duplicate: false, dispatched };

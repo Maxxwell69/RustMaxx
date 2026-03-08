@@ -34,7 +34,10 @@ export async function dispatchBroadcast(
   message: string
 ): Promise<{ ok: boolean; error?: string }> {
   const server = await getServerIfAccessible(serverId, userId, role);
-  if (!server) return { ok: false, error: "Server not found or access denied" };
+  if (!server) {
+    console.error("[twitch broadcast] server not found or access denied:", serverId);
+    return { ok: false, error: "Server not found or access denied" };
+  }
 
   const sanitized = sanitizeBroadcastMessage(message);
   if (!sanitized) return { ok: false, error: "Empty message" };
@@ -46,15 +49,19 @@ export async function dispatchBroadcast(
     server.rcon_password,
     async () => {}
   );
-  if (!ensured.ok) return { ok: false, error: ensured.error ?? "RCON not connected" };
+  if (!ensured.ok) {
+    console.error("[twitch broadcast] RCON not connected:", serverId, ensured.error);
+    return { ok: false, error: ensured.error ?? "RCON not connected" };
+  }
 
-  const command = `say ${sanitized}`;
+  const command = `say ${JSON.stringify(sanitized)}`;
   try {
     await runAndWait(serverId, command, 8000);
     pushLogEvent(serverId, "console", `[Twitch] ${sanitized}`);
     return { ok: true };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
+    console.error("[twitch broadcast] say command failed:", serverId, error);
     return { ok: false, error };
   }
 }

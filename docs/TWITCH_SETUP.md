@@ -53,11 +53,12 @@ This creates `twitch_accounts`, `streamer_server_links`, `event_rules`, and `eve
 ## 6. Testing the first Twitch-triggered broadcast
 
 1. Configure all env vars and run migrations.
-2. Link Twitch from Profile (Connect Twitch) and link a server (Link server for “Follow → in-game broadcast”).
-3. Ensure the server has RCON connected (user has opened the server page or triggered a connection so the app can send the `say` command).
-4. Have someone follow your Twitch channel (or use a test account).
-5. Twitch sends the follow event to your webhook; the app logs it, applies the rule, and sends the whitelist action “broadcast” (in-game `say`).
-6. Check **Super Admin Dashboard** → “Recent Twitch events” to see the event; check the game server for the broadcast message.
+2. **Webhook must be public:** Twitch can only POST to a public HTTPS URL. On localhost, use a tunnel (e.g. ngrok) and set `TWITCH_WEBHOOK_CALLBACK_URL` to it (e.g. `https://xxx.ngrok.io/api/twitch/webhook`).
+3. Link Twitch from Profile (Connect Twitch) and link a server (Link server for “Follow → in-game broadcast”).
+4. Ensure the server has RCON connected (user has opened the server page or triggered a connection so the app can send the `say` command).
+5. Have someone follow your Twitch channel (or use a test account).
+6. Twitch sends the follow event to your webhook; the app logs it, applies the rule, and sends the whitelist action “broadcast” (in-game `say`).
+7. Check **Super Admin Dashboard** → “Recent Twitch events” to see the event; check the game server for the broadcast message.
 
 ## 7. Retry-safe / duplicate handling
 
