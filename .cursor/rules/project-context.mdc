@@ -1,0 +1,9 @@
+---
+description: Project deployment and environment context for RustMaxx.
+alwaysApply: true
+---
+
+# RustMaxx project context
+
+- **Hosting**: This project is **not** on Vercel. Do not add Vercel-specific env vars (e.g. VERCEL_URL) or logic. Use **APP_URL** or **SITE_URL** for the public base URL when building redirect URIs or absolute URLs.
+- **Public URL**: In production, set **APP_URL** (e.g. `https://rustmaxx.com` or `https://www.rustmaxx.com`) so OAuth and webhooks use the correct domain.

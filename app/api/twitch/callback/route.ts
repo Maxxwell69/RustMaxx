@@ -37,7 +37,6 @@ export async function GET(request: NextRequest) {
       const base = appUrl.replace(/\/$/, "");
       return `${base}/api/twitch/callback`;
     }
-    if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/api/twitch/callback`;
     const url = new URL(request.url);
     const forwardedProto = request.headers.get("x-forwarded-proto");
     const forwardedHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
