@@ -51,12 +51,14 @@ export async function POST(request: NextRequest) {
   const broadcasterUserId = account.twitch_user_id;
   let followOk = false;
   let chatOk = false;
+  let lastError: string | null = null;
 
   try {
     await createChannelFollowSubscription(broadcasterUserId, webhookUrl, eventsubSecret, accessToken);
     followOk = true;
   } catch (err) {
     console.error("[twitch refresh-subscriptions] follow failed", err);
+    lastError = err instanceof Error ? err.message : String(err);
   }
 
   try {
@@ -64,12 +66,14 @@ export async function POST(request: NextRequest) {
     chatOk = true;
   } catch (err) {
     console.error("[twitch refresh-subscriptions] chat failed", err);
+    lastError = err instanceof Error ? err.message : String(err);
   }
 
   if (!followOk && !chatOk) {
     return NextResponse.json({
       ok: false,
       error: "Could not create subscriptions. Reconnect Twitch once (Profile → Connect Twitch) to grant permissions.",
+      detail: lastError ?? undefined,
       follow: false,
       chat: false,
     });

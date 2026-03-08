@@ -186,7 +186,14 @@ function ProfilePageContent() {
       .then((r) => r.json().then((d) => ({ ok: r.ok, ...d })))
       .then((d) => {
         setRefreshSubs(d.ok ? "ok" : "err");
-        setRefreshSubsMsg(d.ok ? (d.message ?? "Subscriptions refreshed.") : (d.error ?? "Request failed"));
+        setRefreshSubsMsg(d.ok ? (d.message ?? "Subscriptions refreshed.") : [d.error ?? "Request failed", d.detail].filter(Boolean).join(" — "));
+        if (d.ok) {
+          const params = new URLSearchParams(searchParams.toString());
+          params.delete("eventsub");
+          params.delete("eventsub_error");
+          const q = params.toString();
+          router.replace(q ? `/profile?${q}` : "/profile");
+        }
       })
       .catch(() => {
         setRefreshSubs("err");
@@ -331,7 +338,13 @@ function ProfilePageContent() {
             )}
             {searchParams.get("twitch") === "linked" && searchParams.get("eventsub") === "failed" && (
               <p className="mt-2 text-sm text-amber-400">
-                Follow notifications could not be enabled (Twitch EventSub failed). Check that TWITCH_WEBHOOK_CALLBACK_URL and TWITCH_EVENTSUB_SECRET are set and the webhook URL is reachable. Try disconnecting and reconnecting Twitch to retry.
+                Follow notifications could not be enabled (Twitch EventSub failed).{" "}
+                {searchParams.get("eventsub_error") ? (
+                  <>Twitch said: <span className="font-mono text-xs">{(() => { try { return decodeURIComponent(searchParams.get("eventsub_error") ?? ""); } catch { return searchParams.get("eventsub_error") ?? ""; } })()}</span></>
+                ) : (
+                  "Check that TWITCH_WEBHOOK_CALLBACK_URL and TWITCH_EVENTSUB_SECRET are set and the webhook URL is reachable."
+                )}{" "}
+                Ensure /api/twitch/webhook is publicly reachable (no auth). Try &quot;Refresh event subscriptions&quot; or disconnect and reconnect Twitch.
               </p>
             )}
             {searchParams.get("twitch") === "state_invalid" && (

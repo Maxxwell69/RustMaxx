@@ -50,6 +50,7 @@ This creates `twitch_accounts`, `streamer_server_links`, `event_rules`, and `eve
 
 - Twitch will send HTTP POST requests to `TWITCH_WEBHOOK_CALLBACK_URL`.
 - Your app must be reachable over HTTPS (Twitch requires HTTPS for production webhooks).
+- The route `/api/twitch/webhook` is **public** (no login required) so Twitch can reach it; requests are verified with the EventSub signature and secret.
 - On first subscription creation, Twitch sends a `webhook_callback_verification` message with a `challenge`; the app responds with the challenge body to confirm ownership.
 - Incoming events are verified with `Twitch-Eventsub-Message-Signature` using `TWITCH_EVENTSUB_SECRET`, then normalized, logged, and run through event rules (e.g. follow → broadcast).
 

@@ -7,6 +7,11 @@ import { getPublicProfileUrl } from "@/lib/twitch-public-url";
 
 const STATE_COOKIE = "twitch_oauth_state";
 
+function sanitizeEventSubError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.replace(/\s+/g, " ").slice(0, 180).trim();
+}
+
 function redirectToProfile(request: NextRequest, query: string): NextResponse {
   const url = getPublicProfileUrl("/profile?" + query) ?? new URL("/profile?" + query, request.url).href;
   return NextResponse.redirect(url);
@@ -50,6 +55,7 @@ export async function GET(request: NextRequest) {
   })();
 
   let eventsubFailed = false;
+  let eventsubError: string | null = null;
   try {
     const tokens = await exchangeCodeForTokens(code, redirectUri);
     const twitchUser = await getTwitchUserFromToken(tokens.access_token);
@@ -75,6 +81,7 @@ export async function GET(request: NextRequest) {
       } catch (subErr) {
         console.error("[twitch callback] EventSub follow subscribe failed", subErr);
         eventsubFailed = true;
+        eventsubError = sanitizeEventSubError(subErr);
       }
       try {
         await createChannelChatMessageSubscription(
@@ -86,9 +93,11 @@ export async function GET(request: NextRequest) {
       } catch (chatErr) {
         console.error("[twitch callback] EventSub chat subscribe failed (may need extra scope)", chatErr);
         eventsubFailed = true;
+        if (!eventsubError) eventsubError = sanitizeEventSubError(chatErr);
       }
     } else {
       eventsubFailed = true;
+      eventsubError = !webhookUrl ? "TWITCH_WEBHOOK_CALLBACK_URL not set" : "TWITCH_EVENTSUB_SECRET not set";
     }
   } catch (e) {
     console.error("[twitch callback]", e);
@@ -101,7 +110,11 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const query = "twitch=linked" + (eventsubFailed ? "&eventsub=failed" : "");
+  let query = "twitch=linked";
+  if (eventsubFailed) {
+    query += "&eventsub=failed";
+    if (eventsubError) query += "&eventsub_error=" + encodeURIComponent(eventsubError);
+  }
   const res = redirectToProfile(request, query);
   res.cookies.delete(STATE_COOKIE);
   return res;
