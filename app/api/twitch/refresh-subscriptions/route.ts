@@ -51,7 +51,8 @@ export async function POST(request: NextRequest) {
   const broadcasterUserId = account.twitch_user_id;
   let followOk = false;
   let chatOk = false;
-  let lastError: string | null = null;
+  let followError: string | null = null;
+  let chatError: string | null = null;
   const appToken = await getAppAccessToken();
 
   try {
@@ -59,31 +60,37 @@ export async function POST(request: NextRequest) {
     followOk = true;
   } catch (err) {
     console.error("[twitch refresh-subscriptions] follow failed", err);
-    lastError = err instanceof Error ? err.message : String(err);
+    followError = err instanceof Error ? err.message : String(err);
   }
 
   try {
     await createChannelChatMessageSubscription(broadcasterUserId, webhookUrl, eventsubSecret, appToken);
     chatOk = true;
   } catch (err) {
-    console.error("[twitch refresh-subscriptions] chat failed", err);
-    lastError = err instanceof Error ? err.message : String(err);
+    console.error("[twitch refresh-subscriptions] chat failed (follow may still work)", err);
+    chatError = err instanceof Error ? err.message : String(err);
   }
 
   if (!followOk && !chatOk) {
     return NextResponse.json({
       ok: false,
       error: "Could not create subscriptions. Reconnect Twitch once (Profile → Connect Twitch) to grant permissions.",
-      detail: lastError ?? undefined,
+      detail: followError ?? chatError ?? undefined,
       follow: false,
       chat: false,
     });
   }
 
+  const message =
+    followOk && chatOk
+      ? "Follow and chat subscriptions enabled."
+      : followOk
+        ? "Follow notifications enabled. Chat (!rust) subscription could not be enabled (Twitch limitation); use Test !rust to send to game."
+        : "Chat enabled; follow failed.";
   return NextResponse.json({
     ok: true,
     follow: followOk,
     chat: chatOk,
-    message: followOk && chatOk ? "Follow and chat subscriptions enabled." : followOk ? "Follow enabled; chat failed—reconnect Twitch once to grant chat permission." : "Chat enabled; follow failed.",
+    message,
   });
 }

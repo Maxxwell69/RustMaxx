@@ -92,9 +92,8 @@ export async function GET(request: NextRequest) {
           appToken
         );
       } catch (chatErr) {
-        console.error("[twitch callback] EventSub chat subscribe failed", chatErr);
-        eventsubFailed = true;
-        if (!eventsubError) eventsubError = sanitizeEventSubError(chatErr);
+        console.error("[twitch callback] EventSub chat subscribe failed (follow may still work)", chatErr);
+        // Don't set eventsubFailed when only chat fails—follow notifications are the main feature
       }
     } else {
       eventsubFailed = true;
