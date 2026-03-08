@@ -182,6 +182,14 @@ function ProfilePageContent() {
   function runRefreshSubscriptions() {
     setRefreshSubs("sending");
     setRefreshSubsMsg(null);
+    // Clear stale EventSub error from URL so only the refresh result is shown
+    if (searchParams.get("eventsub") || searchParams.get("eventsub_error")) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("eventsub");
+      params.delete("eventsub_error");
+      const q = params.toString();
+      router.replace(q ? `/profile?${q}` : "/profile");
+    }
     fetch("/api/twitch/refresh-subscriptions", { method: "POST" })
       .then((r) => r.json().then((d) => ({ ok: r.ok, ...d })))
       .then((d) => {
