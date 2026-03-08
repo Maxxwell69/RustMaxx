@@ -8,7 +8,7 @@ const TWITCH_TOKEN = "https://id.twitch.tv/oauth2/token";
 const TWITCH_VALIDATE = "https://id.twitch.tv/oauth2/validate";
 const TWITCH_HELIX_USERS = "https://api.twitch.tv/helix/users";
 
-const SCOPES = ["user:read:email", "channel:read:subscriptions", "moderator:read:chat", "channel:bot"].join(" ");
+const SCOPES = ["user:read:email", "channel:read:subscriptions", "channel:bot"].join(" ");
 
 export function getTwitchAuthUrl(redirectUri: string, state: string): string {
   const clientId = process.env.TWITCH_CLIENT_ID;
