@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
-import { exchangeCodeForTokens, getTwitchUserFromToken } from "@/lib/twitch-oauth";
+import { exchangeCodeForTokens, getTwitchUserFromToken, getAppAccessToken } from "@/lib/twitch-oauth";
 import { upsertTwitchAccount } from "@/lib/twitch-db";
 import { createChannelFollowSubscription, createChannelChatMessageSubscription } from "@/lib/twitch-eventsub";
 import { getPublicProfileUrl } from "@/lib/twitch-public-url";
@@ -71,12 +71,13 @@ export async function GET(request: NextRequest) {
     const webhookUrl = process.env.TWITCH_WEBHOOK_CALLBACK_URL;
     const eventsubSecret = process.env.TWITCH_EVENTSUB_SECRET;
     if (webhookUrl && eventsubSecret) {
+      const appToken = await getAppAccessToken();
       try {
         await createChannelFollowSubscription(
           twitchUser.id,
           webhookUrl,
           eventsubSecret,
-          tokens.access_token
+          appToken
         );
       } catch (subErr) {
         console.error("[twitch callback] EventSub follow subscribe failed", subErr);
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
           twitchUser.id,
           webhookUrl,
           eventsubSecret,
-          tokens.access_token
+          appToken
         );
       } catch (chatErr) {
         console.error("[twitch callback] EventSub chat subscribe failed (may need extra scope)", chatErr);

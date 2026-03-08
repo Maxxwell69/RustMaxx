@@ -8,6 +8,44 @@ const TWITCH_TOKEN = "https://id.twitch.tv/oauth2/token";
 const TWITCH_VALIDATE = "https://id.twitch.tv/oauth2/validate";
 const TWITCH_HELIX_USERS = "https://api.twitch.tv/helix/users";
 
+/** In-memory cache for app access token (client credentials). EventSub requires app token to create webhook subscriptions. */
+let appTokenCache: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Get an app access token via client_credentials. Cached until ~5 min before expiry.
+ * Required by Twitch for creating EventSub webhook subscriptions.
+ */
+export async function getAppAccessToken(): Promise<string> {
+  const now = Date.now();
+  if (appTokenCache && appTokenCache.expiresAt > now + 5 * 60 * 1000) {
+    return appTokenCache.token;
+  }
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  const clientSecret = process.env.TWITCH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set");
+
+  const res = await fetch(TWITCH_TOKEN, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "client_credentials",
+    }).toString(),
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Twitch app token failed: ${res.status} ${t}`);
+  }
+  const data = (await res.json()) as { access_token: string; expires_in: number };
+  appTokenCache = {
+    token: data.access_token,
+    expiresAt: now + (data.expires_in - 300) * 1000, // refresh 5 min early
+  };
+  return appTokenCache.token;
+}
+
 const SCOPES = ["user:read:email", "channel:read:subscriptions", "channel:bot"].join(" ");
 
 export function getTwitchAuthUrl(redirectUri: string, state: string): string {

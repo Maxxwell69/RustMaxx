@@ -6,7 +6,7 @@ import {
   getRefreshTokenForUser,
   updateTwitchTokens,
 } from "@/lib/twitch-db";
-import { refreshTwitchToken } from "@/lib/twitch-oauth";
+import { refreshTwitchToken, getAppAccessToken } from "@/lib/twitch-oauth";
 import { createChannelFollowSubscription, createChannelChatMessageSubscription } from "@/lib/twitch-eventsub";
 
 /**
@@ -52,9 +52,10 @@ export async function POST(request: NextRequest) {
   let followOk = false;
   let chatOk = false;
   let lastError: string | null = null;
+  const appToken = await getAppAccessToken();
 
   try {
-    await createChannelFollowSubscription(broadcasterUserId, webhookUrl, eventsubSecret, accessToken);
+    await createChannelFollowSubscription(broadcasterUserId, webhookUrl, eventsubSecret, appToken);
     followOk = true;
   } catch (err) {
     console.error("[twitch refresh-subscriptions] follow failed", err);
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await createChannelChatMessageSubscription(broadcasterUserId, webhookUrl, eventsubSecret, accessToken);
+    await createChannelChatMessageSubscription(broadcasterUserId, webhookUrl, eventsubSecret, appToken);
     chatOk = true;
   } catch (err) {
     console.error("[twitch refresh-subscriptions] chat failed", err);

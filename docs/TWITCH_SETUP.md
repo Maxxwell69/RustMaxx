@@ -43,7 +43,7 @@ This creates `twitch_accounts`, `streamer_server_links`, `event_rules`, and `eve
 1. User goes to **Profile** and clicks **Connect Twitch**.
 2. They are sent to Twitch to authorize; Twitch redirects back to `TWITCH_REDIRECT_URI` with a code.
 3. The backend exchanges the code for tokens, fetches the Twitch user, and stores encrypted tokens and broadcaster id/login/display name.
-4. If `TWITCH_WEBHOOK_CALLBACK_URL` and `TWITCH_EVENTSUB_SECRET` are set, the backend creates an EventSub subscription for `channel.follow` for that broadcaster.
+4. If `TWITCH_WEBHOOK_CALLBACK_URL` and `TWITCH_EVENTSUB_SECRET` are set, the backend obtains an app access token (client credentials) and creates EventSub subscriptions for `channel.follow` and chat for that broadcaster.
 5. User can **Link server** on Profile to choose a server and enable the rule “Twitch follow → in-game broadcast”.
 
 ## 5. EventSub webhook (production)
