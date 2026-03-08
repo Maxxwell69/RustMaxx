@@ -120,7 +120,7 @@ function TwitchLinkServerBlock() {
 
       <div className="border-t border-zinc-700 pt-2">
         <p className="mb-1.5 text-xs text-zinc-500">In your Twitch chat, type <code className="rounded bg-zinc-700 px-1">!rust your message</code> (only you, the broadcaster) to send that message to the linked server&apos;s in-game chat. <code className="rounded bg-zinc-700 px-1">irust</code> also works. Rate limited to once per 10 seconds.</p>
-        <p className="mb-1.5 text-xs text-amber-500/90">If chat commands don&apos;t work: revoke RustMaxx at twitch.tv/settings/connections, then click Connect Twitch again below so the app can create the chat subscription.</p>
+        <p className="mb-1.5 text-xs text-zinc-500">If chat or follow events stop working, use &quot;Refresh event subscriptions&quot; above—no need to revoke.</p>
         <button
           type="button"
           onClick={runTestChat}
@@ -155,6 +155,8 @@ function ProfilePageContent() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [twitch, setTwitch] = useState<TwitchStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshSubs, setRefreshSubs] = useState<"idle" | "sending" | "ok" | "err">("idle");
+  const [refreshSubsMsg, setRefreshSubsMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -175,6 +177,21 @@ function ProfilePageContent() {
       .then((r) => (r.ok ? r.json() : { linked: false }))
       .then(setTwitch);
   }, [profile]);
+
+  function runRefreshSubscriptions() {
+    setRefreshSubs("sending");
+    setRefreshSubsMsg(null);
+    fetch("/api/twitch/refresh-subscriptions", { method: "POST" })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, ...d })))
+      .then((d) => {
+        setRefreshSubs(d.ok ? "ok" : "err");
+        setRefreshSubsMsg(d.ok ? (d.message ?? "Subscriptions refreshed.") : (d.error ?? "Request failed"));
+      })
+      .catch(() => {
+        setRefreshSubs("err");
+        setRefreshSubsMsg("Network error");
+      });
+  }
 
   if (loading) {
     return (
@@ -253,6 +270,18 @@ function ProfilePageContent() {
                     </span>
                   )}
                 </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={runRefreshSubscriptions}
+                    disabled={refreshSubs === "sending"}
+                    className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+                  >
+                    {refreshSubs === "sending" ? "Refreshing…" : "Refresh event subscriptions"}
+                  </button>
+                  {refreshSubs === "ok" && refreshSubsMsg && <span className="text-sm text-green-400">{refreshSubsMsg}</span>}
+                  {refreshSubs === "err" && refreshSubsMsg && <span className="text-sm text-amber-400">{refreshSubsMsg}</span>}
+                </div>
                 <Link
                   href="/streamer-interaction"
                   className="inline-block text-sm text-rust-cyan hover:underline"
