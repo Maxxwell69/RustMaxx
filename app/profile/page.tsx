@@ -337,15 +337,30 @@ function ProfilePageContent() {
               <p className="mt-2 text-sm text-green-400">Twitch account linked successfully.</p>
             )}
             {searchParams.get("twitch") === "linked" && searchParams.get("eventsub") === "failed" && (
-              <p className="mt-2 text-sm text-amber-400">
-                Follow notifications could not be enabled (Twitch EventSub failed).{" "}
-                {searchParams.get("eventsub_error") ? (
-                  <>Twitch said: <span className="font-mono text-xs">{(() => { try { return decodeURIComponent(searchParams.get("eventsub_error") ?? ""); } catch { return searchParams.get("eventsub_error") ?? ""; } })()}</span></>
-                ) : (
-                  "Check that TWITCH_WEBHOOK_CALLBACK_URL and TWITCH_EVENTSUB_SECRET are set and the webhook URL is reachable."
-                )}{" "}
-                Ensure /api/twitch/webhook is publicly reachable (no auth). Try &quot;Refresh event subscriptions&quot; or disconnect and reconnect Twitch.
-              </p>
+              <div className="mt-2 flex flex-wrap items-start gap-2 text-sm text-amber-400">
+                <p className="min-w-0 flex-1">
+                  Follow notifications could not be enabled (Twitch EventSub failed).{" "}
+                  {searchParams.get("eventsub_error") ? (
+                    <>Twitch said: <span className="font-mono text-xs">{(() => { try { return decodeURIComponent(searchParams.get("eventsub_error") ?? ""); } catch { return searchParams.get("eventsub_error") ?? ""; } })()}</span></>
+                  ) : (
+                    "Check that TWITCH_WEBHOOK_CALLBACK_URL and TWITCH_EVENTSUB_SECRET are set and the webhook URL is reachable."
+                  )}{" "}
+                  Ensure /api/twitch/webhook is publicly reachable (no auth). Try &quot;Refresh event subscriptions&quot; or disconnect and reconnect Twitch.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.delete("eventsub");
+                    params.delete("eventsub_error");
+                    const q = params.toString();
+                    router.replace(q ? `/profile?${q}` : "/profile");
+                  }}
+                  className="shrink-0 rounded border border-amber-500/60 bg-amber-500/10 px-2 py-1 text-xs text-amber-400 hover:bg-amber-500/20"
+                >
+                  Dismiss
+                </button>
+              </div>
             )}
             {searchParams.get("twitch") === "state_invalid" && (
               <p className="mt-2 text-sm text-amber-400">Link expired or invalid. Try connecting again.</p>
