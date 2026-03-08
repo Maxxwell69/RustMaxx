@@ -312,6 +312,14 @@ function ProfilePageContent() {
             {searchParams.get("twitch") === "state_invalid" && (
               <p className="mt-2 text-sm text-amber-400">Link expired or invalid. Try connecting again.</p>
             )}
+            {searchParams.get("twitch") === "already_linked" && (
+              <p className="mt-2 text-sm text-amber-400">
+                This Twitch account is already linked to another RustMaxx user. Use a different Twitch account, or ask that user to disconnect Twitch in their Profile first.
+              </p>
+            )}
+            {searchParams.get("twitch") === "exchange_failed" && (
+              <p className="mt-2 text-sm text-amber-400">Twitch connection failed. Try again or check server logs.</p>
+            )}
           </div>
         </div>
     </div>

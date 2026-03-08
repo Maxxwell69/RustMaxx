@@ -87,7 +87,12 @@ export async function GET(request: NextRequest) {
     }
   } catch (e) {
     console.error("[twitch callback]", e);
-    const res = NextResponse.redirect(new URL("/profile?twitch=exchange_failed", request.url));
+    const err = e as { code?: string; constraint?: string };
+    const isDuplicateTwitch =
+      err?.code === "23505" && err?.constraint === "twitch_accounts_twitch_user_id_key";
+    const redirectUrl = new URL("/profile", request.url);
+    redirectUrl.searchParams.set("twitch", isDuplicateTwitch ? "already_linked" : "exchange_failed");
+    const res = NextResponse.redirect(redirectUrl);
     res.cookies.delete(STATE_COOKIE);
     return res;
   }
