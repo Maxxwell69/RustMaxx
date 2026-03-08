@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await createChannelChatMessageSubscription(broadcasterUserId, webhookUrl, eventsubSecret, appToken);
+    await createChannelChatMessageSubscription(broadcasterUserId, webhookUrl, eventsubSecret, accessToken);
     chatOk = true;
   } catch (err) {
     console.error("[twitch refresh-subscriptions] chat failed", err);

@@ -89,10 +89,10 @@ export async function GET(request: NextRequest) {
           twitchUser.id,
           webhookUrl,
           eventsubSecret,
-          appToken
+          tokens.access_token
         );
       } catch (chatErr) {
-        console.error("[twitch callback] EventSub chat subscribe failed (may need extra scope)", chatErr);
+        console.error("[twitch callback] EventSub chat subscribe failed (requires user token)", chatErr);
         eventsubFailed = true;
         if (!eventsubError) eventsubError = sanitizeEventSubError(chatErr);
       }
