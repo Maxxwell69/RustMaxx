@@ -157,6 +157,7 @@ function ProfilePageContent() {
   const [loading, setLoading] = useState(true);
   const [refreshSubs, setRefreshSubs] = useState<"idle" | "sending" | "ok" | "err">("idle");
   const [refreshSubsMsg, setRefreshSubsMsg] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -190,6 +191,22 @@ function ProfilePageContent() {
       .catch(() => {
         setRefreshSubs("err");
         setRefreshSubsMsg("Network error");
+      });
+  }
+
+  function runDisconnectTwitch() {
+    if (disconnecting) return;
+    setDisconnecting(true);
+    fetch("/api/twitch/disconnect", { method: "POST" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Failed"))))
+      .then(() => {
+        setTwitch({ linked: false });
+      })
+      .catch(() => {
+        setDisconnecting(false);
+      })
+      .finally(() => {
+        setDisconnecting(false);
       });
   }
 
@@ -278,6 +295,14 @@ function ProfilePageContent() {
                     className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
                   >
                     {refreshSubs === "sending" ? "Refreshing…" : "Refresh event subscriptions"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={runDisconnectTwitch}
+                    disabled={disconnecting}
+                    className="rounded border border-amber-600/60 bg-amber-900/20 px-3 py-1.5 text-sm font-medium text-amber-400 hover:bg-amber-900/40 disabled:opacity-50"
+                  >
+                    {disconnecting ? "Disconnecting…" : "Disconnect Twitch"}
                   </button>
                   {refreshSubs === "ok" && refreshSubsMsg && <span className="text-sm text-green-400">{refreshSubsMsg}</span>}
                   {refreshSubs === "err" && refreshSubsMsg && <span className="text-sm text-amber-400">{refreshSubsMsg}</span>}

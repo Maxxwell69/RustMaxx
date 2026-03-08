@@ -116,6 +116,11 @@ export async function updateTwitchTokens(userId: string, accessToken: string, re
   );
 }
 
+/** Remove the Twitch account link for this user (disconnect from Profile). */
+export async function deleteTwitchAccountByUserId(userId: string): Promise<void> {
+  await query("DELETE FROM twitch_accounts WHERE user_id = $1", [userId]);
+}
+
 export async function getEventRulesForUser(userId: string): Promise<EventRuleRow[]> {
   const { rows } = await query<EventRuleRow>(
     "SELECT id, user_id, server_id, event_kind, action_id, action_params, enabled, created_at, updated_at FROM event_rules WHERE user_id = $1 AND enabled = true",
