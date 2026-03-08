@@ -20,6 +20,7 @@ const PUBLIC_PATHS = [
   "/streamer-interaction",
   "/early-access",
   "/api/early-access",
+  "/api/twitch/webhook",   // Twitch EventSub verification and notifications (no session)
   "/sitemap.xml",
   "/robots.txt",
 ];
