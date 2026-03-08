@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
 import {
   getTwitchAccountByUserId,
-  getAccessTokenForUser,
   getRefreshTokenForUser,
   updateTwitchTokens,
 } from "@/lib/twitch-db";
@@ -32,20 +31,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let accessToken = await getAccessTokenForUser(session.userId);
-  if (!accessToken) {
-    const refreshToken = await getRefreshTokenForUser(session.userId);
-    if (!refreshToken) {
-      return NextResponse.json({ ok: false, error: "Twitch token missing. Reconnect Twitch on Profile." }, { status: 400 });
-    }
-    try {
-      const tokens = await refreshTwitchToken(refreshToken);
-      await updateTwitchTokens(session.userId, tokens.access_token, tokens.refresh_token);
-      accessToken = tokens.access_token;
-    } catch (e) {
-      console.error("[twitch refresh-subscriptions] token refresh failed", e);
-      return NextResponse.json({ ok: false, error: "Token expired. Reconnect Twitch on Profile." }, { status: 400 });
-    }
+  const refreshToken = await getRefreshTokenForUser(session.userId);
+  if (!refreshToken) {
+    return NextResponse.json({ ok: false, error: "Twitch token missing. Reconnect Twitch on Profile." }, { status: 400 });
+  }
+  let accessToken: string;
+  try {
+    const tokens = await refreshTwitchToken(refreshToken);
+    await updateTwitchTokens(session.userId, tokens.access_token, tokens.refresh_token);
+    accessToken = tokens.access_token;
+  } catch (e) {
+    console.error("[twitch refresh-subscriptions] token refresh failed", e);
+    return NextResponse.json({ ok: false, error: "Token expired or revoked. Disconnect Twitch and connect again on Profile." }, { status: 400 });
   }
 
   const broadcasterUserId = account.twitch_user_id;
