@@ -63,7 +63,7 @@ export function parseEventSubPayload(body: unknown): { type: EventSubMessageType
 
 /**
  * Create EventSub subscription for channel.follow (version 2).
- * Requires app access token or user access token with channel:read:subscriptions.
+ * Requires app access token. Condition requires broadcaster_user_id and moderator_user_id (use broadcaster as moderator).
  */
 export async function createChannelFollowSubscription(
   broadcasterUserId: string,
@@ -84,7 +84,10 @@ export async function createChannelFollowSubscription(
     body: JSON.stringify({
       type: "channel.follow",
       version: "2",
-      condition: { broadcaster_user_id: broadcasterUserId },
+      condition: {
+        broadcaster_user_id: broadcasterUserId,
+        moderator_user_id: broadcasterUserId,
+      },
       transport: { method: "webhook", callback: callbackUrl, secret },
     }),
   });
