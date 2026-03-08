@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   const appToken = await getAppAccessToken();
 
   try {
-    await createChannelFollowSubscription(broadcasterUserId, webhookUrl, eventsubSecret, appToken);
+    await createChannelFollowSubscription(broadcasterUserId, webhookUrl, eventsubSecret, accessToken);
     followOk = true;
   } catch (err) {
     console.error("[twitch refresh-subscriptions] follow failed", err);

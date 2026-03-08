@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
           twitchUser.id,
           webhookUrl,
           eventsubSecret,
-          appToken
+          tokens.access_token
         );
       } catch (subErr) {
         console.error("[twitch callback] EventSub follow subscribe failed", subErr);
