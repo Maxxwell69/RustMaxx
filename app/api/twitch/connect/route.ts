@@ -6,9 +6,19 @@ import { randomBytes } from "crypto";
 const STATE_COOKIE = "twitch_oauth_state";
 const STATE_MAX_AGE = 600; // 10 min
 
-function getRedirectUri(request: NextRequest): string | null {
+function getRedirectUri(request: NextRequest): string {
   const fromEnv = process.env.TWITCH_REDIRECT_URI?.trim();
   if (fromEnv && !fromEnv.includes("localhost")) return fromEnv;
+
+  const appUrl = process.env.APP_URL?.trim() || process.env.SITE_URL?.trim();
+  if (appUrl) {
+    const base = appUrl.replace(/\/$/, "");
+    return `${base}/api/twitch/callback`;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/api/twitch/callback`;
+  }
 
   const url = new URL(request.url);
   const forwardedProto = request.headers.get("x-forwarded-proto");
@@ -24,9 +34,9 @@ export async function GET(request: NextRequest) {
   if (authErr) return authErr;
 
   const redirectUri = getRedirectUri(request);
-  if (!redirectUri) {
+  if (!redirectUri || redirectUri.includes("localhost")) {
     return NextResponse.json(
-      { error: "TWITCH_REDIRECT_URI is not configured" },
+      { error: "Set APP_URL or TWITCH_REDIRECT_URI to your public URL (e.g. https://rustmaxx.com) so Connect Twitch redirects correctly." },
       { status: 500 }
     );
   }

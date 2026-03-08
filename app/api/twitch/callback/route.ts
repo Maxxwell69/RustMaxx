@@ -32,6 +32,12 @@ export async function GET(request: NextRequest) {
   const redirectUri = (() => {
     const fromEnv = process.env.TWITCH_REDIRECT_URI?.trim();
     if (fromEnv && !fromEnv.includes("localhost")) return fromEnv;
+    const appUrl = process.env.APP_URL?.trim() || process.env.SITE_URL?.trim();
+    if (appUrl) {
+      const base = appUrl.replace(/\/$/, "");
+      return `${base}/api/twitch/callback`;
+    }
+    if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/api/twitch/callback`;
     const url = new URL(request.url);
     const forwardedProto = request.headers.get("x-forwarded-proto");
     const forwardedHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
