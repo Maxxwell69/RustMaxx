@@ -44,7 +44,7 @@ export function SiteHeader() {
           </Link>
         </div>
         <nav
-          className="hidden min-w-0 flex-1 items-center justify-center gap-2 overflow-x-auto sm:gap-4 md:flex md:flex-nowrap"
+          className="hidden min-w-0 flex-1 flex-wrap items-center justify-center gap-2 sm:gap-4 md:flex"
           aria-label="Site navigation"
         >
           {NAV_LINKS.map(({ href, label }) => (
@@ -67,13 +67,6 @@ export function SiteHeader() {
         >
           {mounted && loggedIn ? (
             <>
-              <Link
-                href="/profile"
-                className="rounded border border-[#9146ff]/60 bg-zinc-800/80 px-3 py-1.5 text-sm font-medium text-[#bf94ff] transition-colors hover:border-[#9146ff] hover:text-white"
-                title="Connect Twitch in your profile"
-              >
-                Connect Twitch
-              </Link>
               <UserProfile />
               <LogoutButton />
             </>
@@ -113,14 +106,6 @@ export function SiteHeader() {
             {label}
           </Link>
         ))}
-        {mounted && loggedIn && (
-          <Link
-            href="/profile"
-            className="shrink-0 rounded border border-[#9146ff]/60 px-3 py-1.5 text-sm font-medium text-[#bf94ff] hover:border-[#9146ff] hover:text-white"
-          >
-            Connect Twitch
-          </Link>
-        )}
         {mounted && !loggedIn && (
           <>
             <span className="text-zinc-600">|</span>
