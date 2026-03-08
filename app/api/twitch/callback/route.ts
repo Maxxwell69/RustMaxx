@@ -3,9 +3,14 @@ import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
 import { exchangeCodeForTokens, getTwitchUserFromToken } from "@/lib/twitch-oauth";
 import { upsertTwitchAccount } from "@/lib/twitch-db";
 import { createChannelFollowSubscription, createChannelChatMessageSubscription } from "@/lib/twitch-eventsub";
+import { getPublicProfileUrl } from "@/lib/twitch-public-url";
 
 const STATE_COOKIE = "twitch_oauth_state";
-const FRONTEND_REDIRECT = "/profile"; // or /streamer-interaction
+
+function redirectToProfile(request: NextRequest, query: string): NextResponse {
+  const url = getPublicProfileUrl("/profile?" + query) ?? new URL("/profile?" + query, request.url).href;
+  return NextResponse.redirect(url);
+}
 
 export async function GET(request: NextRequest) {
   const authErr = requireSession(request);
@@ -18,13 +23,13 @@ export async function GET(request: NextRequest) {
 
   const storedState = request.cookies.get(STATE_COOKIE)?.value;
   if (!state || state !== storedState) {
-    const res = NextResponse.redirect(new URL("/profile?twitch=state_invalid", request.url));
+    const res = redirectToProfile(request, "twitch=state_invalid");
     res.cookies.delete(STATE_COOKIE);
     return res;
   }
 
   if (!code) {
-    const res = NextResponse.redirect(new URL("/profile?twitch=no_code", request.url));
+    const res = redirectToProfile(request, "twitch=no_code");
     res.cookies.delete(STATE_COOKIE);
     return res;
   }
@@ -90,17 +95,14 @@ export async function GET(request: NextRequest) {
     const err = e as { code?: string; constraint?: string };
     const isDuplicateTwitch =
       err?.code === "23505" && err?.constraint === "twitch_accounts_twitch_user_id_key";
-    const redirectUrl = new URL("/profile", request.url);
-    redirectUrl.searchParams.set("twitch", isDuplicateTwitch ? "already_linked" : "exchange_failed");
-    const res = NextResponse.redirect(redirectUrl);
+    const query = "twitch=" + (isDuplicateTwitch ? "already_linked" : "exchange_failed");
+    const res = redirectToProfile(request, query);
     res.cookies.delete(STATE_COOKIE);
     return res;
   }
 
-  const redirectUrl = new URL(FRONTEND_REDIRECT, request.url);
-  redirectUrl.searchParams.set("twitch", "linked");
-  if (eventsubFailed) redirectUrl.searchParams.set("eventsub", "failed");
-  const res = NextResponse.redirect(redirectUrl);
+  const query = "twitch=linked" + (eventsubFailed ? "&eventsub=failed" : "");
+  const res = redirectToProfile(request, query);
   res.cookies.delete(STATE_COOKIE);
   return res;
 }
