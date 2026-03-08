@@ -25,7 +25,7 @@ function formatRole(role: string): string {
 
 type ServerOption = { id: string; name: string };
 
-function TwitchLinkServerBlock() {
+function TwitchLinkServerBlock({ onLinked }: { onLinked?: () => void }) {
   const [servers, setServers] = useState<ServerOption[]>([]);
   const [serverId, setServerId] = useState("");
   const [linking, setLinking] = useState(false);
@@ -53,6 +53,7 @@ function TwitchLinkServerBlock() {
       .then((r) => r.json().then((d) => ({ ok: r.ok, ...d })))
       .then((d) => {
         setLinkMsg(d.ok ? "ok" : "err");
+        if (d.ok) onLinked?.();
       })
       .finally(() => setLinking(false));
   }
@@ -158,6 +159,12 @@ function ProfilePageContent() {
   const [refreshSubs, setRefreshSubs] = useState<"idle" | "sending" | "ok" | "err">("idle");
   const [refreshSubsMsg, setRefreshSubsMsg] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<{
+    linked: boolean;
+    linkedServerCount: number;
+    followSubscriptionActive: boolean;
+    chatSubscriptionActive: boolean;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -178,6 +185,17 @@ function ProfilePageContent() {
       .then((r) => (r.ok ? r.json() : { linked: false }))
       .then(setTwitch);
   }, [profile]);
+
+  useEffect(() => {
+    if (!twitch?.linked) {
+      setSetupStatus(null);
+      return;
+    }
+    fetch("/api/twitch/setup-status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setSetupStatus)
+      .catch(() => setSetupStatus(null));
+  }, [twitch?.linked, refreshSubs]);
 
   function runRefreshSubscriptions() {
     setRefreshSubs("sending");
@@ -322,13 +340,42 @@ function ProfilePageContent() {
                   {refreshSubs === "ok" && refreshSubsMsg && <span className="text-sm text-green-400">{refreshSubsMsg}</span>}
                   {refreshSubs === "err" && refreshSubsMsg && <span className="text-sm text-amber-400">{refreshSubsMsg}</span>}
                 </div>
+                {setupStatus?.linked && (
+                  <div className="rounded border border-zinc-700 bg-zinc-800/40 px-3 py-2 text-sm">
+                    <p className="mb-1.5 font-medium text-zinc-300">Follow notifications setup</p>
+                    <ul className="space-y-1 text-zinc-400">
+                      <li>
+                        {setupStatus.followSubscriptionActive ? (
+                          <span className="text-green-400">✓ Follow subscription active</span>
+                        ) : (
+                          <span className="text-amber-400">✗ Follow subscription missing — click &quot;Refresh event subscriptions&quot; above</span>
+                        )}
+                      </li>
+                      <li>
+                        {setupStatus.linkedServerCount > 0 ? (
+                          <span className="text-green-400">✓ Server linked for in-game broadcast</span>
+                        ) : (
+                          <span className="text-amber-400">✗ No server linked — link a server below so follows trigger in-game</span>
+                        )}
+                      </li>
+                      <li className="text-zinc-500">Use &quot;Test follow broadcast&quot; below to verify the pipeline.</li>
+                    </ul>
+                  </div>
+                )}
                 <Link
                   href="/streamer-interaction"
                   className="inline-block text-sm text-rust-cyan hover:underline"
                 >
                   Streamer interaction & events →
                 </Link>
-                <TwitchLinkServerBlock />
+                <TwitchLinkServerBlock
+                  onLinked={() => {
+                    fetch("/api/twitch/setup-status")
+                      .then((r) => (r.ok ? r.json() : null))
+                      .then((s) => s && setSetupStatus(s))
+                      .catch(() => {});
+                  }}
+                />
               </div>
             ) : (
               <div>

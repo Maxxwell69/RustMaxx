@@ -7,6 +7,16 @@ import { createHmac, timingSafeEqual } from "crypto";
 
 const TWITCH_EVENTSUB_API = "https://api.twitch.tv/helix/eventsub/subscriptions";
 
+export type EventSubSubscription = {
+  id: string;
+  type: string;
+  version: string;
+  status: string;
+  condition: Record<string, string>;
+  created_at: string;
+  transport: { method: string; callback?: string };
+};
+
 export type EventSubMessageType = "webhook_callback_verification" | "notification" | "revocation";
 
 export type EventSubPayload = {
@@ -143,4 +153,45 @@ export async function createChannelChatMessageSubscription(
   const sub = data.data?.[0];
   if (!sub) throw new Error("EventSub chat create returned no subscription");
   return { id: sub.id };
+}
+
+/**
+ * List current EventSub subscriptions (app-wide). Use app access token.
+ * Twitch returns all subscriptions for the app; filter by broadcaster_user_id for a given channel.
+ */
+export async function getEventSubSubscriptions(accessToken: string): Promise<EventSubSubscription[]> {
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  if (!clientId) throw new Error("TWITCH_CLIENT_ID is not set");
+
+  const out: EventSubSubscription[] = [];
+  let cursor: string | undefined;
+  do {
+    const url = new URL(TWITCH_EVENTSUB_API);
+    if (cursor) url.searchParams.set("after", cursor);
+    const res = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Client-Id": clientId,
+      },
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`EventSub list failed: ${res.status} ${t}`);
+    }
+    const data = (await res.json()) as {
+      data: Array<{
+        id: string;
+        type: string;
+        version: string;
+        status: string;
+        condition: Record<string, string>;
+        created_at: string;
+        transport: { method: string; callback?: string };
+      }>;
+      pagination?: { cursor?: string };
+    };
+    out.push(...(data.data ?? []));
+    cursor = data.pagination?.cursor;
+  } while (cursor);
+  return out;
 }
