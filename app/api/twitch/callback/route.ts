@@ -29,12 +29,15 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const redirectUri = process.env.TWITCH_REDIRECT_URI;
-  if (!redirectUri) {
-    const res = NextResponse.redirect(new URL("/profile?twitch=config_error", request.url));
-    res.cookies.delete(STATE_COOKIE);
-    return res;
-  }
+  const redirectUri = (() => {
+    const fromEnv = process.env.TWITCH_REDIRECT_URI?.trim();
+    if (fromEnv && !fromEnv.includes("localhost")) return fromEnv;
+    const url = new URL(request.url);
+    const forwardedProto = request.headers.get("x-forwarded-proto");
+    const forwardedHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+    const origin = forwardedProto && forwardedHost ? `${forwardedProto}://${forwardedHost}` : url.origin;
+    return `${origin}/api/twitch/callback`;
+  })();
 
   let eventsubFailed = false;
   try {
