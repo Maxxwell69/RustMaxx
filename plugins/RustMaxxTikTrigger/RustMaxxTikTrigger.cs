@@ -14,10 +14,41 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("RustMaxxTikTrigger", "RustMaxx", "1.0.0")]
-    [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>")]
+    [Info("RustMaxxTikTrigger", "RustMaxx", "1.1.0")]
+    [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>. Effects target the configured streamer.")]
     public class RustMaxxTikTrigger : RustPlugin
     {
+        #region Configuration
+
+        private class PluginConfig
+        {
+            public string StreamerName { get; set; } = "pirate maxx";
+        }
+
+        private PluginConfig _config;
+
+        protected override void LoadDefaultConfig() => _config = new PluginConfig();
+
+        protected override void LoadConfig()
+        {
+            base.LoadConfig();
+            try
+            {
+                _config = Config.ReadObject<PluginConfig>();
+                if (_config == null || string.IsNullOrWhiteSpace(_config.StreamerName))
+                    _config = new PluginConfig();
+            }
+            catch
+            {
+                LoadDefaultConfig();
+            }
+            SaveConfig();
+        }
+
+        private void SaveConfig() => Config.WriteObject(_config);
+
+        #endregion
+
         #region Constants
 
         private const string LogPrefix = "[RustMaxxTikTrigger]";
@@ -82,10 +113,10 @@ namespace Oxide.Plugins
 
         private void ExecuteAction(string action, string viewerName, string giftName)
         {
-            BasePlayer target = GetFirstOnlinePlayer();
+            BasePlayer target = GetStreamerPlayer();
             if (target == null && ActionRequiresPlayer(action))
             {
-                PrintWarning($"{LogPrefix} No players online. Action '{action}' cancelled.");
+                PrintWarning($"{LogPrefix} Streamer '{_config.StreamerName}' not online. Action '{action}' cancelled.");
                 return;
             }
 
@@ -149,14 +180,19 @@ namespace Oxide.Plugins
         #region Helpers
 
         /// <summary>
-        /// Returns the first connected, alive player. Used as target for effects/NPC when no specific viewer is chosen.
-        /// Easy to extend later (e.g. random player, closest to point).
+        /// Returns the streamer (player whose display name matches config). Effects and NPCs spawn at/near this player.
+        /// If not found or not online, returns null.
         /// </summary>
-        private static BasePlayer GetFirstOnlinePlayer()
+        private BasePlayer GetStreamerPlayer()
         {
+            if (string.IsNullOrWhiteSpace(_config?.StreamerName)) return null;
+            string name = _config.StreamerName.Trim();
             foreach (var player in BasePlayer.activePlayerList)
-                if (player != null && player.IsConnected && !player.IsDead())
+            {
+                if (player == null || !player.IsConnected || player.IsDead()) continue;
+                if (string.Equals(player.displayName, name, StringComparison.OrdinalIgnoreCase))
                     return player;
+            }
             return null;
         }
 
