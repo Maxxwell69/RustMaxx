@@ -21,6 +21,7 @@ const PUBLIC_PATHS = [
   "/early-access",
   "/api/early-access",
   "/api/twitch/webhook",   // Twitch EventSub verification and notifications (no session)
+  "/api/tikfinity/webhook", // TikFinity Trigger WebHook (no session)
   "/sitemap.xml",
   "/robots.txt",
 ];

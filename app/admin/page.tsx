@@ -204,12 +204,20 @@ export default function SuperAdminDashboardPage() {
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3">
           <h2 className="text-lg font-medium text-zinc-200">Users</h2>
-          <Link
-            href="/admin/users"
-            className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
-          >
-            Manage users & roles →
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/streamer-interactions"
+              className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
+            >
+              TikFinity action maps →
+            </Link>
+            <Link
+              href="/admin/users"
+              className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
+            >
+              Manage users & roles →
+            </Link>
+          </div>
         </div>
         <div className="p-4">
           <p className="text-sm text-zinc-500">
