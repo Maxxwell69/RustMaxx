@@ -14,8 +14,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("RustMaxxTikTrigger", "RustMaxx", "1.1.0")]
-    [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>. Effects target the configured streamer.")]
+    [Info("RustMaxxTikTrigger", "RustMaxx", "1.2.0")]
+    [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustMaxxTikTrigger : RustPlugin
     {
         #region Configuration
@@ -62,6 +62,7 @@ namespace Oxide.Plugins
 
         private const string ScientistPrefab = "assets/prefabs/npc/scientist/scientist.prefab";
         private const string WolfPrefab = "assets/rust.ai/agents/wolf/wolf.prefab";
+        private const string CargoPlanePrefab = "assets/prefabs/npc/cargo plane/cargo_plane.prefab";
 
         #endregion
 
@@ -170,7 +171,7 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat($"{viewerName} sent a {giftName}!");
-                        GiveItemToPlayer(target, "supply.signal", 1);
+                        SpawnSupplyDropAt(GetPositionNear(target));
                     }
                     break;
 
@@ -277,6 +278,24 @@ namespace Oxide.Plugins
             BaseEntity entity = GameManager.server.CreateEntity(prefabPath, position, Quaternion.identity, true);
             if (entity != null)
                 entity.Spawn();
+        }
+
+        /// <summary>
+        /// Calls in a supply drop at the given world position (cargo plane flies in and drops the crate automatically).
+        /// </summary>
+        private static void SpawnSupplyDropAt(Vector3 dropPosition)
+        {
+            if (dropPosition == Vector3.zero) return;
+            BaseEntity ent = GameManager.server.CreateEntity(CargoPlanePrefab, Vector3.zero, Quaternion.identity, true);
+            if (ent == null) return;
+            var plane = ent as CargoPlane;
+            if (plane == null)
+            {
+                ent.Kill();
+                return;
+            }
+            plane.InitDropPosition(dropPosition);
+            ent.Spawn();
         }
 
         #endregion
