@@ -54,13 +54,14 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustMaxxTikTrigger]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "npcwave" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "npcwave", "wolf" };
 
         // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
         private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
         private const string EffectFireworks = "assets/bundled/prefabs/fx/fireball_small.prefab";
 
         private const string ScientistPrefab = "assets/prefabs/npc/scientist/scientist.prefab";
+        private const string WolfPrefab = "assets/rust.ai/agents/wolf/wolf.prefab";
 
         #endregion
 
@@ -155,6 +156,14 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "wolf":
+                    if (target != null)
+                    {
+                        BroadcastChat($"{viewerName} sent a {giftName}!");
+                        SpawnNPC(WolfPrefab, GetPositionNear(target));
+                    }
+                    break;
+
                 default:
                     // Whitelist guarantees we don't reach here; defensive.
                     PrintWarning($"{LogPrefix} Unhandled action: {action}");
@@ -164,7 +173,7 @@ namespace Oxide.Plugins
 
         private static bool ActionRequiresPlayer(string action)
         {
-            return action == "smoke" || action == "fireworks" || action == "npcwave";
+            return action == "smoke" || action == "fireworks" || action == "npcwave" || action == "wolf";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
