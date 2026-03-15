@@ -206,8 +206,13 @@ namespace Oxide.Plugins
         {
             if (player == null || !player.IsValid()) return Vector3.zero;
             Vector3 pos = player.transform.position;
-            // Offset slightly so effect/NPC is visible beside the player.
-            return pos + UnityEngine.Random.insideUnitSphere * 2f;
+            // Spawn a few meters away so effects/NPCs/animals are not on the player's head.
+            Vector3 offset = UnityEngine.Random.insideUnitSphere;
+            offset.y = 0f;
+            if (offset.sqrMagnitude < 0.01f) offset = Vector3.forward;
+            offset.Normalize();
+            float distance = 4f + UnityEngine.Random.Range(0f, 3f);
+            return pos + offset * distance;
         }
 
         #endregion
