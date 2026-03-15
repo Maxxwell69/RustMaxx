@@ -13,6 +13,27 @@ import { audit } from "@/lib/audit";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 
+/** CORS: allow TikFinity's site to call this webhook from the browser. */
+const TIKFINITY_ORIGIN = "https://tikfinity.zerody.one";
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": TIKFINITY_ORIGIN,
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
+
+function withCors(response: NextResponse): NextResponse {
+  Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
+  return response;
+}
+
+/** Preflight: browser sends this before POST when calling from another origin. */
+export async function OPTIONS() {
+  return withCors(new NextResponse(null, { status: 204 }));
+}
+
 /** Sanitize for RCON: no spaces (plugin expects three space-separated args). */
 function sanitizeArg(s: string, maxLen = 48): string {
   return s.replace(/\s+/g, "_").slice(0, maxLen) || "Viewer";
@@ -23,7 +44,7 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return withCors(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
   }
 
   let payload = normalizeWebhookPayload(body);
@@ -43,12 +64,14 @@ export async function POST(request: NextRequest) {
   if (!payload) {
     const keys = getPayloadKeysForDebug(body);
     console.warn("[tikfinity webhook] Could not parse payload. Top-level keys:", keys);
-    return NextResponse.json(
-      {
-        error: "Missing gift name (giftName, gift_name, gift, giftType) or action (action, actionName)",
-        debug: keys.length ? `Received top-level keys: ${keys.join(", ")}. If TikFinity uses different names, we can add support.` : "Body was empty or not an object.",
-      },
-      { status: 400 }
+    return withCors(
+      NextResponse.json(
+        {
+          error: "Missing gift name (giftName, gift_name, gift, giftType) or action (action, actionName)",
+          debug: keys.length ? `Received top-level keys: ${keys.join(", ")}. If TikFinity uses different names, we can add support.` : "Body was empty or not an object.",
+        },
+        { status: 400 }
+      )
     );
   }
 
@@ -58,17 +81,21 @@ export async function POST(request: NextRequest) {
       viewerName: payload.viewerName,
       giftName: payload.giftName,
     }).catch(() => {});
-    return NextResponse.json(
-      { ok: false, skipped: true, reason: "Gift not mapped to an action", giftName: payload.giftName },
-      { status: 200 }
+    return withCors(
+      NextResponse.json(
+        { ok: false, skipped: true, reason: "Gift not mapped to an action", giftName: payload.giftName },
+        { status: 200 }
+      )
     );
   }
 
   if (!TIKFINITY_SERVER_ID) {
     console.error("[tikfinity webhook] TIKFINITY_SERVER_ID not set");
-    return NextResponse.json(
-      { error: "TikFinity integration not configured", debug: "Set TIKFINITY_SERVER_ID in env." },
-      { status: 503 }
+    return withCors(
+      NextResponse.json(
+        { error: "TikFinity integration not configured", debug: "Set TIKFINITY_SERVER_ID in env." },
+        { status: 503 }
+      )
     );
   }
 
@@ -79,9 +106,11 @@ export async function POST(request: NextRequest) {
   const server = rows[0];
   if (!server) {
     console.error("[tikfinity webhook] Server not found:", TIKFINITY_SERVER_ID);
-    return NextResponse.json(
-      { error: "TikFinity server not found", debug: "TIKFINITY_SERVER_ID does not match any server." },
-      { status: 503 }
+    return withCors(
+      NextResponse.json(
+        { error: "TikFinity server not found", debug: "TIKFINITY_SERVER_ID does not match any server." },
+        { status: 503 }
+      )
     );
   }
 
@@ -106,9 +135,11 @@ export async function POST(request: NextRequest) {
       action,
       serverId: server.id,
     }).catch(() => {});
-    return NextResponse.json(
-      { error: "Could not connect to game server", debug: connected.error ?? "Check RCON host/port/password." },
-      { status: 502 }
+    return withCors(
+      NextResponse.json(
+        { error: "Could not connect to game server", debug: connected.error ?? "Check RCON host/port/password." },
+        { status: 502 }
+      )
     );
   }
 
@@ -124,9 +155,11 @@ export async function POST(request: NextRequest) {
       serverId: server.id,
       command,
     }).catch(() => {});
-    return NextResponse.json(
-      { error: result.error ?? "Command send failed", debug: "Connection ok but command failed.", command },
-      { status: 502 }
+    return withCors(
+      NextResponse.json(
+        { error: result.error ?? "Command send failed", debug: "Connection ok but command failed.", command },
+        { status: 502 }
+      )
     );
   }
 
@@ -139,11 +172,13 @@ export async function POST(request: NextRequest) {
     command,
   }).catch(() => {});
 
-  return NextResponse.json({
-    ok: true,
-    action: action as TikTriggerAction,
-    viewerName: payload.viewerName,
-    giftName: payload.giftName,
-    command,
-  });
+  return withCors(
+    NextResponse.json({
+      ok: true,
+      action: action as TikTriggerAction,
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      command,
+    })
+  );
 }
