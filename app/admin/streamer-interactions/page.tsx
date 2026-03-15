@@ -237,7 +237,35 @@ export default function AdminStreamerInteractionsPage() {
         <p className="mt-1 text-sm text-zinc-500">
           Map TikFinity event/action names to server actions. When TikFinity sends an event with the given name (e.g. &quot;Likes&quot;, &quot;Wolf Attack&quot;), the chosen server action runs. Names are case-insensitive.
         </p>
-        <div className="mt-4 flex flex-wrap items-end gap-3">
+
+        <h3 className="mt-4 text-sm font-medium text-zinc-300">Available server actions (commands)</h3>
+        <p className="mt-1 text-xs text-zinc-500">
+          Choose one of these when setting the action for a connection.
+        </p>
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                <th className="px-3 py-2 font-medium text-zinc-400">Command</th>
+                <th className="px-3 py-2 font-medium text-zinc-400">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.availableActions.map((a) => (
+                <tr key={a.action} className="border-b border-zinc-800/50">
+                  <td className="px-3 py-2 font-mono text-rust-cyan">{a.action}</td>
+                  <td className="px-3 py-2 text-zinc-400">{a.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="mt-4 text-sm font-medium text-zinc-300">Add connection</h3>
+        <p className="mt-1 text-xs text-zinc-500">
+          Set the name (as in TikFinity) and choose the server action from the list above.
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs text-zinc-500">Event / action name (as in TikFinity)</label>
             <input
@@ -293,7 +321,12 @@ export default function AdminStreamerInteractionsPage() {
         {connectionError && (
           <p className="mt-2 text-sm text-red-400">{connectionError}</p>
         )}
-        <div className="mt-4 overflow-x-auto">
+
+        <h3 className="mt-6 text-sm font-medium text-zinc-300">Your connections</h3>
+        <p className="mt-1 text-xs text-zinc-500">
+          TikFinity event names you’ve mapped to server actions. Remove or add more above.
+        </p>
+        <div className="mt-2 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-800/50">
@@ -306,7 +339,7 @@ export default function AdminStreamerInteractionsPage() {
               {connections.length === 0 ? (
                 <tr>
                   <td colSpan={3} className="px-4 py-6 text-center text-zinc-500">
-                    No connections. Add one above to map a TikFinity event name to a server action.
+                    No connections yet. Add one above (set the name and choose an action from the list).
                   </td>
                 </tr>
               ) : (
