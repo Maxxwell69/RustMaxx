@@ -75,18 +75,25 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (!payload) {
+  // TikFinity "Test" sometimes sends empty body {} – treat as default action so test succeeds
+  if (!payload || !action) {
     const keys = getPayloadKeysForDebug(body);
-    console.warn("[tikfinity webhook] Could not parse payload. Top-level keys:", keys);
-    return withCors(
-      NextResponse.json(
-        {
-          error: "Missing gift name (giftName, gift_name, gift, giftType) or action (action, actionName)",
-          debug: keys.length ? `Received top-level keys: ${keys.join(", ")}. If TikFinity uses different names, we can add support.` : "Body was empty or not an object.",
-        },
-        { status: 400 }
-      )
-    );
+    const isEmpty = !body || (typeof body === "object" && Object.keys(body as Record<string, unknown>).length === 0);
+    if (isEmpty) {
+      action = "wolf";
+      payload = { viewerName: "TikFinity", giftName: "Test" };
+    } else if (!payload) {
+      console.warn("[tikfinity webhook] Could not parse payload. Top-level keys:", keys);
+      return withCors(
+        NextResponse.json(
+          {
+            error: "Missing gift name (giftName, gift_name, gift, giftType) or action (action, actionName)",
+            debug: keys.length ? `Received top-level keys: ${keys.join(", ")}. If TikFinity uses different names, we can add support.` : "Body was empty or not an object.",
+          },
+          { status: 400 }
+        )
+      );
+    }
   }
 
   if (!action) {
