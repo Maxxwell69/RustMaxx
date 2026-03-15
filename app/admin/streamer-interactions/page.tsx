@@ -9,10 +9,18 @@ type ActionMeta = {
   exampleGifts: string[];
 };
 
+type ConnectionRow = {
+  id: string;
+  name: string;
+  server_action: string;
+  created_at: string;
+};
+
 type ActionMapsResponse = {
   webhookUrl: string | null;
   availableActions: ActionMeta[];
   giftToActionMap: Record<string, string>;
+  connections?: ConnectionRow[];
 };
 
 type TestResult = {
@@ -37,6 +45,24 @@ export default function AdminStreamerInteractionsPage() {
   const [testViewer, setTestViewer] = useState("TestViewer");
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [connections, setConnections] = useState<ConnectionRow[]>([]);
+  const [newConnectionName, setNewConnectionName] = useState("");
+  const [newConnectionAction, setNewConnectionAction] = useState("likes");
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionLoading, setConnectionLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function refetchData() {
+    fetch("/api/tikfinity/action-maps")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) {
+          setData(d);
+          setConnections(d.connections ?? []);
+        }
+      })
+      .catch(() => {});
+  }
 
   useEffect(() => {
     fetch("/api/tikfinity/action-maps")
@@ -48,7 +74,10 @@ export default function AdminStreamerInteractionsPage() {
         return r.ok ? r.json() : null;
       })
       .then((d) => {
-        if (d) setData(d);
+        if (d) {
+          setData(d);
+          setConnections(d.connections ?? []);
+        }
       })
       .catch(() => setAccessDenied(true))
       .finally(() => setLoading(false));
@@ -170,6 +199,112 @@ export default function AdminStreamerInteractionsPage() {
             </ul>
           </>
         )}
+      </section>
+
+      {/* TikFinity connections: event name → server action */}
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+        <h2 className="text-lg font-medium text-zinc-200">TikFinity connections</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Map TikFinity event/action names to server actions. When TikFinity sends an event with the given name (e.g. &quot;Likes&quot;, &quot;Wolf Attack&quot;), the chosen server action runs. Names are case-insensitive.
+        </p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs text-zinc-500">Event / action name (as in TikFinity)</label>
+            <input
+              type="text"
+              value={newConnectionName}
+              onChange={(e) => { setNewConnectionName(e.target.value); setConnectionError(null); }}
+              placeholder="e.g. Likes, Wolf Attack"
+              className="mt-1 w-48 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200 placeholder:text-zinc-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-zinc-500">Server action</label>
+            <select
+              value={newConnectionAction}
+              onChange={(e) => setNewConnectionAction(e.target.value)}
+              className="mt-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
+            >
+              {data.availableActions.map((a) => (
+                <option key={a.action} value={a.action}>{a.action}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const name = newConnectionName.trim();
+              if (!name) { setConnectionError("Enter a name"); return; }
+              setConnectionError(null);
+              setConnectionLoading(true);
+              fetch("/api/tikfinity/connections", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, serverAction: newConnectionAction }),
+              })
+                .then((r) => r.json().then((j) => ({ status: r.status, ...j })))
+                .then((res) => {
+                  if (res.id) {
+                    setNewConnectionName("");
+                    refetchData();
+                  } else {
+                    setConnectionError(res.error ?? "Failed to add");
+                  }
+                })
+                .catch(() => setConnectionError("Request failed"))
+                .finally(() => setConnectionLoading(false));
+            }}
+            disabled={connectionLoading}
+            className="rounded bg-rust-cyan/20 px-4 py-2 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30 disabled:opacity-50"
+          >
+            {connectionLoading ? "Adding…" : "Add connection"}
+          </button>
+        </div>
+        {connectionError && (
+          <p className="mt-2 text-sm text-red-400">{connectionError}</p>
+        )}
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                <th className="px-4 py-3 font-medium text-zinc-400">Event name</th>
+                <th className="px-4 py-3 font-medium text-zinc-400">Server action</th>
+                <th className="px-4 py-3 font-medium text-zinc-400 w-20"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {connections.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-center text-zinc-500">
+                    No connections. Add one above to map a TikFinity event name to a server action.
+                  </td>
+                </tr>
+              ) : (
+                connections.map((c) => (
+                  <tr key={c.id} className="border-b border-zinc-800/50">
+                    <td className="px-4 py-3 text-zinc-300">{c.name}</td>
+                    <td className="px-4 py-3 font-mono text-rust-cyan">{c.server_action}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeletingId(c.id);
+                          fetch(`/api/tikfinity/connections?id=${encodeURIComponent(c.id)}`, { method: "DELETE" })
+                            .then(() => refetchData())
+                            .finally(() => setDeletingId(null));
+                        }}
+                        disabled={deletingId === c.id}
+                        className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                      >
+                        {deletingId === c.id ? "…" : "Remove"}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {/* Test trigger */}

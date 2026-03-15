@@ -5,11 +5,13 @@ import {
   normalizeWebhookPayload,
   getActionForGift,
   getActionFromPayload,
+  getRawActionNameFromPayload,
   getPayloadKeysForDebug,
   getGiftValueFromPayload,
   getDefaultGiftValue,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
+import { getActionFromConnectionName } from "@/lib/tikfinity-connections";
 import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
 
@@ -73,6 +75,16 @@ export async function POST(request: NextRequest) {
     if (directAction) {
       action = directAction;
       payload = { viewerName: "TikFinity", giftName: directAction };
+    }
+  }
+  if (!action) {
+    const rawName = getRawActionNameFromPayload(body);
+    if (rawName) {
+      const connectionAction = await getActionFromConnectionName(rawName);
+      if (connectionAction) {
+        action = connectionAction;
+        payload = { viewerName: "TikFinity", giftName: connectionAction };
+      }
     }
   }
 

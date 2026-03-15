@@ -89,11 +89,11 @@ export const ACTION_META: Record<
     exampleGifts: ["Puppy", "Puppy Kisses", "Wolf"],
   },
   supply: {
-    description: "Give streamer 1 supply signal (throw at feet for airdrop)",
+    description: "Call in airdrop at streamer (cargo plane)",
     exampleGifts: ["Supply Signal", "Supply"],
   },
   likes: {
-    description: "Give streamer 1 supply signal (e.g. from Likes event)",
+    description: "Call in airdrop at streamer (e.g. from Likes event)",
     exampleGifts: ["Likes", "Like"],
   },
 };
@@ -216,18 +216,24 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   test: "test",
 };
 
-/** If TikFinity sends an action name directly (action, actionName, or event), return it. */
-export function getActionFromPayload(body: unknown): TikTriggerAction | null {
-  if (!body || typeof body !== "object") return null;
+/** Get raw action/event name from body (action, actionName, or event) for admin-connection lookup. */
+export function getRawActionNameFromPayload(body: unknown): string {
+  if (!body || typeof body !== "object") return "";
   const o = body as Record<string, unknown>;
   const raw =
     typeof o.action === "string"
-      ? o.action.trim().toLowerCase()
+      ? o.action.trim()
       : typeof o.actionName === "string"
-        ? o.actionName.trim().toLowerCase()
+        ? o.actionName.trim()
         : typeof o.event === "string"
-          ? o.event.trim().toLowerCase()
+          ? o.event.trim()
           : "";
+  return raw;
+}
+
+/** If TikFinity sends an action name directly (action, actionName, or event), return it. */
+export function getActionFromPayload(body: unknown): TikTriggerAction | null {
+  const raw = getRawActionNameFromPayload(body).toLowerCase();
   if (!raw) return null;
   if ((TIKTRIGGER_ACTIONS as readonly string[]).includes(raw)) return raw as TikTriggerAction;
   const fromEvent = EVENT_TO_ACTION[raw];
