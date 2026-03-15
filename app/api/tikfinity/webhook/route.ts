@@ -49,12 +49,7 @@ export async function POST(request: NextRequest) {
       body = JSON.parse(text);
     }
   } catch {
-    return withCors(
-      NextResponse.json(
-        { error: "Invalid JSON", debug: "Send Content-Type: application/json and a valid JSON body." },
-        { status: 400 }
-      )
-    );
+    body = {};
   }
 
   let payload = normalizeWebhookPayload(body);
@@ -71,25 +66,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // TikFinity "Test" sometimes sends empty body {} – treat as default action so test succeeds
+  // TikFinity "Test" or unknown payload – use default action so we never 400 from this path
   if (!payload || !action) {
     const keys = getPayloadKeysForDebug(body);
-    const isEmpty = !body || (typeof body === "object" && Object.keys(body as Record<string, unknown>).length === 0);
-    if (isEmpty) {
-      action = "wolf";
-      payload = { viewerName: "TikFinity", giftName: "Test" };
-    } else if (!payload) {
-      console.warn("[tikfinity webhook] Could not parse payload. Top-level keys:", keys);
-      return withCors(
-        NextResponse.json(
-          {
-            error: "Missing gift name (giftName, gift_name, gift, giftType) or action (action, actionName)",
-            debug: keys.length ? `Received top-level keys: ${keys.join(", ")}. If TikFinity uses different names, we can add support.` : "Body was empty or not an object.",
-          },
-          { status: 400 }
-        )
-      );
+    if (keys.length) {
+      console.warn("[tikfinity webhook] Unknown payload keys, using default wolf. Keys:", keys);
     }
+    action = "wolf";
+    payload = { viewerName: "TikFinity", giftName: "Test" };
   }
 
   if (!action) {
