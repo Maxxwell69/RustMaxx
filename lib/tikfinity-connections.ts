@@ -75,7 +75,4 @@ export async function deleteTikfinityConnection(
     [id]
   );
   return { deleted: rowCount > 0 };
-</think>
-Fixing the insert: Postgres ON CONFLICT with expression-based unique indexes is tricky. Using a select-then-insert approach:
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-StrReplace
+}
