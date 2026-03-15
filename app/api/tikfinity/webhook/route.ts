@@ -44,14 +44,10 @@ export async function POST(request: NextRequest) {
   try {
     const text = await request.text();
     if (!text || !text.trim()) {
-      return withCors(
-        NextResponse.json(
-          { error: "Empty body", debug: "TikFinity may need to send a JSON body (e.g. { \"action\": \"wolf\" })." },
-          { status: 400 }
-        )
-      );
+      body = {};
+    } else {
+      body = JSON.parse(text);
     }
-    body = JSON.parse(text);
   } catch {
     return withCors(
       NextResponse.json(
