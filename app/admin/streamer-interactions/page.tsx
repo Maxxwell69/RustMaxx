@@ -52,6 +52,8 @@ export default function AdminStreamerInteractionsPage() {
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const ALLOWED_ROLES = ["admin", "super_admin"];
+
   function refetchData() {
     fetch("/api/tikfinity/action-maps")
       .then((r) => (r.ok ? r.json() : null))
@@ -65,10 +67,22 @@ export default function AdminStreamerInteractionsPage() {
   }
 
   useEffect(() => {
-    fetch("/api/tikfinity/action-maps")
-      .then((r) => {
-        if (r.status === 403) {
+    // Use same role source as the header badge (/api/auth/me) so access matches what the user sees
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me: { role?: string } | null) => {
+        if (!me?.role || !ALLOWED_ROLES.includes(me.role)) {
           setAccessDenied(true);
+          setLoading(false);
+          return;
+        }
+        setAccessDenied(false);
+        return fetch("/api/tikfinity/action-maps");
+      })
+      .then((r) => {
+        if (!r || !(r instanceof Response)) return null;
+        if (r.status === 403) {
+          // Backend still returned forbidden; show page but data will be empty (suggest re-login in UI)
           return null;
         }
         return r.ok ? r.json() : null;
@@ -112,13 +126,29 @@ export default function AdminStreamerInteractionsPage() {
     );
   }
 
-  if (accessDenied || !data) {
+  if (accessDenied) {
     return (
       <div className="mx-auto max-w-4xl p-6">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
           <h1 className="text-xl font-semibold text-zinc-100">Streamer interactions (TikFinity)</h1>
           <p className="mt-2 text-zinc-400">
             Only admins and super admins can view this page.
+          </p>
+          <Link href="/admin" className="mt-4 inline-block text-rust-cyan hover:underline">
+            ← Back to admin
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="mx-auto max-w-4xl p-6">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+          <h1 className="text-xl font-semibold text-zinc-100">Streamer interactions (TikFinity)</h1>
+          <p className="mt-2 text-zinc-400">
+            Settings could not be loaded. Try logging out and back in to refresh your session.
           </p>
           <Link href="/admin" className="mt-4 inline-block text-rust-cyan hover:underline">
             ← Back to admin
