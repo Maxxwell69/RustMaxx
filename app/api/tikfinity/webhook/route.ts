@@ -42,9 +42,23 @@ function sanitizeArg(s: string, maxLen = 48): string {
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
-    body = await request.json();
+    const text = await request.text();
+    if (!text || !text.trim()) {
+      return withCors(
+        NextResponse.json(
+          { error: "Empty body", debug: "TikFinity may need to send a JSON body (e.g. { \"action\": \"wolf\" })." },
+          { status: 400 }
+        )
+      );
+    }
+    body = JSON.parse(text);
   } catch {
-    return withCors(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
+    return withCors(
+      NextResponse.json(
+        { error: "Invalid JSON", debug: "Send Content-Type: application/json and a valid JSON body." },
+        { status: 400 }
+      )
+    );
   }
 
   let payload = normalizeWebhookPayload(body);
