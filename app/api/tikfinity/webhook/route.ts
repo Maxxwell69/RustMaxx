@@ -119,12 +119,18 @@ export async function POST(request: NextRequest) {
 
   const viewerArg = sanitizeArg(payload.viewerName);
   const giftArg = sanitizeArg(payload.giftName);
-  const rawValue = getGiftValueFromPayload(body) || getDefaultGiftValue(payload.giftName);
+  const fromPayload = getGiftValueFromPayload(body);
+  const fromDefault = getDefaultGiftValue(payload.giftName);
+  const rawValue = fromPayload > 0 ? fromPayload : fromDefault;
   const giftValue = Math.min(10000, Math.max(0, rawValue));
   const command =
     giftValue > 0
       ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue}`
       : `tiktrigger ${action} ${viewerArg} ${giftArg}`;
+
+  if (giftValue > 0) {
+    console.log("[tikfinity webhook] scrap:", giftValue, "fromPayload:", fromPayload, "fromDefault:", fromDefault, "giftName:", payload.giftName);
+  }
 
   const connected = await ensureConnection(
     server.id,

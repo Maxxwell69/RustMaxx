@@ -46,7 +46,7 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   "Smoke Signal": 10,
   Firework: 50,
   Fireworks: 100,
-  Test: 0,
+  Test: 299,
 };
 
 /** Human-readable description and example gifts for each action (for admin UI). */

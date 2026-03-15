@@ -172,7 +172,14 @@ namespace Oxide.Plugins
             }
 
             if (scrapAmount > 0 && target != null)
+            {
                 GiveScrapToPlayer(target, scrapAmount);
+                Puts($"{LogPrefix} Gave {scrapAmount} scrap to streamer {target.displayName}");
+            }
+            else if (scrapAmount > 0 && target == null)
+            {
+                PrintWarning($"{LogPrefix} Streamer not online – scrap not given ({scrapAmount} would have been given).");
+            }
         }
 
         /// <summary>
