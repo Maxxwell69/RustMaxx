@@ -15,11 +15,28 @@ type ActionMapsResponse = {
   giftToActionMap: Record<string, string>;
 };
 
+type TestResult = {
+  ok: boolean;
+  error?: string;
+  debug?: string;
+  skipped?: boolean;
+  reason?: string;
+  action?: string;
+  viewerName?: string;
+  giftName?: string;
+  command?: string;
+  availableActions?: string[];
+};
+
 export default function AdminStreamerInteractionsPage() {
   const [data, setData] = useState<ActionMapsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [testGift, setTestGift] = useState("Puppy");
+  const [testViewer, setTestViewer] = useState("TestViewer");
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
 
   useEffect(() => {
     fetch("/api/tikfinity/action-maps")
@@ -42,6 +59,20 @@ export default function AdminStreamerInteractionsPage() {
     navigator.clipboard.writeText(data.webhookUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function runTest() {
+    setTestResult(null);
+    setTestLoading(true);
+    fetch("/api/tikfinity/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ giftName: testGift, viewerName: testViewer || "TestViewer" }),
+    })
+      .then((r) => r.json())
+      .then((res) => setTestResult(res as TestResult))
+      .catch((err) => setTestResult({ ok: false, error: String(err.message || err), debug: "Request failed." }))
+      .finally(() => setTestLoading(false));
   }
 
   if (loading) {
@@ -112,6 +143,63 @@ export default function AdminStreamerInteractionsPage() {
           Ensure <code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code> is set in your
           server environment so the webhook knows which Rust server to send commands to.
         </p>
+      </section>
+
+      {/* Test trigger */}
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+        <h2 className="text-lg font-medium text-zinc-200">Test trigger (debug)</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Simulate a webhook without TikFinity. Runs the same RCON command as a real gift. Use this to verify the server receives the trigger. Real and test triggers are logged to the audit table (actions: <code className="rounded bg-zinc-800 px-1">webhook.trigger</code>, <code className="rounded bg-zinc-800 px-1">webhook.failed</code>, <code className="rounded bg-zinc-800 px-1">webhook.skipped</code>) for debugging.
+        </p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs text-zinc-500">Gift name (e.g. Puppy → wolf)</label>
+            <select
+              value={testGift}
+              onChange={(e) => setTestGift(e.target.value)}
+              className="mt-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
+            >
+              {giftEntries.map(([gift]) => (
+                <option key={gift} value={gift}>{gift}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-zinc-500">Viewer name (optional)</label>
+            <input
+              type="text"
+              value={testViewer}
+              onChange={(e) => setTestViewer(e.target.value)}
+              placeholder="TestViewer"
+              className="mt-1 w-40 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={runTest}
+            disabled={testLoading}
+            className="rounded bg-rust-cyan/20 px-4 py-2 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30 disabled:opacity-50"
+          >
+            {testLoading ? "Sending…" : "Run test"}
+          </button>
+        </div>
+        {testResult && (
+          <div className={`mt-4 rounded border p-3 text-sm ${testResult.ok ? "border-green-800/50 bg-green-900/20 text-green-200" : "border-red-800/50 bg-red-900/20 text-red-200"}`}>
+            {testResult.ok ? (
+              <>
+                <p className="font-medium">Trigger sent</p>
+                <p className="mt-1 text-zinc-400">Action: {testResult.action} · Command: <code className="rounded bg-zinc-800 px-1">{testResult.command}</code></p>
+                {testResult.debug && <p className="mt-1 text-xs text-zinc-500">{testResult.debug}</p>}
+              </>
+            ) : (
+              <>
+                <p className="font-medium">{testResult.error ?? testResult.reason ?? "Failed"}</p>
+                {testResult.debug && <p className="mt-1 text-xs opacity-90">{testResult.debug}</p>}
+                {testResult.command && <p className="mt-1 text-xs">Command attempted: <code className="rounded bg-zinc-800 px-1">{testResult.command}</code></p>}
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Available actions */}

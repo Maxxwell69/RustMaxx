@@ -7,6 +7,7 @@ import {
   type TikTriggerAction,
 } from "@/lib/tikfinity";
 import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
+import { audit } from "@/lib/audit";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 
@@ -33,8 +34,13 @@ export async function POST(request: NextRequest) {
 
   const action = getActionForGift(payload.giftName);
   if (!action) {
+    audit("tikfinity", "webhook.skipped", {
+      reason: "Gift not mapped",
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+    }).catch(() => {});
     return NextResponse.json(
-      { ok: false, skipped: true, reason: "Gift not mapped to an action" },
+      { ok: false, skipped: true, reason: "Gift not mapped to an action", giftName: payload.giftName },
       { status: 200 }
     );
   }
@@ -42,7 +48,7 @@ export async function POST(request: NextRequest) {
   if (!TIKFINITY_SERVER_ID) {
     console.error("[tikfinity webhook] TIKFINITY_SERVER_ID not set");
     return NextResponse.json(
-      { error: "TikFinity integration not configured" },
+      { error: "TikFinity integration not configured", debug: "Set TIKFINITY_SERVER_ID in env." },
       { status: 503 }
     );
   }
@@ -55,7 +61,7 @@ export async function POST(request: NextRequest) {
   if (!server) {
     console.error("[tikfinity webhook] Server not found:", TIKFINITY_SERVER_ID);
     return NextResponse.json(
-      { error: "TikFinity server not found" },
+      { error: "TikFinity server not found", debug: "TIKFINITY_SERVER_ID does not match any server." },
       { status: 503 }
     );
   }
@@ -73,8 +79,16 @@ export async function POST(request: NextRequest) {
   );
   if (!connected.ok) {
     console.error("[tikfinity webhook] RCON connect failed:", connected.error);
+    audit("tikfinity", "webhook.failed", {
+      reason: "RCON connect failed",
+      error: connected.error,
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      action,
+      serverId: server.id,
+    }).catch(() => {});
     return NextResponse.json(
-      { error: "Could not connect to game server" },
+      { error: "Could not connect to game server", debug: connected.error ?? "Check RCON host/port/password." },
       { status: 502 }
     );
   }
@@ -82,13 +96,30 @@ export async function POST(request: NextRequest) {
   const result = sendCommand(server.id, command);
   if (!result.ok) {
     console.error("[tikfinity webhook] RCON send failed:", result.error);
+    audit("tikfinity", "webhook.failed", {
+      reason: "RCON send failed",
+      error: result.error,
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      action,
+      serverId: server.id,
+      command,
+    }).catch(() => {});
     return NextResponse.json(
-      { error: result.error ?? "Command send failed" },
+      { error: result.error ?? "Command send failed", debug: "Connection ok but command failed.", command },
       { status: 502 }
     );
   }
 
   console.log("[tikfinity webhook]", payload.viewerName, action, payload.giftName);
+  audit("tikfinity", "webhook.trigger", {
+    viewerName: payload.viewerName,
+    giftName: payload.giftName,
+    action,
+    serverId: server.id,
+    command,
+  }).catch(() => {});
+
   return NextResponse.json({
     ok: true,
     action: action as TikTriggerAction,
