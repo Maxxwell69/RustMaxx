@@ -56,9 +56,9 @@ namespace Oxide.Plugins
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
         private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "npcwave" };
 
-        // Effect prefab paths (short names used by Rust). Adjust if your server uses different assets.
-        private const string EffectSmoke = "fx/gas_explosion_small";
-        private const string EffectFireworks = "fx/explosion_01";
+        // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
+        private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
+        private const string EffectFireworks = "assets/bundled/prefabs/fx/fireball_small.prefab";
 
         private const string ScientistPrefab = "assets/prefabs/npc/scientist/scientist.prefab";
 
