@@ -80,14 +80,16 @@ namespace Oxide.Plugins
 
             if (!arg.HasArgs(3))
             {
-                arg.ReplyWith("Usage: tiktrigger <action> <viewerName> <giftName> [scrapAmount]");
+                arg.ReplyWith("Usage: tiktrigger <action> <viewerName> <giftName> [scrapAmount] [customMessage]");
                 return;
             }
 
             string action = arg.GetString(0).ToLowerInvariant();
             string viewerName = arg.GetString(1);
             string giftName = arg.GetString(2);
-            int scrapAmount = arg.HasArgs(4) ? arg.GetInt(3, 0) : 0;
+            int scrapAmount = arg.HasArgs(4) || arg.HasArgs(5) ? arg.GetInt(3, 0) : 0;
+            string customMessage = arg.HasArgs(5) ? arg.GetString(4) : null;
+            if (string.IsNullOrWhiteSpace(customMessage)) customMessage = null;
 
             if (!IsAllowedAction(action))
             {
@@ -99,7 +101,7 @@ namespace Oxide.Plugins
             // Log every trigger to server console.
             Puts($"{LogPrefix} {viewerName} triggered action '{action}' from gift '{giftName}'" + (scrapAmount > 0 ? $" (+{scrapAmount} scrap)" : ""));
 
-            ExecuteAction(action, viewerName, giftName, scrapAmount);
+            ExecuteAction(action, viewerName, giftName, scrapAmount, customMessage);
             arg.ReplyWith($"OK: {action}" + (scrapAmount > 0 ? $" +{scrapAmount} scrap" : ""));
         }
 
@@ -114,7 +116,7 @@ namespace Oxide.Plugins
 
         #region Action execution
 
-        private void ExecuteAction(string action, string viewerName, string giftName, int scrapAmount)
+        private void ExecuteAction(string action, string viewerName, string giftName, int scrapAmount, string customMessage = null)
         {
             BasePlayer target = GetStreamerPlayer();
             if (target == null && ActionRequiresPlayer(action))
@@ -123,20 +125,22 @@ namespace Oxide.Plugins
                 return;
             }
 
+            string ChatMsg(string fallback) => !string.IsNullOrEmpty(customMessage) ? customMessage : fallback;
+
             switch (action)
             {
                 case "test":
-                    BroadcastChat($"{viewerName} triggered a TikTok test event!");
+                    BroadcastChat(ChatMsg($"{viewerName} triggered a TikTok test event!"));
                     break;
 
                 case "rose":
-                    BroadcastChat($"{viewerName} sent a {giftName}!");
+                    BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
                     break;
 
                 case "smoke":
                     if (target != null)
                     {
-                        BroadcastChat($"{viewerName} sent a {giftName}!");
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
                         SpawnEffect(EffectSmoke, GetPositionNear(target));
                     }
                     break;
@@ -144,7 +148,7 @@ namespace Oxide.Plugins
                 case "fireworks":
                     if (target != null)
                     {
-                        BroadcastChat($"{viewerName} sent a {giftName}!");
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
                         Vector3 pos = GetPositionNear(target);
                         SpawnEffect(EffectFireworks, pos);
                     }
@@ -153,7 +157,7 @@ namespace Oxide.Plugins
                 case "npcwave":
                     if (target != null)
                     {
-                        BroadcastChat($"{viewerName} sent a {giftName}!");
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
                         SpawnNPC(ScientistPrefab, GetPositionNear(target));
                     }
                     break;
@@ -161,7 +165,7 @@ namespace Oxide.Plugins
                 case "wolf":
                     if (target != null)
                     {
-                        BroadcastChat($"{viewerName} sent a {giftName}!");
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
                         SpawnNPC(WolfPrefab, GetPositionNear(target));
                     }
                     break;
@@ -170,7 +174,7 @@ namespace Oxide.Plugins
                 case "likes":
                     if (target != null)
                     {
-                        BroadcastChat($"{viewerName} sent a {giftName}!");
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
                         SpawnSupplyDropAt(GetPositionNear(target));
                     }
                     break;

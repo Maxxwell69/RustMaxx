@@ -13,6 +13,8 @@ type ConnectionRow = {
   id: string;
   name: string;
   server_action: string;
+  message?: string | null;
+  scrap_amount?: number;
   created_at: string;
 };
 
@@ -47,6 +49,8 @@ export default function AdminStreamerInteractionsPage() {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [newConnectionName, setNewConnectionName] = useState("");
+  const [newConnectionMessage, setNewConnectionMessage] = useState("");
+  const [newConnectionScrap, setNewConnectionScrap] = useState<number>(0);
   const [newConnectionAction, setNewConnectionAction] = useState("likes");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionLoading, setConnectionLoading] = useState(false);
@@ -263,30 +267,53 @@ export default function AdminStreamerInteractionsPage() {
 
         <h3 className="mt-4 text-sm font-medium text-zinc-300">Add connection</h3>
         <p className="mt-1 text-xs text-zinc-500">
-          Set the name (as in TikFinity) and choose the server action from the list above.
+          Set the name (as in TikFinity), optional message and scrap, then choose the server action.
         </p>
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-zinc-500">Event / action name (as in TikFinity)</label>
-            <input
-              type="text"
-              value={newConnectionName}
-              onChange={(e) => { setNewConnectionName(e.target.value); setConnectionError(null); }}
-              placeholder="e.g. Likes, Wolf Attack"
-              className="mt-1 w-48 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200 placeholder:text-zinc-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-zinc-500">Server action</label>
-            <select
-              value={newConnectionAction}
-              onChange={(e) => setNewConnectionAction(e.target.value)}
-              className="mt-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
-            >
-              {data.availableActions.map((a) => (
-                <option key={a.action} value={a.action}>{a.action}</option>
-              ))}
-            </select>
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs text-zinc-500">Event / action name (as in TikFinity)</label>
+              <input
+                type="text"
+                value={newConnectionName}
+                onChange={(e) => { setNewConnectionName(e.target.value); setConnectionError(null); }}
+                placeholder="e.g. Likes, Wolf Attack"
+                className="mt-1 w-48 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200 placeholder:text-zinc-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500">Message (chat when triggered)</label>
+              <input
+                type="text"
+                value={newConnectionMessage}
+                onChange={(e) => { setNewConnectionMessage(e.target.value); setConnectionError(null); }}
+                placeholder="e.g. Thanks for the likes!"
+                className="mt-1 w-56 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200 placeholder:text-zinc-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500">Scrap to give (0–10000)</label>
+              <input
+                type="number"
+                min={0}
+                max={10000}
+                value={newConnectionScrap}
+                onChange={(e) => { setNewConnectionScrap(Number(e.target.value) || 0); setConnectionError(null); }}
+                className="mt-1 w-24 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500">Server action</label>
+              <select
+                value={newConnectionAction}
+                onChange={(e) => setNewConnectionAction(e.target.value)}
+                className="mt-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
+              >
+                {data.availableActions.map((a) => (
+                  <option key={a.action} value={a.action}>{a.action}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <button
             type="button"
@@ -295,15 +322,23 @@ export default function AdminStreamerInteractionsPage() {
               if (!name) { setConnectionError("Enter a name"); return; }
               setConnectionError(null);
               setConnectionLoading(true);
+              const scrap = Math.min(10000, Math.max(0, Number(newConnectionScrap) || 0));
               fetch("/api/tikfinity/connections", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, serverAction: newConnectionAction }),
+                body: JSON.stringify({
+                  name,
+                  serverAction: newConnectionAction,
+                  message: newConnectionMessage.trim() || undefined,
+                  scrapAmount: scrap || undefined,
+                }),
               })
                 .then((r) => r.json().then((j) => ({ status: r.status, ...j })))
                 .then((res) => {
                   if (res.id) {
                     setNewConnectionName("");
+                    setNewConnectionMessage("");
+                    setNewConnectionScrap(0);
                     refetchData();
                   } else {
                     setConnectionError(res.error ?? "Failed to add");
@@ -331,6 +366,8 @@ export default function AdminStreamerInteractionsPage() {
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-800/50">
                 <th className="px-4 py-3 font-medium text-zinc-400">Event name</th>
+                <th className="px-4 py-3 font-medium text-zinc-400">Message</th>
+                <th className="px-4 py-3 font-medium text-zinc-400">Scrap</th>
                 <th className="px-4 py-3 font-medium text-zinc-400">Server action</th>
                 <th className="px-4 py-3 font-medium text-zinc-400 w-20"></th>
               </tr>
@@ -338,14 +375,18 @@ export default function AdminStreamerInteractionsPage() {
             <tbody>
               {connections.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-zinc-500">
-                    No connections yet. Add one above (set the name and choose an action from the list).
+                  <td colSpan={5} className="px-4 py-6 text-center text-zinc-500">
+                    No connections yet. Add one above (set the name, optional message and scrap, choose an action).
                   </td>
                 </tr>
               ) : (
                 connections.map((c) => (
                   <tr key={c.id} className="border-b border-zinc-800/50">
                     <td className="px-4 py-3 text-zinc-300">{c.name}</td>
+                    <td className="max-w-[200px] truncate px-4 py-3 text-zinc-400" title={c.message ?? undefined}>
+                      {c.message ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400">{c.scrap_amount ?? 0}</td>
                     <td className="px-4 py-3 font-mono text-rust-cyan">{c.server_action}</td>
                     <td className="px-4 py-3">
                       <button

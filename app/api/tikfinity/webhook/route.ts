@@ -11,7 +11,7 @@ import {
   getDefaultGiftValue,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
-import { getActionFromConnectionName } from "@/lib/tikfinity-connections";
+import { getConnectionByEventName } from "@/lib/tikfinity-connections";
 import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
 
@@ -77,13 +77,14 @@ export async function POST(request: NextRequest) {
       payload = { viewerName: "TikFinity", giftName: directAction };
     }
   }
+  let connectionFromAdmin: Awaited<ReturnType<typeof getConnectionByEventName>> = null;
   if (!action) {
     const rawName = getRawActionNameFromPayload(body);
     if (rawName) {
-      const connectionAction = await getActionFromConnectionName(rawName);
-      if (connectionAction) {
-        action = connectionAction;
-        payload = { viewerName: "TikFinity", giftName: connectionAction };
+      connectionFromAdmin = await getConnectionByEventName(rawName);
+      if (connectionFromAdmin) {
+        action = connectionFromAdmin.server_action;
+        payload = { viewerName: "TikFinity", giftName: connectionFromAdmin.server_action };
       }
     }
   }
@@ -143,17 +144,29 @@ export async function POST(request: NextRequest) {
 
   const viewerArg = sanitizeArg(payload.viewerName);
   const giftArg = sanitizeArg(payload.giftName);
+  const scrapFromConnection = connectionFromAdmin?.scrap_amount ?? 0;
   const fromPayload = getGiftValueFromPayload(body);
   const fromDefault = getDefaultGiftValue(payload.giftName);
-  const rawValue = fromPayload > 0 ? fromPayload : fromDefault;
+  const rawValue =
+    scrapFromConnection > 0
+      ? scrapFromConnection
+      : fromPayload > 0
+        ? fromPayload
+        : fromDefault;
   const giftValue = Math.min(10000, Math.max(0, rawValue));
+  const messageArg =
+    connectionFromAdmin?.message?.trim() != null && connectionFromAdmin.message.trim() !== ""
+      ? sanitizeArg(connectionFromAdmin.message.trim(), 128)
+      : null;
   const command =
-    giftValue > 0
-      ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue}`
-      : `tiktrigger ${action} ${viewerArg} ${giftArg}`;
+    messageArg != null
+      ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
+      : giftValue > 0
+        ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue}`
+        : `tiktrigger ${action} ${viewerArg} ${giftArg}`;
 
   if (giftValue > 0) {
-    console.log("[tikfinity webhook] scrap:", giftValue, "fromPayload:", fromPayload, "fromDefault:", fromDefault, "giftName:", payload.giftName);
+    console.log("[tikfinity webhook] scrap:", giftValue, "fromConnection:", scrapFromConnection, "fromPayload:", fromPayload, "giftName:", payload.giftName);
   }
 
   const connected = await ensureConnection(
