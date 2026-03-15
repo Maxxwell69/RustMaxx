@@ -143,6 +143,33 @@ export default function AdminStreamerInteractionsPage() {
           Ensure <code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code> is set in your
           server environment so the webhook knows which Rust server to send commands to.
         </p>
+        {data.webhookUrl && (
+          <>
+            <h3 className="mt-4 text-sm font-medium text-zinc-300">Per-action URLs (by event name)</h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              For actions named by event (e.g. &quot;Likes&quot;, &quot;Wolf&quot;), use a dedicated URL so the server runs the right trigger even if TikFinity doesn’t send the action in the body. Add <code className="rounded bg-zinc-800 px-1">?action=likes</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, etc.
+            </p>
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {data.availableActions.map((a) => (
+                <li key={a.action}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = `${data!.webhookUrl!}?action=${a.action}`;
+                      navigator.clipboard.writeText(url);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                    title={`Copy ${data!.webhookUrl!}?action=${a.action}`}
+                  >
+                    {a.action}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </section>
 
       {/* Test trigger */}

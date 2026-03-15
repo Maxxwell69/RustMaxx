@@ -54,13 +54,21 @@ export async function POST(request: NextRequest) {
     body = {};
   }
 
+  // Action from URL query (e.g. ?action=likes) – one webhook URL per TikFinity action
+  const queryAction = request.nextUrl.searchParams.get("action")?.trim().toLowerCase();
+  const actionFromQuery = queryAction ? getActionFromPayload({ action: queryAction }) : null;
+
   let payload = normalizeWebhookPayload(body);
   let action: TikTriggerAction | null = null;
 
   if (payload) {
     action = getActionForGift(payload.giftName);
-  } else {
-    // TikFinity may send action name directly (e.g. "Trigger all of these actions" = wolf)
+  }
+  if (!action && actionFromQuery) {
+    action = actionFromQuery;
+    payload = { viewerName: "TikFinity", giftName: actionFromQuery };
+  }
+  if (!action) {
     const directAction = getActionFromPayload(body);
     if (directAction) {
       action = directAction;
