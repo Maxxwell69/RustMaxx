@@ -33,6 +33,22 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Test: "test",
 };
 
+/** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
+export const DEFAULT_GIFT_COINS: Record<string, number> = {
+  "Puppy Kisses": 299,
+  Puppy: 299,
+  Rose: 1,
+  Roses: 5,
+  Galaxy: 999,
+  "Galaxy Gift": 999,
+  "Finger Heart": 1,
+  Smoke: 5,
+  "Smoke Signal": 10,
+  Firework: 50,
+  Fireworks: 100,
+  Test: 0,
+};
+
 /** Human-readable description and example gifts for each action (for admin UI). */
 export const ACTION_META: Record<
   TikTriggerAction,
@@ -135,6 +151,39 @@ export function normalizeWebhookPayload(body: unknown): {
 export function getPayloadKeysForDebug(body: unknown): string[] {
   if (!body || typeof body !== "object") return [];
   return Object.keys(body as Record<string, unknown>);
+}
+
+/** Parse gift coin value from payload (TikTok coins → scrap in-game). Checks value, coins, amount, giftValue, etc. */
+export function getGiftValueFromPayload(body: unknown): number {
+  if (!body || typeof body !== "object") return 0;
+  const o = body as Record<string, unknown>;
+  const get = (obj: Record<string, unknown>): number => {
+    const v = obj.value ?? obj.coins ?? obj.amount ?? obj.giftValue ?? obj.coinCount ?? obj.repeatCount;
+    if (typeof v === "number" && !Number.isNaN(v)) return Math.max(0, Math.floor(v));
+    if (typeof v === "string") {
+      const n = parseInt(v, 10);
+      if (!Number.isNaN(n)) return Math.max(0, n);
+    }
+    return 0;
+  };
+  const flat = get(o);
+  if (flat > 0) return flat;
+  const nested = (o.data ?? o.event ?? o.payload) as Record<string, unknown> | undefined;
+  if (nested && typeof nested === "object") return get(nested as Record<string, unknown>);
+  return 0;
+}
+
+/** Coin value for a gift name when payload has no value (from DEFAULT_GIFT_COINS). */
+export function getDefaultGiftValue(giftName: string): number {
+  if (!giftName || typeof giftName !== "string") return 0;
+  const key = giftName.trim();
+  const exact = DEFAULT_GIFT_COINS[key];
+  if (exact !== undefined) return Math.max(0, exact);
+  const lower = key.toLowerCase();
+  for (const [name, value] of Object.entries(DEFAULT_GIFT_COINS)) {
+    if (name.toLowerCase() === lower) return Math.max(0, value);
+  }
+  return 0;
 }
 
 /** If TikFinity sends an action name directly (e.g. from "Trigger all of these actions"), return it. */

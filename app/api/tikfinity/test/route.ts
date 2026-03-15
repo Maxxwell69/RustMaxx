@@ -5,6 +5,7 @@ import { query } from "@/lib/db";
 import type { ServerRow } from "@/lib/db";
 import {
   getActionForGift,
+  getDefaultGiftValue,
   TIKTRIGGER_ACTIONS,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
   const authErr = requireRole(request, CAN_MANAGE_SERVERS);
   if (authErr) return authErr;
 
-  let body: { giftName?: string; viewerName?: string };
+  let body: { giftName?: string; viewerName?: string; amount?: number };
   try {
     body = await request.json();
   } catch {
@@ -74,7 +75,11 @@ export async function POST(request: NextRequest) {
 
   const viewerArg = sanitizeArg(viewerName);
   const giftArg = sanitizeArg(giftName);
-  const command = `tiktrigger ${action} ${viewerArg} ${giftArg}`;
+  const scrapAmount = Math.min(10000, Math.max(0, typeof body.amount === "number" ? body.amount : getDefaultGiftValue(giftName)));
+  const command =
+    scrapAmount > 0
+      ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${scrapAmount}`
+      : `tiktrigger ${action} ${viewerArg} ${giftArg}`;
 
   const connected = await ensureConnection(
     server.id,
@@ -107,7 +112,8 @@ export async function POST(request: NextRequest) {
     action: action as TikTriggerAction,
     viewerName,
     giftName,
+    scrapAmount: scrapAmount > 0 ? scrapAmount : undefined,
     command,
-    debug: "Trigger sent. Check the Rust server console or in-game for the effect.",
+    debug: "Trigger sent. Check the Rust server console or in-game for the effect." + (scrapAmount > 0 ? ` Streamer receives ${scrapAmount} scrap.` : ""),
   });
 }

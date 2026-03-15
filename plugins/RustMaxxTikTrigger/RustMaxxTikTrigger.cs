@@ -79,13 +79,14 @@ namespace Oxide.Plugins
 
             if (!arg.HasArgs(3))
             {
-                arg.ReplyWith("Usage: tiktrigger <action> <viewerName> <giftName>");
+                arg.ReplyWith("Usage: tiktrigger <action> <viewerName> <giftName> [scrapAmount]");
                 return;
             }
 
             string action = arg.GetString(0).ToLowerInvariant();
             string viewerName = arg.GetString(1);
             string giftName = arg.GetString(2);
+            int scrapAmount = arg.HasArgs(4) ? arg.GetInt(3, 0) : 0;
 
             if (!IsAllowedAction(action))
             {
@@ -95,10 +96,10 @@ namespace Oxide.Plugins
             }
 
             // Log every trigger to server console.
-            Puts($"{LogPrefix} {viewerName} triggered action '{action}' from gift '{giftName}'");
+            Puts($"{LogPrefix} {viewerName} triggered action '{action}' from gift '{giftName}'" + (scrapAmount > 0 ? $" (+{scrapAmount} scrap)" : ""));
 
-            ExecuteAction(action, viewerName, giftName);
-            arg.ReplyWith($"OK: {action}");
+            ExecuteAction(action, viewerName, giftName, scrapAmount);
+            arg.ReplyWith($"OK: {action}" + (scrapAmount > 0 ? $" +{scrapAmount} scrap" : ""));
         }
 
         private static bool IsAllowedAction(string action)
@@ -112,7 +113,7 @@ namespace Oxide.Plugins
 
         #region Action execution
 
-        private void ExecuteAction(string action, string viewerName, string giftName)
+        private void ExecuteAction(string action, string viewerName, string giftName, int scrapAmount)
         {
             BasePlayer target = GetStreamerPlayer();
             if (target == null && ActionRequiresPlayer(action))
@@ -169,6 +170,24 @@ namespace Oxide.Plugins
                     PrintWarning($"{LogPrefix} Unhandled action: {action}");
                     break;
             }
+
+            if (scrapAmount > 0 && target != null)
+                GiveScrapToPlayer(target, scrapAmount);
+        }
+
+        /// <summary>
+        /// Gives scrap to the streamer (gift value from TikTok). Capped per call to avoid abuse.
+        /// </summary>
+        private static void GiveScrapToPlayer(BasePlayer player, int amount)
+        {
+            if (player == null || !player.IsValid() || amount <= 0) return;
+            const int maxScrapPerTrigger = 10000;
+            int give = Math.Min(amount, maxScrapPerTrigger);
+            ItemDefinition scrapDef = ItemManager.FindItemDefinition("scrap");
+            if (scrapDef == null) return;
+            Item item = ItemManager.Create(scrapDef, give, 0ul);
+            if (item == null) return;
+            item.MoveToContainer(player.inventory.containerMain);
         }
 
         private static bool ActionRequiresPlayer(string action)

@@ -6,6 +6,8 @@ import {
   getActionForGift,
   getActionFromPayload,
   getPayloadKeysForDebug,
+  getGiftValueFromPayload,
+  getDefaultGiftValue,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
 import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
@@ -117,7 +119,12 @@ export async function POST(request: NextRequest) {
 
   const viewerArg = sanitizeArg(payload.viewerName);
   const giftArg = sanitizeArg(payload.giftName);
-  const command = `tiktrigger ${action} ${viewerArg} ${giftArg}`;
+  const rawValue = getGiftValueFromPayload(body) || getDefaultGiftValue(payload.giftName);
+  const giftValue = Math.min(10000, Math.max(0, rawValue));
+  const command =
+    giftValue > 0
+      ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue}`
+      : `tiktrigger ${action} ${viewerArg} ${giftArg}`;
 
   const connected = await ensureConnection(
     server.id,
@@ -164,13 +171,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  console.log("[tikfinity webhook]", payload.viewerName, action, payload.giftName);
+  console.log("[tikfinity webhook]", payload.viewerName, action, payload.giftName, giftValue > 0 ? `+${giftValue} scrap` : "");
   audit("tikfinity", "webhook.trigger", {
     viewerName: payload.viewerName,
     giftName: payload.giftName,
     action,
     serverId: server.id,
     command,
+    scrapAmount: giftValue || undefined,
   }).catch(() => {});
 
   return withCors(
@@ -180,6 +188,7 @@ export async function POST(request: NextRequest) {
       viewerName: payload.viewerName,
       giftName: payload.giftName,
       command,
+      scrapAmount: giftValue > 0 ? giftValue : undefined,
     })
   );
 }
