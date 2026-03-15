@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole } from "@/lib/api-auth";
-import { CAN_MANAGE_SERVERS } from "@/lib/permissions";
+import { requireCanManageServersFromDb } from "@/lib/api-auth";
 import { query } from "@/lib/db";
 import type { ServerRow } from "@/lib/db";
 import {
@@ -23,7 +22,7 @@ function sanitizeArg(s: string, maxLen = 48): string {
  * Use this to test RCON and plugin without sending a real TikTok gift.
  */
 export async function POST(request: NextRequest) {
-  const authErr = requireRole(request, CAN_MANAGE_SERVERS);
+  const authErr = await requireCanManageServersFromDb(request);
   if (authErr) return authErr;
 
   let body: { giftName?: string; viewerName?: string; amount?: number };

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole } from "@/lib/api-auth";
-import { CAN_MANAGE_SERVERS } from "@/lib/permissions";
+import { requireCanManageServersFromDb } from "@/lib/api-auth";
 import {
   createTikfinityConnection,
   deleteTikfinityConnection,
@@ -12,7 +11,7 @@ import type { TikTriggerAction } from "@/lib/tikfinity";
  * Body: { name: string, serverAction: TikTriggerAction }
  */
 export async function POST(request: NextRequest) {
-  const authErr = requireRole(request, CAN_MANAGE_SERVERS);
+  const authErr = await requireCanManageServersFromDb(request);
   if (authErr) return authErr;
 
   let body: { name?: string; serverAction?: string };
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
  * Query: ?id=<uuid>
  */
 export async function DELETE(request: NextRequest) {
-  const authErr = requireRole(request, CAN_MANAGE_SERVERS);
+  const authErr = await requireCanManageServersFromDb(request);
   if (authErr) return authErr;
 
   const id = request.nextUrl.searchParams.get("id")?.trim();

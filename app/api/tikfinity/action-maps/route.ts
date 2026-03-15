@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole } from "@/lib/api-auth";
-import { CAN_MANAGE_SERVERS } from "@/lib/permissions";
+import { requireCanManageServersFromDb } from "@/lib/api-auth";
 import {
   getAvailableActionsForAdmin,
   getGiftToActionMapForAdmin,
@@ -13,7 +12,7 @@ import { getPublicOriginOrNull } from "@/lib/twitch-public-url";
  * Admin and super_admin only (same as server management).
  */
 export async function GET(request: NextRequest) {
-  const authErr = requireRole(request, CAN_MANAGE_SERVERS);
+  const authErr = await requireCanManageServersFromDb(request);
   if (authErr) return authErr;
 
   const origin = getPublicOriginOrNull();

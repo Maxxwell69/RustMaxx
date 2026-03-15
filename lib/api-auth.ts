@@ -55,6 +55,28 @@ export function requireCanManageServers(request: NextRequest): NextResponse | nu
   return null;
 }
 
+/**
+ * Same as requireCanManageServers but uses the user's current role from the database.
+ * Use this so a recently promoted admin gets access without re-login (session cookie has old role).
+ */
+export async function requireCanManageServersFromDb(
+  request: NextRequest
+): Promise<NextResponse | null> {
+  const session = getSessionFromRequest(request);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const user = await findUserById(session.userId);
+  const role = (user?.role ?? session.role) as UserRole;
+  if (!canManageServers(role)) {
+    return NextResponse.json(
+      { error: "Forbidden: only admin or super_admin can manage servers" },
+      { status: 403 }
+    );
+  }
+  return null;
+}
+
 export function requireCanManageServerUsers(
   request: NextRequest
 ): NextResponse | null {
