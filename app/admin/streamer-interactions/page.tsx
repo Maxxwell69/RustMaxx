@@ -55,7 +55,7 @@ export default function AdminStreamerInteractionsPage() {
   const ALLOWED_ROLES = ["admin", "super_admin"];
 
   function refetchData() {
-    fetch("/api/tikfinity/action-maps")
+    fetch("/api/tikfinity/action-maps", { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d) {
@@ -68,7 +68,7 @@ export default function AdminStreamerInteractionsPage() {
 
   useEffect(() => {
     // Use same role source as the header badge (/api/auth/me) so access matches what the user sees
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
       .then((me: { role?: string } | null) => {
         if (!me?.role || !ALLOWED_ROLES.includes(me.role)) {
@@ -77,7 +77,7 @@ export default function AdminStreamerInteractionsPage() {
           return;
         }
         setAccessDenied(false);
-        return fetch("/api/tikfinity/action-maps");
+        return fetch("/api/tikfinity/action-maps", { credentials: "same-origin" });
       })
       .then((r) => {
         if (!r || !(r instanceof Response)) return null;
@@ -148,7 +148,7 @@ export default function AdminStreamerInteractionsPage() {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
           <h1 className="text-xl font-semibold text-zinc-100">Streamer interactions (TikFinity)</h1>
           <p className="mt-2 text-zinc-400">
-            Settings could not be loaded. Try logging out and back in to refresh your session.
+            Settings could not be loaded. Try logging out and back in. If you recently deployed, run database migrations (<code className="rounded bg-zinc-800 px-1">npm run migrate</code>) on your server.
           </p>
           <Link href="/admin" className="mt-4 inline-block text-rust-cyan hover:underline">
             ← Back to admin

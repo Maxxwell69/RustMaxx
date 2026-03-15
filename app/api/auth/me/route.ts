@@ -8,12 +8,20 @@ export async function GET(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const user = await findUserById(session.userId);
-  if (!user) {
+  try {
+    const user = await findUserById(session.userId);
+    if (!user) {
+      return NextResponse.json(
+        { error: "User no longer exists" },
+        { status: 401 }
+      );
+    }
+    return NextResponse.json(toProfile(user));
+  } catch (e) {
+    console.error("[auth/me] findUserById failed:", e);
     return NextResponse.json(
-      { error: "User no longer exists" },
-      { status: 401 }
+      { error: "Server error" },
+      { status: 500 }
     );
   }
-  return NextResponse.json(toProfile(user));
 }
