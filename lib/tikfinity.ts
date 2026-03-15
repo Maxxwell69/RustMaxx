@@ -11,6 +11,8 @@ export const TIKTRIGGER_ACTIONS = [
   "fireworks",
   "npcwave",
   "wolf",
+  "supply",
+  "likes",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
@@ -31,6 +33,10 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   "Finger Heart": "smoke",
   FingerHeart: "smoke",
   Test: "test",
+  Likes: "likes",
+  Like: "likes",
+  Supply: "supply",
+  "Supply Signal": "supply",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -47,6 +53,10 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   Firework: 50,
   Fireworks: 100,
   Test: 299,
+  Likes: 0,
+  Like: 0,
+  Supply: 0,
+  "Supply Signal": 0,
 };
 
 /** Human-readable description and example gifts for each action (for admin UI). */
@@ -77,6 +87,14 @@ export const ACTION_META: Record<
   wolf: {
     description: "Spawn wolf near streamer",
     exampleGifts: ["Puppy", "Puppy Kisses", "Wolf"],
+  },
+  supply: {
+    description: "Give streamer 1 supply signal (throw at feet for airdrop)",
+    exampleGifts: ["Supply Signal", "Supply"],
+  },
+  likes: {
+    description: "Give streamer 1 supply signal (e.g. from Likes event)",
+    exampleGifts: ["Likes", "Like"],
   },
 };
 

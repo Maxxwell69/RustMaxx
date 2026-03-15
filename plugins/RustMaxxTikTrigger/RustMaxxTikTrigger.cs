@@ -54,7 +54,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustMaxxTikTrigger]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "npcwave", "wolf" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "npcwave", "wolf", "supply", "likes" };
 
         // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
         private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
@@ -165,6 +165,15 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "supply":
+                case "likes":
+                    if (target != null)
+                    {
+                        BroadcastChat($"{viewerName} sent a {giftName}!");
+                        GiveItemToPlayer(target, "supply.signal", 1);
+                    }
+                    break;
+
                 default:
                     // Whitelist guarantees we don't reach here; defensive.
                     PrintWarning($"{LogPrefix} Unhandled action: {action}");
@@ -180,6 +189,19 @@ namespace Oxide.Plugins
             {
                 PrintWarning($"{LogPrefix} Streamer not online – scrap not given ({scrapAmount} would have been given).");
             }
+        }
+
+        /// <summary>
+        /// Gives an item (e.g. supply.signal) to the player. Used for supply/likes trigger.
+        /// </summary>
+        private static void GiveItemToPlayer(BasePlayer player, string shortName, int amount)
+        {
+            if (player == null || !player.IsValid() || amount <= 0 || string.IsNullOrEmpty(shortName)) return;
+            ItemDefinition def = ItemManager.FindItemDefinition(shortName);
+            if (def == null) return;
+            Item item = ItemManager.Create(def, amount, 0ul);
+            if (item == null) return;
+            item.MoveToContainer(player.inventory.containerMain);
         }
 
         /// <summary>
@@ -199,7 +221,7 @@ namespace Oxide.Plugins
 
         private static bool ActionRequiresPlayer(string action)
         {
-            return action == "smoke" || action == "fireworks" || action == "npcwave" || action == "wolf";
+            return action == "smoke" || action == "fireworks" || action == "npcwave" || action == "wolf" || action == "supply" || action == "likes";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
