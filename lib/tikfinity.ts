@@ -204,7 +204,19 @@ export function getDefaultGiftValue(giftName: string): number {
   return 0;
 }
 
-/** If TikFinity sends an action name directly (e.g. from "Trigger all of these actions"), return it. */
+const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
+  likes: "likes",
+  like: "likes",
+  supply: "supply",
+  wolf: "wolf",
+  rose: "rose",
+  smoke: "smoke",
+  fireworks: "fireworks",
+  npcwave: "npcwave",
+  test: "test",
+};
+
+/** If TikFinity sends an action name directly (action, actionName, or event), return it. */
 export function getActionFromPayload(body: unknown): TikTriggerAction | null {
   if (!body || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
@@ -213,9 +225,13 @@ export function getActionFromPayload(body: unknown): TikTriggerAction | null {
       ? o.action.trim().toLowerCase()
       : typeof o.actionName === "string"
         ? o.actionName.trim().toLowerCase()
-        : "";
+        : typeof o.event === "string"
+          ? o.event.trim().toLowerCase()
+          : "";
   if (!raw) return null;
   if ((TIKTRIGGER_ACTIONS as readonly string[]).includes(raw)) return raw as TikTriggerAction;
+  const fromEvent = EVENT_TO_ACTION[raw];
+  if (fromEvent) return fromEvent;
   return null;
 }
 

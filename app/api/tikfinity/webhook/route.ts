@@ -68,28 +68,32 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // TikFinity "Test" or unknown payload – use default action so we never 400 from this path
-  if (!payload || !action) {
-    const keys = getPayloadKeysForDebug(body);
-    if (keys.length) {
-      console.warn("[tikfinity webhook] Unknown payload keys, using default wolf. Keys:", keys);
-    }
-    action = "wolf";
-    payload = { viewerName: "TikFinity", giftName: "Test" };
-  }
-
+  // No valid action from payload – don't default to wolf; skip and tell them how to specify action
   if (!action) {
+    const keys = getPayloadKeysForDebug(body);
+    console.warn("[tikfinity webhook] No action. Keys:", keys);
     audit("tikfinity", "webhook.skipped", {
-      reason: "Gift not mapped",
-      viewerName: payload.viewerName,
-      giftName: payload.giftName,
+      reason: payload ? "Gift not mapped" : "Empty or unknown payload",
+      keys: keys.length ? keys : undefined,
     }).catch(() => {});
     return withCors(
       NextResponse.json(
-        { ok: false, skipped: true, reason: "Gift not mapped to an action", giftName: payload.giftName },
+        {
+          ok: false,
+          skipped: true,
+          reason: payload
+            ? "Gift not mapped to an action"
+            : "No action specified. TikFinity sent empty/default body.",
+          debug: "To test a specific action (e.g. likes, supply, wolf), send a JSON body. Example: {\"action\": \"likes\"} or {\"giftName\": \"Puppy Kisses\"}. If TikFinity cannot set the webhook body, use the RustMaxx admin 'Test trigger' instead.",
+          giftName: payload?.giftName,
+        },
         { status: 200 }
       )
     );
+  }
+
+  if (!payload) {
+    payload = { viewerName: "TikFinity", giftName: action };
   }
 
   if (!TIKFINITY_SERVER_ID) {
