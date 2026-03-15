@@ -155,7 +155,7 @@ namespace Oxide.Plugins
         private static BasePlayer GetFirstOnlinePlayer()
         {
             foreach (var player in BasePlayer.activePlayerList)
-                if (player != null && player.IsConnected && !player.IsDead)
+                if (player != null && player.IsConnected && !player.IsDead())
                     return player;
             return null;
         }
