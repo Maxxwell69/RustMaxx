@@ -26,6 +26,7 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Galaxy: "npcwave",
   "Galaxy Gift": "npcwave",
   Puppy: "wolf",
+  "Puppy Kisses": "wolf",
   Wolf: "wolf",
   "Finger Heart": "smoke",
   FingerHeart: "smoke",
@@ -59,7 +60,7 @@ export const ACTION_META: Record<
   },
   wolf: {
     description: "Spawn wolf near streamer",
-    exampleGifts: ["Puppy", "Wolf"],
+    exampleGifts: ["Puppy", "Puppy Kisses", "Wolf"],
   },
 };
 
