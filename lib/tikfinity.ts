@@ -77,13 +77,8 @@ export function getActionForGift(giftName: string): TikTriggerAction | null {
   return null;
 }
 
-/** Normalize TikFinity webhook body to viewerName + giftName. */
-export function normalizeWebhookPayload(body: unknown): {
-  viewerName: string;
-  giftName: string;
-} | null {
-  if (!body || typeof body !== "object") return null;
-  const o = body as Record<string, unknown>;
+/** Try to get viewer and gift from a plain object (any nesting level). */
+function extractFromObject(o: Record<string, unknown>): { viewerName: string; giftName: string } | null {
   const viewerName =
     typeof o.viewerName === "string"
       ? o.viewerName.trim()
@@ -95,7 +90,11 @@ export function normalizeWebhookPayload(body: unknown): {
             ? o.user_name.trim()
             : typeof o.nickname === "string"
               ? o.nickname.trim()
-              : "Viewer";
+              : typeof o.username === "string"
+                ? o.username.trim()
+                : typeof o.sender === "string"
+                  ? o.sender.trim()
+                  : "";
   const giftName =
     typeof o.giftName === "string"
       ? o.giftName.trim()
@@ -103,9 +102,54 @@ export function normalizeWebhookPayload(body: unknown): {
         ? o.gift_name.trim()
         : typeof o.gift === "string"
           ? o.gift.trim()
-          : "";
+          : typeof o.giftType === "string"
+            ? o.giftType.trim()
+            : "";
   if (!giftName) return null;
   return { viewerName: viewerName || "Viewer", giftName };
+}
+
+/** Normalize TikFinity webhook body to viewerName + giftName. Supports flat and nested payloads. */
+export function normalizeWebhookPayload(body: unknown): {
+  viewerName: string;
+  giftName: string;
+} | null {
+  if (!body || typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+
+  // Flat body
+  const flat = extractFromObject(o);
+  if (flat) return flat;
+
+  // Nested: body.data or body.event or body.payload
+  const nested = (o.data ?? o.event ?? o.payload) as Record<string, unknown> | undefined;
+  if (nested && typeof nested === "object") {
+    const fromNested = extractFromObject(nested as Record<string, unknown>);
+    if (fromNested) return fromNested;
+  }
+
+  return null;
+}
+
+/** Return top-level keys of the body for debug messages (no sensitive values). */
+export function getPayloadKeysForDebug(body: unknown): string[] {
+  if (!body || typeof body !== "object") return [];
+  return Object.keys(body as Record<string, unknown>);
+}
+
+/** If TikFinity sends an action name directly (e.g. from "Trigger all of these actions"), return it. */
+export function getActionFromPayload(body: unknown): TikTriggerAction | null {
+  if (!body || typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+  const raw =
+    typeof o.action === "string"
+      ? o.action.trim().toLowerCase()
+      : typeof o.actionName === "string"
+        ? o.actionName.trim().toLowerCase()
+        : "";
+  if (!raw) return null;
+  if ((TIKTRIGGER_ACTIONS as readonly string[]).includes(raw)) return raw as TikTriggerAction;
+  return null;
 }
 
 export function getAvailableActionsForAdmin(): {

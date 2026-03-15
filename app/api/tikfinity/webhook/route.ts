@@ -4,6 +4,8 @@ import type { ServerRow } from "@/lib/db";
 import {
   normalizeWebhookPayload,
   getActionForGift,
+  getActionFromPayload,
+  getPayloadKeysForDebug,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
 import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
@@ -24,15 +26,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const payload = normalizeWebhookPayload(body);
+  let payload = normalizeWebhookPayload(body);
+  let action: TikTriggerAction | null = null;
+
+  if (payload) {
+    action = getActionForGift(payload.giftName);
+  } else {
+    // TikFinity may send action name directly (e.g. "Trigger all of these actions" = wolf)
+    const directAction = getActionFromPayload(body);
+    if (directAction) {
+      action = directAction;
+      payload = { viewerName: "TikFinity", giftName: directAction };
+    }
+  }
+
   if (!payload) {
+    const keys = getPayloadKeysForDebug(body);
+    console.warn("[tikfinity webhook] Could not parse payload. Top-level keys:", keys);
     return NextResponse.json(
-      { error: "Missing gift name (giftName, gift_name, or gift)" },
+      {
+        error: "Missing gift name (giftName, gift_name, gift, giftType) or action (action, actionName)",
+        debug: keys.length ? `Received top-level keys: ${keys.join(", ")}. If TikFinity uses different names, we can add support.` : "Body was empty or not an object.",
+      },
       { status: 400 }
     );
   }
 
-  const action = getActionForGift(payload.giftName);
   if (!action) {
     audit("tikfinity", "webhook.skipped", {
       reason: "Gift not mapped",
