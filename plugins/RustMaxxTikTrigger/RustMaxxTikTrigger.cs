@@ -353,11 +353,12 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Spawn one scientist at position. Tries main prefab, then fallback. Returns true if spawned.
+        /// Spawn one scientist at position. Tries PrefabSniffer path first, then fallbacks. Returns true if spawned.
         /// </summary>
         private static bool SpawnScientist(Vector3 position)
         {
             string[] prefabs = {
+                "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
                 "assets/prefabs/npc/scientist/scientist.prefab",
                 "assets/content/npc/scientist/scientist.prefab"
             };
