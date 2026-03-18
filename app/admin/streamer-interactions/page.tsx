@@ -167,6 +167,12 @@ export default function AdminStreamerInteractionsPage() {
     ([a], [b]) => a.localeCompare(b)
   );
 
+  // Actions to show in webhook URL area and connections (exclude test, rose, smoke, fireworks, likes)
+  const WEBHOOK_HIDDEN_ACTIONS = ["test", "rose", "smoke", "fireworks", "likes"];
+  const webhookActions = data.availableActions.filter(
+    (a) => !WEBHOOK_HIDDEN_ACTIONS.includes(a.action)
+  );
+
   return (
     <div className="mx-auto max-w-4xl space-y-8 p-6">
       <div className="flex flex-wrap items-center gap-4">
@@ -211,10 +217,10 @@ export default function AdminStreamerInteractionsPage() {
           <>
             <h3 className="mt-4 text-sm font-medium text-zinc-300">Per-action URLs (by event name)</h3>
             <p className="mt-1 text-xs text-zinc-500">
-              For actions named by event (e.g. &quot;Likes&quot;, &quot;Wolf&quot;), use a dedicated URL so the server runs the right trigger even if TikFinity doesn’t send the action in the body. Add <code className="rounded bg-zinc-800 px-1">?action=likes</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, etc.
+              Use a dedicated URL so the server runs the right trigger. Add <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=bear</code>, etc.
             </p>
             <ul className="mt-2 flex flex-wrap gap-2">
-              {data.availableActions.map((a) => (
+              {webhookActions.map((a) => (
                 <li key={a.action}>
                   <button
                     type="button"
@@ -256,7 +262,7 @@ export default function AdminStreamerInteractionsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.availableActions.map((a) => (
+              {webhookActions.map((a) => (
                 <tr key={a.action} className="border-b border-zinc-800/50">
                   <td className="px-3 py-2 font-mono text-rust-cyan">{a.label ?? a.action}</td>
                   <td className="px-3 py-2 text-zinc-400">{a.description}</td>
@@ -310,7 +316,7 @@ export default function AdminStreamerInteractionsPage() {
                 onChange={(e) => setNewConnectionAction(e.target.value)}
                 className="mt-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
               >
-                {data.availableActions.map((a) => (
+                {webhookActions.map((a) => (
                   <option key={a.action} value={a.action}>{a.label ?? a.action}</option>
                 ))}
               </select>
@@ -488,7 +494,7 @@ export default function AdminStreamerInteractionsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.availableActions.map((a) => (
+              {webhookActions.map((a) => (
                 <tr key={a.action} className="border-b border-zinc-800/50">
                   <td className="px-4 py-3 font-mono text-rust-cyan">{a.label ?? a.action}</td>
                   <td className="px-4 py-3 text-zinc-300">{a.description}</td>
