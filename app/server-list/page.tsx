@@ -76,6 +76,9 @@ export default function ServerListPage() {
                             alt=""
                             className="h-full w-full object-cover"
                             referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
                           />
                         </div>
                       )}

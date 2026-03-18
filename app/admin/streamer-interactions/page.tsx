@@ -341,7 +341,8 @@ export default function AdminStreamerInteractionsPage() {
                     setNewConnectionScrap(0);
                     refetchData();
                   } else {
-                    setConnectionError(res.error ?? "Failed to add");
+                    const msg = res.error ?? "Failed to add";
+                    setConnectionError(res.debug ? `${msg}: ${res.debug}` : msg);
                   }
                 })
                 .catch(() => setConnectionError("Request failed"))

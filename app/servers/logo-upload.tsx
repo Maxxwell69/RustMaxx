@@ -71,7 +71,16 @@ export function LogoUpload({
       {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
       {value && (
         <p className="mt-1 text-xs text-zinc-500">
-          Preview: <img src={value} alt="" className="inline-block h-6 w-6 rounded object-cover align-middle" onError={() => {}} />
+          Preview:{" "}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={value}
+            alt=""
+            className="inline-block h-6 w-6 rounded object-cover align-middle"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
         </p>
       )}
     </div>
