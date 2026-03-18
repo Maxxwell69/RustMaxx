@@ -23,6 +23,8 @@ namespace Oxide.Plugins
         private class PluginConfig
         {
             public string StreamerName { get; set; } = "pirate maxx";
+            /// <summary>Optional. If your Rust build uses a different shark prefab path, set it here (e.g. from PrefabSniffer or debug.lookingat). Leave empty to use built-in list.</summary>
+            public string SharkPrefabPath { get; set; } = "";
         }
 
         private PluginConfig _config;
@@ -191,7 +193,7 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        if (SpawnShark(GetPositionNear(target)))
+                        if (SpawnShark(GetPositionNear(target), _config?.SharkPrefabPath))
                             Puts($"{LogPrefix} Spawned 1 shark near {target.displayName}");
                     }
                     break;
@@ -373,20 +375,34 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// Spawn one shark at position. Shark is a water entity – best results when streamer is in or near water.
-        /// Tries multiple prefab paths (varies by Rust version). Logs tried paths if all fail.
+        /// If config SharkPrefabPath is set, that path is tried first. Otherwise tries built-in list. To find your path: PrefabSniffer "prefab find shark" or debug.lookingat on a shark in-game.
         /// </summary>
-        private static bool SpawnShark(Vector3 position)
+        private static bool SpawnShark(Vector3 position, string configSharkPath = null)
         {
+            if (!string.IsNullOrWhiteSpace(configSharkPath))
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(configSharkPath.Trim(), position, Quaternion.identity, true);
+                if (entity != null)
+                {
+                    entity.Spawn();
+                    return true;
+                }
+            }
             string[] prefabs = {
                 "assets/content/water/ocean/simpleshark.prefab",
+                "assets/content/water/ocean/greatwhite.prefab",
+                "assets/content/water/ocean/greatwhiteshark.prefab",
+                "assets/prefabs/npc/ocean/simpleshark.prefab",
+                "assets/prefabs/npc/ocean/simpleshark_full.prefab",
+                "assets/prefabs/npc/ocean/greatwhite.prefab",
+                "assets/prefabs/npc/ocean/greatwhiteshark.prefab",
                 "assets/bundled/prefabs/autospawn/animals/simpleshark.prefab",
                 "assets/bundled/prefabs/autospawn/animals/shark.prefab",
-                "assets/prefabs/npc/ocean/simpleshark.prefab",
+                "assets/bundled/prefabs/autospawn/water/simpleshark.prefab",
                 "assets/rust.ai/agents/greatwhite/greatwhite.prefab",
                 "assets/rust.ai/agents/simpleshark/simpleshark.prefab",
-                "assets/content/water/ocean/greatwhiteshark.prefab",
-                "assets/prefabs/npc/greatwhiteshark/greatwhiteshark.prefab",
-                "assets/content/entities/ocean/simpleshark.prefab"
+                "assets/content/entities/ocean/simpleshark.prefab",
+                "assets/content/props/underwater/simpleshark.prefab"
             };
             foreach (string path in prefabs)
             {
@@ -397,7 +413,7 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
-            UnityEngine.Debug.LogWarning($"[RustMaxxTikTrigger] Shark spawn failed: no prefab worked. Tried: {string.Join(", ", prefabs)}. Shark may require water or a different path on your Rust build.");
+            UnityEngine.Debug.LogWarning($"[RustMaxxTikTrigger] Shark spawn failed. Set SharkPrefabPath in config (oxide/config/RustMaxxTikTrigger.json) to your shark prefab path. To find it: install PrefabSniffer and run 'prefab find shark', or look at a shark in-game and run 'debug.lookingat' in F1.");
             return false;
         }
 
