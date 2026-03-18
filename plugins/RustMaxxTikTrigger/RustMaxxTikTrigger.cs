@@ -268,12 +268,12 @@ namespace Oxide.Plugins
         {
             if (player == null || !player.IsValid()) return Vector3.zero;
             Vector3 pos = player.transform.position;
-            // Spawn a few meters away so effects/NPCs/animals are not on the player's head.
+            // Spawn at a comfortable distance so NPCs/animals are not on top of the player.
             Vector3 offset = UnityEngine.Random.insideUnitSphere;
             offset.y = 0f;
             if (offset.sqrMagnitude < 0.01f) offset = Vector3.forward;
             offset.Normalize();
-            float distance = 4f + UnityEngine.Random.Range(0f, 3f);
+            float distance = 8f + UnityEngine.Random.Range(0f, 4f);
             return pos + offset * distance;
         }
 
@@ -298,7 +298,7 @@ namespace Oxide.Plugins
             if (forward.sqrMagnitude < 0.01f)
                 return GetPositionNear(player);
             forward.Normalize();
-            float distance = 4f + UnityEngine.Random.Range(0f, 2f);
+            float distance = 7f + UnityEngine.Random.Range(0f, 3f);
             return pos - forward * distance;
         }
 
