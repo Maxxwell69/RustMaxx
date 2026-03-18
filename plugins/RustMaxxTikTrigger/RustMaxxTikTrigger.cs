@@ -372,14 +372,21 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Spawn one shark at position (water entity; may need to be near water). Tries common prefab paths.
+        /// Spawn one shark at position. Shark is a water entity – best results when streamer is in or near water.
+        /// Tries multiple prefab paths (varies by Rust version). Logs tried paths if all fail.
         /// </summary>
         private static bool SpawnShark(Vector3 position)
         {
             string[] prefabs = {
+                "assets/content/water/ocean/simpleshark.prefab",
+                "assets/bundled/prefabs/autospawn/animals/simpleshark.prefab",
+                "assets/bundled/prefabs/autospawn/animals/shark.prefab",
+                "assets/prefabs/npc/ocean/simpleshark.prefab",
                 "assets/rust.ai/agents/greatwhite/greatwhite.prefab",
+                "assets/rust.ai/agents/simpleshark/simpleshark.prefab",
                 "assets/content/water/ocean/greatwhiteshark.prefab",
-                "assets/prefabs/npc/greatwhiteshark/greatwhiteshark.prefab"
+                "assets/prefabs/npc/greatwhiteshark/greatwhiteshark.prefab",
+                "assets/content/entities/ocean/simpleshark.prefab"
             };
             foreach (string path in prefabs)
             {
@@ -390,6 +397,7 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
+            UnityEngine.Debug.LogWarning($"[RustMaxxTikTrigger] Shark spawn failed: no prefab worked. Tried: {string.Join(", ", prefabs)}. Shark may require water or a different path on your Rust build.");
             return false;
         }
 
