@@ -146,7 +146,7 @@ export const ACTION_META: Record<
   },
   scientistboat: {
     label: "Scientist Boat",
-    description: "Spawn rowboat + 2 scientists in water (streamer must be swimming or on boat)",
+    description: "Spawn scientist RHIB or PT boat (AI + turrets) in water (streamer must be swimming or on boat)",
     exampleGifts: ["Scientist Boat", "ScientistBoat"],
   },
 };

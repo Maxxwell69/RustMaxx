@@ -14,7 +14,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("RustMaxxTikTrigger", "RustMaxx", "1.6.0")]
+    [Info("RustMaxxTikTrigger", "RustMaxx", "1.7.0")]
     [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustMaxxTikTrigger : RustPlugin
     {
@@ -25,8 +25,10 @@ namespace Oxide.Plugins
             public string StreamerName { get; set; } = "pirate maxx";
             /// <summary>Optional. If your Rust build uses a different shark prefab path, set it here (e.g. from PrefabSniffer or debug.lookingat). Leave empty to use built-in list.</summary>
             public string SharkPrefabPath { get; set; } = "";
-            /// <summary>Optional. If your Rust build uses a different rowboat prefab path for scientistboat, set it here. Leave empty to use built-in list.</summary>
-            public string RowboatPrefabPath { get; set; } = "";
+            /// <summary>Optional. Override scientist RHIB prefab for scientistboat (default: assets/content/vehicles/boats/rhib/rhib_scientist.prefab).</summary>
+            public string ScientistRhibPrefabPath { get; set; } = "";
+            /// <summary>Optional. Override scientist PT boat prefab (default: assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab).</summary>
+            public string ScientistPtBoatPrefabPath { get; set; } = "";
         }
 
         private PluginConfig _config;
@@ -237,17 +239,15 @@ namespace Oxide.Plugins
                         if (loc == ChaosLocation.Sea || loc == ChaosLocation.Swimming)
                         {
                             Vector3 waterPos = target.transform.position;
-                            if (SpawnRowboat(waterPos, _config?.RowboatPrefabPath))
+                            if (SpawnScientistBoat(waterPos, _config?.ScientistRhibPrefabPath, _config?.ScientistPtBoatPrefabPath))
                             {
-                                SpawnScientist(waterPos);
-                                SpawnScientist(waterPos);
                                 BroadcastChat(ChatMsg($"{viewerName} sent a scientist boat!"));
-                                Puts($"{LogPrefix} Spawned rowboat + 2 scientists at {target.displayName} (water)");
+                                Puts($"{LogPrefix} Spawned scientist boat (RHIB or PT) at {target.displayName} (water)");
                             }
                             else
                             {
-                                BroadcastChat(ChatMsg($"{viewerName} tried to send a scientist boat but spawn failed. Set RowboatPrefabPath in config."));
-                                PrintWarning($"{LogPrefix} Rowboat spawn failed for scientistboat. Set RowboatPrefabPath in oxide/config/RustMaxxTikTrigger.json (e.g. from PrefabSniffer or debug.lookingat).");
+                                BroadcastChat(ChatMsg($"{viewerName} tried to send a scientist boat but spawn failed. Check ScientistRhibPrefabPath / ScientistPtBoatPrefabPath in config."));
+                                PrintWarning($"{LogPrefix} Scientist boat spawn failed. Set ScientistRhibPrefabPath or ScientistPtBoatPrefabPath in oxide/config/RustMaxxTikTrigger.json if paths differ on your build.");
                             }
                         }
                         else
@@ -529,25 +529,27 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Spawn a rowboat at position (e.g. in water). Used for scientistboat. If config RowboatPrefabPath is set, that path is tried first.
+        /// Spawn a scientist boat (RHIB or PT boat variant with AI and turrets) at position in water.
+        /// Tries config overrides first, then Scientist RHIB, then Scientist PT Boat prefabs.
         /// </summary>
-        private static bool SpawnRowboat(Vector3 position, string configRowboatPath = null)
+        private static bool SpawnScientistBoat(Vector3 position, string configRhibPath = null, string configPtBoatPath = null)
         {
             if (position == Vector3.zero) return false;
-            if (!string.IsNullOrWhiteSpace(configRowboatPath))
+
+            if (!string.IsNullOrWhiteSpace(configRhibPath))
             {
-                BaseEntity entity = GameManager.server.CreateEntity(configRowboatPath.Trim(), position, Quaternion.identity, true);
-                if (entity != null)
-                {
-                    entity.Spawn();
-                    return true;
-                }
+                BaseEntity entity = GameManager.server.CreateEntity(configRhibPath.Trim(), position, Quaternion.identity, true);
+                if (entity != null) { entity.Spawn(); return true; }
             }
+            if (!string.IsNullOrWhiteSpace(configPtBoatPath))
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(configPtBoatPath.Trim(), position, Quaternion.identity, true);
+                if (entity != null) { entity.Spawn(); return true; }
+            }
+
             string[] prefabs = {
-                "assets/content/vehicles/boats/rowboat/rowboat.prefab",
-                "assets/prefabs/boats/rowboat/rowboat.prefab",
-                "assets/bundled/prefabs/content/vehicles/boats/rowboat.prefab",
-                "assets/content/vehicles/boats/rowboat.prefab"
+                "assets/content/vehicles/boats/rhib/rhib_scientist.prefab",
+                "assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab"
             };
             foreach (string path in prefabs)
             {
