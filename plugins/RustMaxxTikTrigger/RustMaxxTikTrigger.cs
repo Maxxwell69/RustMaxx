@@ -591,8 +591,17 @@ namespace Oxide.Plugins
             }
 
             string[] prefabs = {
+                // Naval Update scientist patrol boats (newer builds)
                 "assets/content/vehicles/boats/rhib/rhib_scientist.prefab",
-                "assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab"
+                "assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab",
+
+                // Common legacy / alternate locations (server builds differ)
+                "assets/content/vehicles/boats/rhib/rhib.prefab",
+                "assets/content/vehicles/boats/ptboat/ptboat.prefab",
+                "assets/prefabs/boats/rhib/rhib_scientist.prefab",
+                "assets/prefabs/boats/rhib/rhib.prefab",
+                "assets/prefabs/boats/ptboat/ptboat_scientist.prefab",
+                "assets/prefabs/boats/ptboat/ptboat.prefab"
             };
             foreach (string path in prefabs)
             {
@@ -603,25 +612,53 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
+            UnityEngine.Debug.LogWarning("[RustMaxxTikTrigger] Scientist boat spawn failed. Your server build likely doesn't include these prefabs. " +
+                                         "Set ScientistRhibPrefabPath / ScientistPtBoatPrefabPath in oxide/config/RustMaxxTikTrigger.json to your correct prefab paths. " +
+                                         "To find them: look at a spawned patrol boat and run 'debug.lookingat' in F1, or use PrefabSniffer 'prefab find rhib' / 'prefab find ptboat'.");
             return false;
         }
 
         private static bool SpawnScientistRhib(Vector3 position, string configRhibPath = null)
         {
-            return SpawnScientistBoat(position, configRhibPath, null);
+            if (position == Vector3.zero) return false;
+            if (!string.IsNullOrWhiteSpace(configRhibPath))
+            {
+                BaseEntity e = GameManager.server.CreateEntity(configRhibPath.Trim(), position, Quaternion.identity, true);
+                if (e != null) { e.Spawn(); return true; }
+            }
+            string[] prefabs = {
+                "assets/content/vehicles/boats/rhib/rhib_scientist.prefab",
+                "assets/prefabs/boats/rhib/rhib_scientist.prefab",
+                "assets/content/vehicles/boats/rhib/rhib.prefab",
+                "assets/prefabs/boats/rhib/rhib.prefab"
+            };
+            foreach (string p in prefabs)
+            {
+                BaseEntity e = GameManager.server.CreateEntity(p, position, Quaternion.identity, true);
+                if (e != null) { e.Spawn(); return true; }
+            }
+            return false;
         }
 
         private static bool SpawnScientistPtBoat(Vector3 position, string configPtBoatPath = null)
         {
-            // Prefer PT override, but keep RHIB null so we don't spawn RHIB by mistake.
             if (position == Vector3.zero) return false;
             if (!string.IsNullOrWhiteSpace(configPtBoatPath))
             {
                 BaseEntity entity = GameManager.server.CreateEntity(configPtBoatPath.Trim(), position, Quaternion.identity, true);
                 if (entity != null) { entity.Spawn(); return true; }
             }
-            BaseEntity fallback = GameManager.server.CreateEntity("assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab", position, Quaternion.identity, true);
-            if (fallback != null) { fallback.Spawn(); return true; }
+            string[] prefabs = {
+                "assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab",
+                "assets/prefabs/boats/ptboat/ptboat_scientist.prefab",
+                "assets/content/vehicles/boats/ptboat/ptboat.prefab",
+                "assets/prefabs/boats/ptboat/ptboat.prefab"
+            };
+            foreach (string p in prefabs)
+            {
+                BaseEntity e = GameManager.server.CreateEntity(p, position, Quaternion.identity, true);
+                if (e != null) { e.Spawn(); return true; }
+            }
             return false;
         }
 
