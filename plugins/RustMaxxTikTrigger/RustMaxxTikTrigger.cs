@@ -428,10 +428,28 @@ namespace Oxide.Plugins
                     at(9f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(BoarPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): pig"); } });
                     break;
                 case ChaosLocation.Sea:
-                    at(2f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark"); } });
-                    at(5f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark 2"); } });
-                    at(8f, () => { var t = GetStreamer(); if (t != null) { SpawnEffect(EffectFireworks, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Sea): fireworks"); } });
-                    at(11f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark 3"); } });
+                    // Sea Battle: spawn Deep Sea patrol boats with scientists (RHIB + PT boat)
+                    at(2f, () =>
+                    {
+                        var t = GetStreamer();
+                        if (t == null) return;
+                        if (SpawnScientistRhib(GetPositionNear(t), _config?.ScientistRhibPrefabPath))
+                            Puts($"{LogPrefix} Chaos (Sea Battle): scientist RHIB");
+                    });
+                    at(6f, () =>
+                    {
+                        var t = GetStreamer();
+                        if (t == null) return;
+                        if (SpawnScientistPtBoat(GetPositionNear(t), _config?.ScientistPtBoatPrefabPath))
+                            Puts($"{LogPrefix} Chaos (Sea Battle): scientist PT boat");
+                    });
+                    at(10f, () =>
+                    {
+                        var t = GetStreamer();
+                        if (t == null) return;
+                        if (SpawnScientistRhib(GetPositionNear(t), _config?.ScientistRhibPrefabPath))
+                            Puts($"{LogPrefix} Chaos (Sea Battle): scientist RHIB 2");
+                    });
                     break;
                 case ChaosLocation.Swimming:
                     at(1f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): 2 sharks"); } });
@@ -586,6 +604,25 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
+            return false;
+        }
+
+        private static bool SpawnScientistRhib(Vector3 position, string configRhibPath = null)
+        {
+            return SpawnScientistBoat(position, configRhibPath, null);
+        }
+
+        private static bool SpawnScientistPtBoat(Vector3 position, string configPtBoatPath = null)
+        {
+            // Prefer PT override, but keep RHIB null so we don't spawn RHIB by mistake.
+            if (position == Vector3.zero) return false;
+            if (!string.IsNullOrWhiteSpace(configPtBoatPath))
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(configPtBoatPath.Trim(), position, Quaternion.identity, true);
+                if (entity != null) { entity.Spawn(); return true; }
+            }
+            BaseEntity fallback = GameManager.server.CreateEntity("assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab", position, Quaternion.identity, true);
+            if (fallback != null) { fallback.Spawn(); return true; }
             return false;
         }
 
