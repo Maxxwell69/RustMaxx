@@ -376,17 +376,23 @@ namespace Oxide.Plugins
             // assets/prefabs/building boat/hull.square/hull_square.wood.prefab (ShortPrefabName: hull_square_wood)
             try
             {
-                // Some Rust builds don't expose GetGroundEntity() on BasePlayer.
-                // Use parent entity (standing on / attached to) as a reliable fallback.
-                BaseEntity parent = player.GetParentEntity() as BaseEntity;
-                if (parent != null)
+                // Parent entity is often null when merely standing on a surface.
+                // Raycast down to identify the entity directly under the player's feet.
+                var origin = player.transform.position + Vector3.up * 0.25f;
+                RaycastHit hit;
+                // Use all layers to avoid build-specific layer constants.
+                if (Physics.Raycast(origin, Vector3.down, out hit, 4f, ~0, QueryTriggerInteraction.Ignore))
                 {
-                    string shortName = parent.ShortPrefabName ?? "";
-                    string prefabName = parent.PrefabName ?? "";
-                    if (shortName.IndexOf("hull_", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        prefabName.IndexOf("building boat/hull", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        prefabName.IndexOf("building_boat/hull", StringComparison.OrdinalIgnoreCase) >= 0)
-                        return ChaosLocation.Sea;
+                    BaseEntity under = hit.collider != null ? hit.collider.GetComponentInParent<BaseEntity>() : null;
+                    if (under != null)
+                    {
+                        string shortName = under.ShortPrefabName ?? "";
+                        string prefabName = under.PrefabName ?? "";
+                        if (shortName.IndexOf("hull_", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            prefabName.IndexOf("building boat/hull", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            prefabName.IndexOf("building_boat/hull", StringComparison.OrdinalIgnoreCase) >= 0)
+                            return ChaosLocation.Sea;
+                    }
                 }
             }
             catch { }
