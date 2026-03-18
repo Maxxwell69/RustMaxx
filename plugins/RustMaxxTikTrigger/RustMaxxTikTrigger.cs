@@ -371,6 +371,24 @@ namespace Oxide.Plugins
                 }
             }
 
+            // Modular boats (Naval Update): treat standing on a hull piece as "Sea"
+            // Example from debug.lookingat:
+            // assets/prefabs/building boat/hull.square/hull_square.wood.prefab (ShortPrefabName: hull_square_wood)
+            try
+            {
+                BaseEntity ground = player.GetGroundEntity() as BaseEntity;
+                if (ground != null)
+                {
+                    string shortName = ground.ShortPrefabName ?? "";
+                    string prefabName = ground.PrefabName ?? "";
+                    if (shortName.IndexOf("hull_", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        prefabName.IndexOf("building boat/hull", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        prefabName.IndexOf("building_boat/hull", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return ChaosLocation.Sea;
+                }
+            }
+            catch { }
+
             if (player.IsSwimming())
                 return ChaosLocation.Swimming;
 
