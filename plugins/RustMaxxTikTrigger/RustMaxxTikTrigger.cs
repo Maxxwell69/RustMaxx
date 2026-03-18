@@ -63,7 +63,7 @@ namespace Oxide.Plugins
         private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat" };
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
-        private enum ChaosLocation { Land, Sea, Swimming }
+        private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
 
         // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
         private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
@@ -236,7 +236,7 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         ChaosLocation loc = GetStreamerChaosLocation(target);
-                        if (loc == ChaosLocation.Sea || loc == ChaosLocation.Swimming)
+                        if (loc == ChaosLocation.Sea || loc == ChaosLocation.Swimming || loc == ChaosLocation.ModularBoat)
                         {
                             Vector3 waterPos = target.transform.position;
                             if (SpawnScientistBoat(waterPos, _config?.ScientistRhibPrefabPath, _config?.ScientistPtBoatPrefabPath))
@@ -391,7 +391,7 @@ namespace Oxide.Plugins
                         if (shortName.IndexOf("hull_", StringComparison.OrdinalIgnoreCase) >= 0 ||
                             prefabName.IndexOf("building boat/hull", StringComparison.OrdinalIgnoreCase) >= 0 ||
                             prefabName.IndexOf("building_boat/hull", StringComparison.OrdinalIgnoreCase) >= 0)
-                            return ChaosLocation.Sea;
+                            return ChaosLocation.ModularBoat;
                     }
                 }
             }
@@ -435,27 +435,24 @@ namespace Oxide.Plugins
                     break;
                 case ChaosLocation.Swimming:
                     at(1f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): 2 sharks"); } });
-                    // Sea Battle: spawn Deep Sea patrol boats with scientists (RHIB + PT boat) while streamer is swimming
-                    at(4f, () =>
+                    at(4f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): shark"); } });
+                    at(7f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): shark"); } });
+                    break;
+                case ChaosLocation.ModularBoat:
+                    // Standing on modular boat hull: port in patrol boats (scientist RHIB + PT boat)
+                    at(2f, () =>
                     {
                         var t = GetStreamer();
                         if (t == null) return;
                         if (SpawnScientistRhib(GetPositionNear(t), _config?.ScientistRhibPrefabPath))
-                            Puts($"{LogPrefix} Chaos (Swimming Sea Battle): scientist RHIB");
+                            Puts($"{LogPrefix} Chaos (Modular Boat): scientist RHIB");
                     });
-                    at(8f, () =>
+                    at(6f, () =>
                     {
                         var t = GetStreamer();
                         if (t == null) return;
                         if (SpawnScientistPtBoat(GetPositionNear(t), _config?.ScientistPtBoatPrefabPath))
-                            Puts($"{LogPrefix} Chaos (Swimming Sea Battle): scientist PT boat");
-                    });
-                    at(12f, () =>
-                    {
-                        var t = GetStreamer();
-                        if (t == null) return;
-                        if (SpawnScientistRhib(GetPositionNear(t), _config?.ScientistRhibPrefabPath))
-                            Puts($"{LogPrefix} Chaos (Swimming Sea Battle): scientist RHIB 2");
+                            Puts($"{LogPrefix} Chaos (Modular Boat): scientist PT boat");
                     });
                     break;
             }
