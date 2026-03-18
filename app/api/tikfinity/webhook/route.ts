@@ -153,17 +153,17 @@ export async function POST(request: NextRequest) {
       : fromPayload > 0
         ? fromPayload
         : fromDefault;
-  const giftValue = Math.min(10000, Math.max(0, rawValue));
+  // Ensure every gift generates at least 1 scrap for the streamer (coins → inventory).
+  const giftValue = Math.min(10000, Math.max(1, rawValue));
   const messageArg =
     connectionFromAdmin?.message?.trim() != null && connectionFromAdmin.message.trim() !== ""
       ? sanitizeArg(connectionFromAdmin.message.trim(), 128)
       : null;
+  // Always include scrap amount so streamer always receives coins (giftValue is min 1).
   const command =
     messageArg != null
       ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
-      : giftValue > 0
-        ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue}`
-        : `tiktrigger ${action} ${viewerArg} ${giftArg}`;
+      : `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue}`;
 
   if (giftValue > 0) {
     console.log("[tikfinity webhook] scrap:", giftValue, "fromConnection:", scrapFromConnection, "fromPayload:", fromPayload, "giftName:", payload.giftName);

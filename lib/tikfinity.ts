@@ -53,10 +53,10 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   Firework: 50,
   Fireworks: 100,
   Test: 299,
-  Likes: 0,
-  Like: 0,
-  Supply: 0,
-  "Supply Signal": 0,
+  Likes: 1,
+  Like: 1,
+  Supply: 1,
+  "Supply Signal": 1,
 };
 
 /** Human-readable description and example gifts for each action (for admin UI). */
