@@ -5,6 +5,7 @@ import Link from "next/link";
 
 type ActionMeta = {
   action: string;
+  label: string;
   description: string;
   exampleGifts: string[];
 };
@@ -210,7 +211,7 @@ export default function AdminStreamerInteractionsPage() {
           <>
             <h3 className="mt-4 text-sm font-medium text-zinc-300">Per-action URLs (by event name)</h3>
             <p className="mt-1 text-xs text-zinc-500">
-              For actions named by event (e.g. &quot;Likes&quot;, &quot;Wolf&quot;), use a dedicated URL so the server runs the right trigger even if TikFinity doesn’t send the action in the body. Add <code className="rounded bg-zinc-800 px-1">?action=likes</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, etc.
+              For actions named by event (e.g. &quot;Likes&quot;, &quot;Wolf&quot;), use a dedicated URL so the server runs the right trigger even if TikFinity doesn’t send the action in the body. Add <code className="rounded bg-zinc-800 px-1">?action=likes</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, etc.
             </p>
             <ul className="mt-2 flex flex-wrap gap-2">
               {data.availableActions.map((a) => (
@@ -226,7 +227,7 @@ export default function AdminStreamerInteractionsPage() {
                     className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
                     title={`Copy ${data!.webhookUrl!}?action=${a.action}`}
                   >
-                    {a.action}
+                    {a.label ?? a.action}
                   </button>
                 </li>
               ))}
@@ -257,7 +258,7 @@ export default function AdminStreamerInteractionsPage() {
             <tbody>
               {data.availableActions.map((a) => (
                 <tr key={a.action} className="border-b border-zinc-800/50">
-                  <td className="px-3 py-2 font-mono text-rust-cyan">{a.action}</td>
+                  <td className="px-3 py-2 font-mono text-rust-cyan">{a.label ?? a.action}</td>
                   <td className="px-3 py-2 text-zinc-400">{a.description}</td>
                 </tr>
               ))}
@@ -310,7 +311,7 @@ export default function AdminStreamerInteractionsPage() {
                 className="mt-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
               >
                 {data.availableActions.map((a) => (
-                  <option key={a.action} value={a.action}>{a.action}</option>
+                  <option key={a.action} value={a.action}>{a.label ?? a.action}</option>
                 ))}
               </select>
             </div>
@@ -489,7 +490,7 @@ export default function AdminStreamerInteractionsPage() {
             <tbody>
               {data.availableActions.map((a) => (
                 <tr key={a.action} className="border-b border-zinc-800/50">
-                  <td className="px-4 py-3 font-mono text-rust-cyan">{a.action}</td>
+                  <td className="px-4 py-3 font-mono text-rust-cyan">{a.label ?? a.action}</td>
                   <td className="px-4 py-3 text-zinc-300">{a.description}</td>
                   <td className="px-4 py-3 text-zinc-400">
                     {a.exampleGifts.join(", ") || "—"}

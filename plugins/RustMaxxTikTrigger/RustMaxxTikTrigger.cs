@@ -54,7 +54,8 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustMaxxTikTrigger]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "npcwave", "wolf", "supply", "likes" };
+        // scientist = one scientist behind streamer.
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "supply", "likes" };
 
         // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
         private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
@@ -154,11 +155,21 @@ namespace Oxide.Plugins
                     }
                     break;
 
-                case "npcwave":
+                case "scientist":
+                    // One single scientist spawned behind the streamer.
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        SpawnNPC(ScientistPrefab, GetPositionNear(target));
+                        Vector3 scientistPos = GetPositionBehind(target);
+                        if (scientistPos != Vector3.zero)
+                        {
+                            SpawnNPC(ScientistPrefab, scientistPos);
+                            Puts($"{LogPrefix} Spawned 1 scientist behind {target.displayName} at {scientistPos}");
+                        }
+                        else
+                        {
+                            Puts($"{LogPrefix} GetPositionBehind returned zero; scientist not spawned.");
+                        }
                     }
                     break;
 
@@ -226,7 +237,7 @@ namespace Oxide.Plugins
 
         private static bool ActionRequiresPlayer(string action)
         {
-            return action == "smoke" || action == "fireworks" || action == "npcwave" || action == "wolf" || action == "supply" || action == "likes";
+            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "supply" || action == "likes";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -240,6 +251,31 @@ namespace Oxide.Plugins
             offset.Normalize();
             float distance = 4f + UnityEngine.Random.Range(0f, 3f);
             return pos + offset * distance;
+        }
+
+        /// <summary>
+        /// Position a few meters behind the player (based on their look direction). Used for scientist spawn so they appear behind the streamer.
+        /// Falls back to position near player if look direction is invalid.
+        /// </summary>
+        private static Vector3 GetPositionBehind(BasePlayer player)
+        {
+            if (player == null || !player.IsValid()) return Vector3.zero;
+            Vector3 pos = player.transform.position;
+            Vector3 forward = Vector3.zero;
+            try
+            {
+                if (player.eyes != null)
+                    forward = player.eyes.HeadForward();
+            }
+            catch { }
+            if (forward.sqrMagnitude < 0.01f)
+                forward = -player.transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                return GetPositionNear(player);
+            forward.Normalize();
+            float distance = 4f + UnityEngine.Random.Range(0f, 2f);
+            return pos - forward * distance;
         }
 
         #endregion
@@ -281,7 +317,13 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(prefabPath) || position == Vector3.zero) return;
             BaseEntity entity = GameManager.server.CreateEntity(prefabPath, position, Quaternion.identity, true);
             if (entity != null)
+            {
                 entity.Spawn();
+            }
+            else
+            {
+                UnityEngine.Debug.LogWarning($"[RustMaxxTikTrigger] CreateEntity failed for {prefabPath} at {position}");
+            }
         }
 
         /// <summary>

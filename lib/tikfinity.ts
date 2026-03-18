@@ -9,7 +9,7 @@ export const TIKTRIGGER_ACTIONS = [
   "rose",
   "smoke",
   "fireworks",
-  "npcwave",
+  "scientist",
   "wolf",
   "supply",
   "likes",
@@ -25,8 +25,8 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Smoke: "smoke",
   Firework: "fireworks",
   Fireworks: "fireworks",
-  Galaxy: "npcwave",
-  "Galaxy Gift": "npcwave",
+  Galaxy: "scientist",
+  "Galaxy Gift": "scientist",
   Puppy: "wolf",
   "Puppy Kisses": "wolf",
   Wolf: "wolf",
@@ -37,6 +37,7 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Like: "likes",
   Supply: "supply",
   "Supply Signal": "supply",
+  Scientist: "scientist",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -47,6 +48,7 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   Roses: 5,
   Galaxy: 999,
   "Galaxy Gift": 999,
+  Scientist: 299,
   "Finger Heart": 1,
   Smoke: 5,
   "Smoke Signal": 10,
@@ -59,40 +61,48 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   "Supply Signal": 1,
 };
 
-/** Human-readable description and example gifts for each action (for admin UI). */
+/** Human-readable label and description for each action (for admin UI). */
 export const ACTION_META: Record<
   TikTriggerAction,
-  { description: string; exampleGifts: string[] }
+  { label: string; description: string; exampleGifts: string[] }
 > = {
   test: {
+    label: "Test",
     description: "Test event (chat only)",
     exampleGifts: ["Test"],
   },
   rose: {
+    label: "Rose",
     description: "Thank viewer in chat",
     exampleGifts: ["Rose", "Roses"],
   },
   smoke: {
+    label: "Smoke",
     description: "Spawn smoke effect at streamer",
     exampleGifts: ["Smoke", "Smoke Signal", "Finger Heart"],
   },
   fireworks: {
+    label: "Fireworks",
     description: "Spawn fireworks effect at streamer",
     exampleGifts: ["Firework", "Fireworks"],
   },
-  npcwave: {
-    description: "Spawn scientist NPC near streamer",
-    exampleGifts: ["Galaxy", "Galaxy Gift"],
+  scientist: {
+    label: "Scientist",
+    description: "Spawn one scientist behind streamer",
+    exampleGifts: ["Galaxy", "Galaxy Gift", "Scientist"],
   },
   wolf: {
+    label: "Wolf",
     description: "Spawn wolf near streamer",
     exampleGifts: ["Puppy", "Puppy Kisses", "Wolf"],
   },
   supply: {
+    label: "Supply",
     description: "Call in airdrop at streamer (cargo plane)",
     exampleGifts: ["Supply Signal", "Supply"],
   },
   likes: {
+    label: "Likes",
     description: "Call in airdrop at streamer (e.g. from Likes event)",
     exampleGifts: ["Likes", "Like"],
   },
@@ -212,7 +222,7 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   rose: "rose",
   smoke: "smoke",
   fireworks: "fireworks",
-  npcwave: "npcwave",
+  scientist: "scientist",
   test: "test",
 };
 
@@ -243,11 +253,13 @@ export function getActionFromPayload(body: unknown): TikTriggerAction | null {
 
 export function getAvailableActionsForAdmin(): {
   action: TikTriggerAction;
+  label: string;
   description: string;
   exampleGifts: string[];
 }[] {
   return TIKTRIGGER_ACTIONS.map((action) => ({
     action,
+    label: ACTION_META[action].label,
     description: ACTION_META[action].description,
     exampleGifts: ACTION_META[action].exampleGifts,
   }));

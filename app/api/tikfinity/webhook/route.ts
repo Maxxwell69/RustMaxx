@@ -21,7 +21,7 @@ const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 const TIKFINITY_ORIGIN = "https://tikfinity.zerody.one";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": TIKFINITY_ORIGIN,
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
   "Access-Control-Max-Age": "86400",
 };
@@ -43,6 +43,11 @@ function sanitizeArg(s: string, maxLen = 48): string {
   return s.replace(/\s+/g, "_").slice(0, maxLen) || "Viewer";
 }
 
+/** GET: same as POST but with empty body (action from ?action= e.g. ?action=scientist). Lets you test from browser or TikFinity GET. */
+export async function GET(request: NextRequest) {
+  return runWebhook(request, {});
+}
+
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
@@ -55,6 +60,10 @@ export async function POST(request: NextRequest) {
   } catch {
     body = {};
   }
+  return runWebhook(request, body);
+}
+
+async function runWebhook(request: NextRequest, body: unknown) {
 
   // Action from URL query (e.g. ?action=likes) – one webhook URL per TikFinity action
   const queryAction = request.nextUrl.searchParams.get("action")?.trim().toLowerCase();
@@ -121,7 +130,12 @@ export async function POST(request: NextRequest) {
     console.error("[tikfinity webhook] TIKFINITY_SERVER_ID not set");
     return withCors(
       NextResponse.json(
-        { error: "TikFinity integration not configured", debug: "Set TIKFINITY_SERVER_ID in env." },
+        {
+          ok: false,
+          error: "TikFinity integration not configured",
+          debug: "Set TIKFINITY_SERVER_ID in .env to your Rust server's UUID (from the dashboard).",
+          step: "TIKFINITY_SERVER_ID",
+        },
         { status: 503 }
       )
     );
@@ -136,7 +150,13 @@ export async function POST(request: NextRequest) {
     console.error("[tikfinity webhook] Server not found:", TIKFINITY_SERVER_ID);
     return withCors(
       NextResponse.json(
-        { error: "TikFinity server not found", debug: "TIKFINITY_SERVER_ID does not match any server." },
+        {
+          ok: false,
+          error: "TikFinity server not found",
+          debug: "TIKFINITY_SERVER_ID does not match any server in the dashboard. Use the server's UUID.",
+          step: "server_not_found",
+          serverId: TIKFINITY_SERVER_ID,
+        },
         { status: 503 }
       )
     );
@@ -188,7 +208,13 @@ export async function POST(request: NextRequest) {
     }).catch(() => {});
     return withCors(
       NextResponse.json(
-        { error: "Could not connect to game server", debug: connected.error ?? "Check RCON host/port/password." },
+        {
+          ok: false,
+          error: "Could not connect to game server",
+          debug: connected.error ?? "Check RCON: in dashboard set the server's RCON host (IP), port (often 28082 for WebRcon), and password.",
+          step: "rcon_connect",
+          command: command,
+        },
         { status: 502 }
       )
     );
@@ -208,13 +234,19 @@ export async function POST(request: NextRequest) {
     }).catch(() => {});
     return withCors(
       NextResponse.json(
-        { error: result.error ?? "Command send failed", debug: "Connection ok but command failed.", command },
+        {
+          ok: false,
+          error: result.error ?? "Command send failed",
+          debug: "RCON connected but run failed. Check server has RustMaxxTikTrigger plugin loaded.",
+          step: "rcon_send",
+          command,
+        },
         { status: 502 }
       )
     );
   }
 
-  console.log("[tikfinity webhook]", payload.viewerName, action, payload.giftName, giftValue > 0 ? `+${giftValue} scrap` : "");
+  console.log("[tikfinity webhook] OK", { action, command, serverId: server.id });
   audit("tikfinity", "webhook.trigger", {
     viewerName: payload.viewerName,
     giftName: payload.giftName,
@@ -232,6 +264,7 @@ export async function POST(request: NextRequest) {
       giftName: payload.giftName,
       command,
       scrapAmount: giftValue > 0 ? giftValue : undefined,
+      debug: "Command sent. If scientist did not spawn: streamer must be online, plugin config StreamerName must match in-game name, and check server console for [RustMaxxTikTrigger].",
     })
   );
 }
