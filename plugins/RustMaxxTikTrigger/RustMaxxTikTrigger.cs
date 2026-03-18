@@ -14,7 +14,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("RustMaxxTikTrigger", "RustMaxx", "1.2.0")]
+    [Info("RustMaxxTikTrigger", "RustMaxx", "1.4.0")]
     [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustMaxxTikTrigger : RustPlugin
     {
@@ -54,8 +54,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustMaxxTikTrigger]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        // scientist = one scientist behind streamer.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "supply", "likes" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes" };
 
         // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
         private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
@@ -63,6 +62,8 @@ namespace Oxide.Plugins
 
         private const string ScientistPrefab = "assets/prefabs/npc/scientist/scientist.prefab";
         private const string WolfPrefab = "assets/rust.ai/agents/wolf/wolf.prefab";
+        private const string BearPrefab = "assets/rust.ai/agents/bear/bear.prefab";
+        private const string BoarPrefab = "assets/rust.ai/agents/boar/boar.prefab";
         private const string CargoPlanePrefab = "assets/prefabs/npc/cargo plane/cargo_plane.prefab";
 
         #endregion
@@ -156,20 +157,15 @@ namespace Oxide.Plugins
                     break;
 
                 case "scientist":
-                    // One single scientist spawned behind the streamer.
-                    if (target != null)
+                    if (target == null)
+                        PrintWarning($"{LogPrefix} Scientist skipped: streamer not online. Set StreamerName in config (current: '{_config?.StreamerName ?? ""}').");
+                    else
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        Vector3 scientistPos = GetPositionBehind(target);
-                        if (scientistPos != Vector3.zero)
-                        {
-                            SpawnNPC(ScientistPrefab, scientistPos);
-                            Puts($"{LogPrefix} Spawned 1 scientist behind {target.displayName} at {scientistPos}");
-                        }
-                        else
-                        {
-                            Puts($"{LogPrefix} GetPositionBehind returned zero; scientist not spawned.");
-                        }
+                        Vector3 pos = GetPositionBehind(target);
+                        if (pos == Vector3.zero) pos = GetPositionNear(target);
+                        if (pos != Vector3.zero && SpawnScientist(pos))
+                            Puts($"{LogPrefix} Spawned 1 scientist near {target.displayName}");
                     }
                     break;
 
@@ -178,6 +174,34 @@ namespace Oxide.Plugins
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
                         SpawnNPC(WolfPrefab, GetPositionNear(target));
+                        Puts($"{LogPrefix} Spawned 1 wolf near {target.displayName}");
+                    }
+                    break;
+
+                case "bear":
+                    if (target != null)
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        SpawnNPC(BearPrefab, GetPositionNear(target));
+                        Puts($"{LogPrefix} Spawned 1 bear near {target.displayName}");
+                    }
+                    break;
+
+                case "shark":
+                    if (target != null)
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        if (SpawnShark(GetPositionNear(target)))
+                            Puts($"{LogPrefix} Spawned 1 shark near {target.displayName}");
+                    }
+                    break;
+
+                case "pig":
+                    if (target != null)
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        SpawnNPC(BoarPrefab, GetPositionNear(target));
+                        Puts($"{LogPrefix} Spawned 1 pig (boar) near {target.displayName}");
                     }
                     break;
 
@@ -237,7 +261,7 @@ namespace Oxide.Plugins
 
         private static bool ActionRequiresPlayer(string action)
         {
-            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "supply" || action == "likes";
+            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "bear" || action == "shark" || action == "pig" || action == "supply" || action == "likes";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -324,6 +348,49 @@ namespace Oxide.Plugins
             {
                 UnityEngine.Debug.LogWarning($"[RustMaxxTikTrigger] CreateEntity failed for {prefabPath} at {position}");
             }
+        }
+
+        /// <summary>
+        /// Spawn one scientist at position. Tries main prefab, then fallback. Returns true if spawned.
+        /// </summary>
+        private static bool SpawnScientist(Vector3 position)
+        {
+            string[] prefabs = {
+                "assets/prefabs/npc/scientist/scientist.prefab",
+                "assets/content/npc/scientist/scientist.prefab"
+            };
+            foreach (string path in prefabs)
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(path, position, Quaternion.identity, true);
+                if (entity != null)
+                {
+                    entity.Spawn();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Spawn one shark at position (water entity; may need to be near water). Tries common prefab paths.
+        /// </summary>
+        private static bool SpawnShark(Vector3 position)
+        {
+            string[] prefabs = {
+                "assets/rust.ai/agents/greatwhite/greatwhite.prefab",
+                "assets/content/water/ocean/greatwhiteshark.prefab",
+                "assets/prefabs/npc/greatwhiteshark/greatwhiteshark.prefab"
+            };
+            foreach (string path in prefabs)
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(path, position, Quaternion.identity, true);
+                if (entity != null)
+                {
+                    entity.Spawn();
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>
