@@ -14,7 +14,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("RustMaxxTikTrigger", "RustMaxx", "1.4.0")]
+    [Info("RustMaxxTikTrigger", "RustMaxx", "1.5.0")]
     [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustMaxxTikTrigger : RustPlugin
     {
@@ -56,7 +56,10 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustMaxxTikTrigger]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos" };
+
+        /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
+        private enum ChaosLocation { Land, Sea, Swimming }
 
         // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
         private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
@@ -216,6 +219,15 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "chaos":
+                    if (target != null)
+                    {
+                        ChaosLocation loc = GetStreamerChaosLocation(target);
+                        BroadcastChat(ChatMsg($"{viewerName} triggered CHAOS! ({loc})"));
+                        RunChaosEvent(loc, viewerName, giftName, ChatMsg);
+                    }
+                    break;
+
                 default:
                     // Whitelist guarantees we don't reach here; defensive.
                     PrintWarning($"{LogPrefix} Unhandled action: {action}");
@@ -263,7 +275,7 @@ namespace Oxide.Plugins
 
         private static bool ActionRequiresPlayer(string action)
         {
-            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "bear" || action == "shark" || action == "pig" || action == "supply" || action == "likes";
+            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "bear" || action == "shark" || action == "pig" || action == "supply" || action == "likes" || action == "chaos";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -307,6 +319,73 @@ namespace Oxide.Plugins
         #endregion
 
         #region Helpers
+
+        /// <summary>
+        /// Detects streamer location for chaos event: Land (on ground), Sea (mounted on boat), or Swimming (in water, not on boat).
+        /// </summary>
+        private static ChaosLocation GetStreamerChaosLocation(BasePlayer player)
+        {
+            if (player == null || !player.IsValid()) return ChaosLocation.Land;
+
+            BaseMountable mount = player.GetMounted();
+            if (mount != null)
+            {
+                BaseEntity mountEntity = mount as BaseEntity;
+                if (mountEntity != null)
+                {
+                    string prefab = mountEntity.ShortPrefabName ?? "";
+                    if (prefab.IndexOf("boat", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        prefab.IndexOf("rhib", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        prefab.IndexOf("rowboat", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        prefab.IndexOf("submarine", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return ChaosLocation.Sea;
+                }
+            }
+
+            if (player.IsSwimming())
+                return ChaosLocation.Swimming;
+
+            return ChaosLocation.Land;
+        }
+
+        /// <summary>
+        /// Runs chaos event rules on a timer based on streamer location (Land / Sea / Swimming).
+        /// Each location has its own sequence of delayed spawns and effects.
+        /// </summary>
+        private void RunChaosEvent(ChaosLocation loc, string viewerName, string giftName, Func<string, string> chatMsg)
+        {
+            BasePlayer GetStreamer() => GetStreamerPlayer();
+
+            void at(float delaySec, Action run)
+            {
+                timer.Once(delaySec, () =>
+                {
+                    if (run == null) return;
+                    run();
+                });
+            }
+
+            switch (loc)
+            {
+                case ChaosLocation.Land:
+                    at(3f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(WolfPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): wolf"); } });
+                    at(6f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(BearPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): bear"); } });
+                    at(9f, () => { var t = GetStreamer(); if (t != null) { SpawnEffect(EffectSmoke, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): smoke"); } });
+                    at(12f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(BoarPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): pig"); } });
+                    break;
+                case ChaosLocation.Sea:
+                    at(2f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark"); } });
+                    at(5f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark 2"); } });
+                    at(8f, () => { var t = GetStreamer(); if (t != null) { SpawnEffect(EffectFireworks, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Sea): fireworks"); } });
+                    at(11f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark 3"); } });
+                    break;
+                case ChaosLocation.Swimming:
+                    at(1f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): 2 sharks"); } });
+                    at(4f, () => { var t = GetStreamer(); if (t != null) { SpawnEffect(EffectSmoke, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Swimming): smoke"); } });
+                    at(7f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): shark"); } });
+                    break;
+            }
+        }
 
         /// <summary>
         /// Returns the streamer (player whose display name matches config). Effects and NPCs spawn at/near this player.
