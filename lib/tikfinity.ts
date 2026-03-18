@@ -1,9 +1,9 @@
 /**
- * TikFinity webhook handling: gift name → RustMaxxTikTrigger action mapping.
+ * TikFinity webhook handling: gift name → RustChaos action mapping.
  * Used by the webhook endpoint and by the admin action-maps API.
  */
 
-/** Actions supported by RustMaxxTikTrigger plugin (must match plugin whitelist). */
+/** Actions supported by RustChaos plugin (must match plugin whitelist). */
 export const TIKTRIGGER_ACTIONS = [
   "test",
   "rose",

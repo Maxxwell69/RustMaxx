@@ -186,7 +186,7 @@ export default function AdminStreamerInteractionsPage() {
 
       <p className="text-zinc-400">
         Use this URL in TikFinity when creating an action: choose <strong>Trigger WebHook</strong> and
-        set the webhook URL below. Gifts are mapped to RustMaxxTikTrigger actions as shown in the tables.
+        set the webhook URL below. Gifts are mapped to RustChaos actions as shown in the tables.
       </p>
 
       {/* Webhook URL */}
@@ -479,7 +479,7 @@ export default function AdminStreamerInteractionsPage() {
       {/* Available actions */}
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-4 py-3">
-          <h2 className="text-lg font-medium text-zinc-200">Available actions (RustMaxxTikTrigger)</h2>
+          <h2 className="text-lg font-medium text-zinc-200">Available actions (RustChaos)</h2>
           <p className="mt-1 text-sm text-zinc-500">
             These are the actions you can map TikTok gifts to. Set up matching triggers in TikFinity.
           </p>

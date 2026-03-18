@@ -182,8 +182,8 @@ async function runWebhook(request: NextRequest, body: unknown) {
   // Always include scrap amount so streamer always receives coins (giftValue is min 1).
   const command =
     messageArg != null
-      ? `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
-      : `tiktrigger ${action} ${viewerArg} ${giftArg} ${giftValue}`;
+      ? `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
+      : `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue}`;
 
   if (giftValue > 0) {
     console.log("[tikfinity webhook] scrap:", giftValue, "fromConnection:", scrapFromConnection, "fromPayload:", fromPayload, "giftName:", payload.giftName);
@@ -237,7 +237,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
         {
           ok: false,
           error: result.error ?? "Command send failed",
-          debug: "RCON connected but run failed. Check server has RustMaxxTikTrigger plugin loaded.",
+          debug: "RCON connected but run failed. Check server has RustChaos plugin loaded.",
           step: "rcon_send",
           command,
         },
@@ -264,7 +264,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
       giftName: payload.giftName,
       command,
       scrapAmount: giftValue > 0 ? giftValue : undefined,
-      debug: "Command sent. If scientist did not spawn: streamer must be online, plugin config StreamerName must match in-game name, and check server console for [RustMaxxTikTrigger].",
+      debug: "Command sent. If scientist did not spawn: streamer must be online, plugin config StreamerName must match in-game name, and check server console for [RustChaos].",
     })
   );
 }

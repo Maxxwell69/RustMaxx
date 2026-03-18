@@ -14,4 +14,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tikfinity_connections_name_lower
 CREATE INDEX IF NOT EXISTS idx_tikfinity_connections_created
   ON tikfinity_connections (created_at DESC);
 
-COMMENT ON TABLE tikfinity_connections IS 'Admin map: TikFinity event/action name → RustMaxxTikTrigger action (test, rose, smoke, etc.)';
+COMMENT ON TABLE tikfinity_connections IS 'Admin map: TikFinity event/action name → RustChaos action (test, rose, smoke, etc.)';

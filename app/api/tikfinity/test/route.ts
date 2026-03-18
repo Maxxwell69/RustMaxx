@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
   const giftArg = sanitizeArg(giftName);
   // Ensure every gift gives at least 1 scrap to streamer (same as webhook).
   const scrapAmount = Math.min(10000, Math.max(1, typeof body.amount === "number" ? body.amount : getDefaultGiftValue(giftName)));
-  const command = `tiktrigger ${action} ${viewerArg} ${giftArg} ${scrapAmount}`;
+  const command = `rustchaos ${action} ${viewerArg} ${giftArg} ${scrapAmount}`;
 
   const connected = await ensureConnection(
     server.id,

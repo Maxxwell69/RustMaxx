@@ -1,22 +1,22 @@
-// RustMaxxTikTrigger - uMod/Oxide plugin for Rust
+// RustChaos - uMod/Oxide plugin for Rust
 //
 // Purpose: Safe command interface for external systems (e.g. webhook listener connected to TikFinity)
 // to trigger controlled in-game events via RCON.
 //
 // Webhook flow:
-//   TikFinity → webhook listener → RCON command → tiktrigger <action> <viewerName> <giftName>
-//   → RustMaxxTikTrigger executes the whitelisted action (effects, chat, NPC spawn).
+//   TikFinity → webhook listener → RCON command → rustchaos <action> <viewerName> <giftName>
+//   → RustChaos executes the whitelisted action (effects, chat, NPC spawn).
 //
-// Install: copy RustMaxxTikTrigger.cs into servers/Rust/oxide/plugins/
+// Install: copy this file into servers/Rust/oxide/plugins/
 
 using System;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("RustMaxxTikTrigger", "RustMaxx", "1.7.0")]
-    [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
-    public class RustMaxxTikTrigger : RustPlugin
+    [Info("RustChaos", "RustMaxx", "1.7.0")]
+    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
+    public class RustChaos : RustPlugin
     {
         #region Configuration
 
@@ -57,7 +57,7 @@ namespace Oxide.Plugins
 
         #region Constants
 
-        private const string LogPrefix = "[RustMaxxTikTrigger]";
+        private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
         private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat" };
@@ -79,8 +79,8 @@ namespace Oxide.Plugins
 
         #region Command
 
-        [ConsoleCommand("tiktrigger")]
-        private void CmdTikTrigger(ConsoleSystem.Arg arg)
+        [ConsoleCommand("rustchaos")]
+        private void CmdRustChaos(ConsoleSystem.Arg arg)
         {
             // Only allow from server console or RCON (no in-game player execution).
             if (arg.Connection != null)
@@ -91,7 +91,7 @@ namespace Oxide.Plugins
 
             if (!arg.HasArgs(3))
             {
-                arg.ReplyWith("Usage: tiktrigger <action> <viewerName> <giftName> [scrapAmount] [customMessage]");
+                arg.ReplyWith("Usage: rustchaos <action> <viewerName> <giftName> [scrapAmount] [customMessage]");
                 return;
             }
 
@@ -247,7 +247,7 @@ namespace Oxide.Plugins
                             else
                             {
                                 BroadcastChat(ChatMsg($"{viewerName} tried to send a scientist boat but spawn failed. Check ScientistRhibPrefabPath / ScientistPtBoatPrefabPath in config."));
-                                PrintWarning($"{LogPrefix} Scientist boat spawn failed. Set ScientistRhibPrefabPath or ScientistPtBoatPrefabPath in oxide/config/RustMaxxTikTrigger.json if paths differ on your build.");
+                                PrintWarning($"{LogPrefix} Scientist boat spawn failed. Set ScientistRhibPrefabPath or ScientistPtBoatPrefabPath in oxide/config/RustChaos.json if paths differ on your build.");
                             }
                         }
                         else
@@ -498,7 +498,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                UnityEngine.Debug.LogWarning($"[RustMaxxTikTrigger] CreateEntity failed for {prefabPath} at {position}");
+                UnityEngine.Debug.LogWarning($"[RustChaos] CreateEntity failed for {prefabPath} at {position}");
             }
         }
 
@@ -567,7 +567,7 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
-            UnityEngine.Debug.LogWarning($"[RustMaxxTikTrigger] Shark spawn failed. Set SharkPrefabPath in config (oxide/config/RustMaxxTikTrigger.json) to your shark prefab path. To find it: install PrefabSniffer and run 'prefab find shark', or look at a shark in-game and run 'debug.lookingat' in F1.");
+            UnityEngine.Debug.LogWarning($"[RustChaos] Shark spawn failed. Set SharkPrefabPath in config (oxide/config/RustChaos.json) to your shark prefab path. To find it: install PrefabSniffer and run 'prefab find shark', or look at a shark in-game and run 'debug.lookingat' in F1.");
             return false;
         }
 
@@ -616,8 +616,8 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
-            UnityEngine.Debug.LogWarning("[RustMaxxTikTrigger] Scientist boat spawn failed. Your server build likely doesn't include these prefabs. " +
-                                         "Set ScientistRhibPrefabPath / ScientistPtBoatPrefabPath in oxide/config/RustMaxxTikTrigger.json to your correct prefab paths. " +
+            UnityEngine.Debug.LogWarning("[RustChaos] Scientist boat spawn failed. Your server build likely doesn't include these prefabs. " +
+                                         "Set ScientistRhibPrefabPath / ScientistPtBoatPrefabPath in oxide/config/RustChaos.json to your correct prefab paths. " +
                                          "To find them: look at a spawned patrol boat and run 'debug.lookingat' in F1, or use PrefabSniffer 'prefab find rhib' / 'prefab find ptboat'.");
             return false;
         }
