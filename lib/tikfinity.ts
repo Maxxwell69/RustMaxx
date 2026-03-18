@@ -17,6 +17,7 @@ export const TIKTRIGGER_ACTIONS = [
   "supply",
   "likes",
   "chaos",
+  "scientistboat",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
@@ -46,6 +47,8 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Supply: "supply",
   "Supply Signal": "supply",
   Chaos: "chaos",
+  "Scientist Boat": "scientistboat",
+  ScientistBoat: "scientistboat",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -72,6 +75,8 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   Supply: 1,
   "Supply Signal": 1,
   Chaos: 50,
+  "Scientist Boat": 150,
+  ScientistBoat: 150,
 };
 
 /** Human-readable label and description for each action (for admin UI). */
@@ -138,6 +143,11 @@ export const ACTION_META: Record<
     label: "Chaos",
     description: "Detects land/sea/swimming and runs timed spawns and effects",
     exampleGifts: ["Chaos"],
+  },
+  scientistboat: {
+    label: "Scientist Boat",
+    description: "Spawn rowboat + 2 scientists in water (streamer must be swimming or on boat)",
+    exampleGifts: ["Scientist Boat", "ScientistBoat"],
   },
 };
 
@@ -261,6 +271,7 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   scientist: "scientist",
   test: "test",
   chaos: "chaos",
+  scientistboat: "scientistboat",
 };
 
 /** Get raw action/event name from body (action, actionName, or event) for admin-connection lookup. */

@@ -14,7 +14,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("RustMaxxTikTrigger", "RustMaxx", "1.5.0")]
+    [Info("RustMaxxTikTrigger", "RustMaxx", "1.6.0")]
     [Description("RCON-only command for TikFinity webhook: tiktrigger <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustMaxxTikTrigger : RustPlugin
     {
@@ -25,6 +25,8 @@ namespace Oxide.Plugins
             public string StreamerName { get; set; } = "pirate maxx";
             /// <summary>Optional. If your Rust build uses a different shark prefab path, set it here (e.g. from PrefabSniffer or debug.lookingat). Leave empty to use built-in list.</summary>
             public string SharkPrefabPath { get; set; } = "";
+            /// <summary>Optional. If your Rust build uses a different rowboat prefab path for scientistboat, set it here. Leave empty to use built-in list.</summary>
+            public string RowboatPrefabPath { get; set; } = "";
         }
 
         private PluginConfig _config;
@@ -56,7 +58,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustMaxxTikTrigger]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat" };
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
         private enum ChaosLocation { Land, Sea, Swimming }
@@ -228,6 +230,33 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "scientistboat":
+                    if (target != null)
+                    {
+                        ChaosLocation loc = GetStreamerChaosLocation(target);
+                        if (loc == ChaosLocation.Sea || loc == ChaosLocation.Swimming)
+                        {
+                            Vector3 waterPos = target.transform.position;
+                            if (SpawnRowboat(waterPos, _config?.RowboatPrefabPath))
+                            {
+                                SpawnScientist(waterPos);
+                                SpawnScientist(waterPos);
+                                BroadcastChat(ChatMsg($"{viewerName} sent a scientist boat!"));
+                                Puts($"{LogPrefix} Spawned rowboat + 2 scientists at {target.displayName} (water)");
+                            }
+                            else
+                            {
+                                BroadcastChat(ChatMsg($"{viewerName} tried to send a scientist boat but spawn failed. Set RowboatPrefabPath in config."));
+                                PrintWarning($"{LogPrefix} Rowboat spawn failed for scientistboat. Set RowboatPrefabPath in oxide/config/RustMaxxTikTrigger.json (e.g. from PrefabSniffer or debug.lookingat).");
+                            }
+                        }
+                        else
+                        {
+                            BroadcastChat(ChatMsg($"Scientist boat requires streamer to be in water (sea or swimming). {viewerName} sent {giftName}!"));
+                        }
+                    }
+                    break;
+
                 default:
                     // Whitelist guarantees we don't reach here; defensive.
                     PrintWarning($"{LogPrefix} Unhandled action: {action}");
@@ -275,7 +304,7 @@ namespace Oxide.Plugins
 
         private static bool ActionRequiresPlayer(string action)
         {
-            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "bear" || action == "shark" || action == "pig" || action == "supply" || action == "likes" || action == "chaos";
+            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "bear" || action == "shark" || action == "pig" || action == "supply" || action == "likes" || action == "chaos" || action == "scientistboat";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -496,6 +525,39 @@ namespace Oxide.Plugins
                 }
             }
             UnityEngine.Debug.LogWarning($"[RustMaxxTikTrigger] Shark spawn failed. Set SharkPrefabPath in config (oxide/config/RustMaxxTikTrigger.json) to your shark prefab path. To find it: install PrefabSniffer and run 'prefab find shark', or look at a shark in-game and run 'debug.lookingat' in F1.");
+            return false;
+        }
+
+        /// <summary>
+        /// Spawn a rowboat at position (e.g. in water). Used for scientistboat. If config RowboatPrefabPath is set, that path is tried first.
+        /// </summary>
+        private static bool SpawnRowboat(Vector3 position, string configRowboatPath = null)
+        {
+            if (position == Vector3.zero) return false;
+            if (!string.IsNullOrWhiteSpace(configRowboatPath))
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(configRowboatPath.Trim(), position, Quaternion.identity, true);
+                if (entity != null)
+                {
+                    entity.Spawn();
+                    return true;
+                }
+            }
+            string[] prefabs = {
+                "assets/content/vehicles/boats/rowboat/rowboat.prefab",
+                "assets/prefabs/boats/rowboat/rowboat.prefab",
+                "assets/bundled/prefabs/content/vehicles/boats/rowboat.prefab",
+                "assets/content/vehicles/boats/rowboat.prefab"
+            };
+            foreach (string path in prefabs)
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(path, position, Quaternion.identity, true);
+                if (entity != null)
+                {
+                    entity.Spawn();
+                    return true;
+                }
+            }
             return false;
         }
 
