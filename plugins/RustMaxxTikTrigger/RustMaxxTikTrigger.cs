@@ -596,8 +596,12 @@ namespace Oxide.Plugins
                 "assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab",
 
                 // Common legacy / alternate locations (server builds differ)
+                "assets/content/vehicles/boats/rhib/rhib.deepsea.prefab",
+                "assets/content/vehicles/boats/ptboat/ptboat.deepsea.prefab",
                 "assets/content/vehicles/boats/rhib/rhib.prefab",
                 "assets/content/vehicles/boats/ptboat/ptboat.prefab",
+                "assets/content/vehicles/boats/rhib/rhibaidriver.prefab",
+                "assets/content/vehicles/boats/ptboat/ptboataidriver.prefab",
                 "assets/prefabs/boats/rhib/rhib_scientist.prefab",
                 "assets/prefabs/boats/rhib/rhib.prefab",
                 "assets/prefabs/boats/ptboat/ptboat_scientist.prefab",
@@ -629,7 +633,9 @@ namespace Oxide.Plugins
             string[] prefabs = {
                 "assets/content/vehicles/boats/rhib/rhib_scientist.prefab",
                 "assets/prefabs/boats/rhib/rhib_scientist.prefab",
+                "assets/content/vehicles/boats/rhib/rhib.deepsea.prefab",
                 "assets/content/vehicles/boats/rhib/rhib.prefab",
+                "assets/content/vehicles/boats/rhib/rhibaidriver.prefab",
                 "assets/prefabs/boats/rhib/rhib.prefab"
             };
             foreach (string p in prefabs)
@@ -651,7 +657,9 @@ namespace Oxide.Plugins
             string[] prefabs = {
                 "assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab",
                 "assets/prefabs/boats/ptboat/ptboat_scientist.prefab",
+                "assets/content/vehicles/boats/ptboat/ptboat.deepsea.prefab",
                 "assets/content/vehicles/boats/ptboat/ptboat.prefab",
+                "assets/content/vehicles/boats/ptboat/ptboataidriver.prefab",
                 "assets/prefabs/boats/ptboat/ptboat.prefab"
             };
             foreach (string p in prefabs)
