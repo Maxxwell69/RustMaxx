@@ -389,6 +389,8 @@ namespace Oxide.Plugins
                 }
             }
             string[] prefabs = {
+                // Known working path from your server:
+                "assets/rust.ai/agents/fish/shark/shark.prefab",
                 "assets/content/water/ocean/simpleshark.prefab",
                 "assets/content/water/ocean/greatwhite.prefab",
                 "assets/content/water/ocean/greatwhiteshark.prefab",
