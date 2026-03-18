@@ -370,8 +370,7 @@ namespace Oxide.Plugins
                 case ChaosLocation.Land:
                     at(3f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(WolfPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): wolf"); } });
                     at(6f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(BearPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): bear"); } });
-                    at(9f, () => { var t = GetStreamer(); if (t != null) { SpawnEffect(EffectSmoke, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): smoke"); } });
-                    at(12f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(BoarPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): pig"); } });
+                    at(9f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(BoarPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): pig"); } });
                     break;
                 case ChaosLocation.Sea:
                     at(2f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark"); } });
@@ -381,7 +380,7 @@ namespace Oxide.Plugins
                     break;
                 case ChaosLocation.Swimming:
                     at(1f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): 2 sharks"); } });
-                    at(4f, () => { var t = GetStreamer(); if (t != null) { SpawnEffect(EffectSmoke, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Swimming): smoke"); } });
+                    at(4f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): shark"); } });
                     at(7f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): shark"); } });
                     break;
             }
