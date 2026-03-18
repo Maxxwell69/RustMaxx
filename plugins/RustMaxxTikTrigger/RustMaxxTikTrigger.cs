@@ -376,11 +376,13 @@ namespace Oxide.Plugins
             // assets/prefabs/building boat/hull.square/hull_square.wood.prefab (ShortPrefabName: hull_square_wood)
             try
             {
-                BaseEntity ground = player.GetGroundEntity() as BaseEntity;
-                if (ground != null)
+                // Some Rust builds don't expose GetGroundEntity() on BasePlayer.
+                // Use parent entity (standing on / attached to) as a reliable fallback.
+                BaseEntity parent = player.GetParentEntity() as BaseEntity;
+                if (parent != null)
                 {
-                    string shortName = ground.ShortPrefabName ?? "";
-                    string prefabName = ground.PrefabName ?? "";
+                    string shortName = parent.ShortPrefabName ?? "";
+                    string prefabName = parent.PrefabName ?? "";
                     if (shortName.IndexOf("hull_", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         prefabName.IndexOf("building boat/hull", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         prefabName.IndexOf("building_boat/hull", StringComparison.OrdinalIgnoreCase) >= 0)
