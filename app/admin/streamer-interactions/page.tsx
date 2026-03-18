@@ -507,42 +507,6 @@ export default function AdminStreamerInteractionsPage() {
           </table>
         </div>
       </section>
-
-      {/* Gift → action map */}
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-        <div className="border-b border-zinc-800 px-4 py-3">
-          <h2 className="text-lg font-medium text-zinc-200">Gift → action map (current)</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            When TikFinity sends a gift with one of these names, the corresponding action runs on the server.
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-zinc-800 bg-zinc-800/50">
-                <th className="px-4 py-3 font-medium text-zinc-400">TikTok gift name</th>
-                <th className="px-4 py-3 font-medium text-zinc-400">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {giftEntries.length === 0 ? (
-                <tr>
-                  <td colSpan={2} className="px-4 py-6 text-center text-zinc-500">
-                    No mappings.
-                  </td>
-                </tr>
-              ) : (
-                giftEntries.map(([gift, action]) => (
-                  <tr key={gift} className="border-b border-zinc-800/50">
-                    <td className="px-4 py-3 text-zinc-300">{gift}</td>
-                    <td className="px-4 py-3 font-mono text-rust-cyan">{action}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </div>
   );
 }
