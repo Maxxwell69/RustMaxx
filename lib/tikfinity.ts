@@ -161,7 +161,7 @@ export const ACTION_META: Record<
   },
   chaoswave: {
     label: "Chaos Wave",
-    description: "Land only: 1 bear, then 2, 3 … up to 10 (next wave when all current bears killed)",
+    description: "Land only: bear wave 1→10 (next wave when all bears killed). Each wave also gives the streamer weapons/meds/walls per your configured rounds; countdowns: 20s after wave1, 25s after wave2, 30s otherwise.",
     exampleGifts: ["Chaos Wave", "ChaosWave"],
   },
   healinghands: {
