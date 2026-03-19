@@ -595,29 +595,21 @@ namespace Oxide.Plugins
 
             float leashSqr = leashDistance * leashDistance;
             // Copy ids to avoid mutation during enumeration.
-            List<NetworkableId> ids = Pool.Get<List<NetworkableId>>();
-            try
+            var ids = new List<NetworkableId>(_chaosWaveBearIds);
+            foreach (var nid in ids)
             {
-                ids.AddRange(_chaosWaveBearIds);
-                foreach (var nid in ids)
+                try
                 {
-                    try
+                    var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    if (ent == null || ent.IsDestroyed) continue;
+                    Vector3 d = ent.transform.position - streamerPos.Value;
+                    if (d.sqrMagnitude > leashSqr)
                     {
-                        var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
-                        if (ent == null || ent.IsDestroyed) continue;
-                        Vector3 d = ent.transform.position - streamerPos.Value;
-                        if (d.sqrMagnitude > leashSqr)
-                        {
-                            // Kill will trigger OnEntityDeath and advance the wave.
-                            ent.Kill();
-                        }
+                        // Kill will trigger OnEntityDeath and advance the wave.
+                        ent.Kill();
                     }
-                    catch { }
                 }
-            }
-            finally
-            {
-                Pool.FreeUnmanaged(ref ids);
+                catch { }
             }
         }
 
