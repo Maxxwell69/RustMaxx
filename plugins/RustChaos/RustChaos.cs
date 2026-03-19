@@ -985,6 +985,8 @@ namespace Oxide.Plugins
                 case 1:
                     GiveItemToBeltWithLog(streamer, 1, "bow.hunting", "Round 1 bow (belt/arm slot)");
                     GiveItemWithLog(streamer, 100, "arrow.wooden", "Round 1 arrows (100)");
+                    GiveItemWithLog(streamer, 1, "building.planner", "Round 1 building plan");
+                    GiveItemWithLog(streamer, 750, "wood", "Round 1 wood (750)");
                     GiveFirstItemToBeltWithLog(streamer, 2, wallCandidates, "Round 1 wooden barricades (2, belt/arm slot)");
                     GiveFirstItemWithLog(streamer, 1, medCandidates, "Round 1 med stick");
                     GiveItemWithLog(streamer, 3, bandageShort, "Round 1 bandages (3)");
