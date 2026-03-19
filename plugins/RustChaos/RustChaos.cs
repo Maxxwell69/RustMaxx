@@ -944,7 +944,7 @@ namespace Oxide.Plugins
             {
                 case 1:
                     GiveItemToBeltWithLog(streamer, 1, "bow.hunting", "Round 1 bow (belt/arm slot)");
-                    GiveItemWithLog(streamer, 50, "arrow.wooden", "Round 1 arrows (50)");
+                    GiveItemWithLog(streamer, 100, "arrow.wooden", "Round 1 arrows (100)");
                     GiveFirstItemWithLog(streamer, 1, medCandidates, "Round 1 med stick");
                     break;
 
@@ -956,7 +956,8 @@ namespace Oxide.Plugins
 
                 case 3:
                     GiveItemWithLog(streamer, 1, "smg.2", "Round 3 custom SMG");
-                    GiveItemWithLog(streamer, 50, "ammo.pistol", "Round 3 pistol ammo (50)");
+                    // End-of-wave rewards are granted between waves; give 100 so level 4 starts with 100 pistol bullets.
+                    GiveItemWithLog(streamer, 100, "ammo.pistol", "Round 3 pistol ammo (100)");
                     GiveFirstItemWithLog(streamer, 2, medCandidates, "Round 3 med sticks");
                     GiveItemWithLog(streamer, 3, bandageShort, "Round 3 bandages (3)");
                     break;
