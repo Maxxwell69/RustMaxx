@@ -78,7 +78,7 @@ namespace Oxide.Plugins
         private int _chaosWaveNumber;
         private bool _chaosWaveSubscribed;
         private int _chaosWaveCountdown;
-        private Timer _chaosWaveCountdownTimer;
+        private Oxide.Core.Libraries.Timer _chaosWaveCountdownTimer;
         private ulong _chaosWaveStreamerUserId;
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
