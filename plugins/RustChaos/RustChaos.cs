@@ -31,6 +31,8 @@ namespace Oxide.Plugins
             public string ScientistRhibPrefabPath { get; set; } = "";
             /// <summary>Optional. Override scientist PT boat prefab (default: assets/content/vehicles/boats/ptboat/ptboat_scientist.prefab).</summary>
             public string ScientistPtBoatPrefabPath { get; set; } = "";
+            /// <summary>Chaos wave: max distance (meters) from streamer that bears can spawn. Bears spawn between 6m and this radius.</summary>
+            public float ChaosWaveBearRadius { get; set; } = 25f;
         }
 
         private PluginConfig _config;
@@ -602,13 +604,16 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Spawns N bears near streamer and adds their net IDs to _chaosWaveBearIds.
+        /// Spawns N bears within ChaosWaveBearRadius of the streamer and adds their net IDs to _chaosWaveBearIds.
         /// </summary>
         private void SpawnChaosWaveBears(BasePlayer streamer, int count)
         {
+            float maxRadius = Mathf.Clamp(_config?.ChaosWaveBearRadius ?? 25f, 10f, 80f);
+            float minRadius = 6f;
             for (int i = 0; i < count; i++)
             {
-                Vector3 pos = GetPositionNear(streamer);
+                Vector3 pos = GetPositionWithinRadius(streamer, minRadius, maxRadius);
+                if (pos == Vector3.zero) pos = GetPositionNear(streamer);
                 BaseEntity bear = GameManager.server.CreateEntity(BearPrefab, pos, Quaternion.identity, true);
                 if (bear != null)
                 {
@@ -616,6 +621,21 @@ namespace Oxide.Plugins
                     _chaosWaveBearIds.Add(bear.net.ID);
                 }
             }
+        }
+
+        /// <summary>
+        /// Random position on the horizontal plane within minRadius..maxRadius of the player. Used for chaos wave bears.
+        /// </summary>
+        private static Vector3 GetPositionWithinRadius(BasePlayer player, float minRadius, float maxRadius)
+        {
+            if (player == null || !player.IsValid() || maxRadius < minRadius) return Vector3.zero;
+            Vector3 pos = player.transform.position;
+            Vector3 offset = UnityEngine.Random.insideUnitSphere;
+            offset.y = 0f;
+            if (offset.sqrMagnitude < 0.01f) offset = Vector3.forward;
+            offset.Normalize();
+            float distance = UnityEngine.Random.Range(minRadius, maxRadius);
+            return pos + offset * distance;
         }
 
         /// <summary>
