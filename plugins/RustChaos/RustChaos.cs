@@ -630,25 +630,43 @@ namespace Oxide.Plugins
                     if (d.sqrMagnitude > leashSqr)
                     {
                         // Don't kill (player expects bears to "run back" and not disappear).
-                        // Soft leash: reposition the bear back inside the leash radius near the streamer.
-                        Vector3 offset = UnityEngine.Random.insideUnitSphere;
-                        offset.y = 0f;
-                        if (offset.sqrMagnitude < 0.01f) offset = Vector3.forward;
-                        offset.Normalize();
-                        float distance = UnityEngine.Random.Range(3f, Mathf.Max(3f, leashDistance - 1f));
-                        Vector3 newPos = streamerPos.Value + offset * distance;
-                        ent.transform.position = newPos;
+                        // Instead, steer them back toward the streamer:
+                        // 1) rotate toward streamer
+                        // 2) if NavMeshAgent exists, SetDestination()
+                        // 3) otherwise, push rigidbody velocity in that direction
+                        Vector3 toStreamer = streamerPos.Value - ent.transform.position;
+                        toStreamer.y = 0f;
+                        if (toStreamer.sqrMagnitude > 0.01f)
+                            toStreamer.Normalize();
 
-                        // If the bear has a rigidbody, zero velocity so it immediately "commits" to the new spot.
-                        var rb = ent.GetComponent<Rigidbody>();
-                        if (rb != null)
+                        // Turn to face streamer.
+                        try { ent.transform.rotation = Quaternion.LookRotation(toStreamer); } catch { }
+
+                        // Prefer navigation if present.
+                        try
                         {
-                            rb.velocity = Vector3.zero;
-                            rb.angularVelocity = Vector3.zero;
+                            var agent = ent.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                            if (agent != null)
+                            {
+                                agent.isStopped = false;
+                                agent.SetDestination(streamerPos.Value);
+                            }
                         }
+                        catch { }
 
-                        // Try to force a network sync (method exists on BaseEntity in most Rust/Oxide builds).
-                        try { ent.SendNetworkUpdate(); } catch { }
+                        // Fallback: adjust rigidbody velocity.
+                        try
+                        {
+                            var rb = ent.GetComponent<Rigidbody>();
+                            if (rb != null && toStreamer.sqrMagnitude > 0.01f)
+                            {
+                                float speed = rb.velocity.magnitude;
+                                if (speed < 2f) speed = 2f;
+                                rb.velocity = toStreamer * speed;
+                                rb.angularVelocity = Vector3.zero;
+                            }
+                        }
+                        catch { }
                     }
                 }
                 catch { }
