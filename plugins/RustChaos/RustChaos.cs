@@ -651,7 +651,7 @@ namespace Oxide.Plugins
                         try
                         {
                             // NetworkableId -> uint for lookup.
-                            uint id = nid.Value;
+                            uint id = (uint)nid.Value;
                             var ent = BaseNetworkable.serverEntities.Find(id) as BaseCombatEntity;
                             if (ent != null && !ent.IsDestroyed)
                                 ent.Kill();
