@@ -272,9 +272,20 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         float amount = Mathf.Max(0f, _config?.HealingHandsAmount ?? 10f);
-                        target.Heal(amount);
-                        BroadcastChat(ChatMsg($"{viewerName} triggered HEALING HANDS! +{amount:0} health"));
-                        Puts($"{LogPrefix} Healed streamer {target.displayName} by {amount}");
+                        float maxHealth = target.MaxHealth();
+                        // If already topped off, Heal() would do nothing useful — give a bandage instead.
+                        if (target.health >= maxHealth - 0.01f)
+                        {
+                            GiveItemToPlayer(target, "bandage", 1);
+                            BroadcastChat(ChatMsg($"{viewerName} triggered HEALING HANDS! 1 bandage (full health)"));
+                            Puts($"{LogPrefix} Healing Hands: {target.displayName} at full health, gave 1 bandage");
+                        }
+                        else
+                        {
+                            target.Heal(amount);
+                            BroadcastChat(ChatMsg($"{viewerName} triggered HEALING HANDS! +{amount:0} health"));
+                            Puts($"{LogPrefix} Healed streamer {target.displayName} by {amount}");
+                        }
                     }
                     break;
 

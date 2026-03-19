@@ -204,7 +204,8 @@ export const ACTION_META: Record<
   },
   healinghands: {
     label: "Healing Hands",
-    description: "Heals the streamer +10 health every trigger",
+    description:
+      "Heals the streamer +10 health per trigger (configurable on server); if already at full health, gives 1 bandage instead",
     exampleGifts: ["Healing Hands", "HealingHands"],
   },
   fullheal: {
