@@ -273,12 +273,30 @@ namespace Oxide.Plugins
                     {
                         float amount = Mathf.Max(0f, _config?.HealingHandsAmount ?? 10f);
                         float maxHealth = target.MaxHealth();
-                        // If already topped off, Heal() would do nothing useful — give a bandage instead.
+                        // If already topped off, Heal() would do nothing useful — random small loot.
                         if (target.health >= maxHealth - 0.01f)
                         {
-                            GiveItemToPlayer(target, "bandage", 1);
-                            BroadcastChat(ChatMsg($"{viewerName} triggered HEALING HANDS! 1 bandage (full health)"));
-                            Puts($"{LogPrefix} Healing Hands: {target.displayName} at full health, gave 1 bandage");
+                            int roll = UnityEngine.Random.Range(0, 3);
+                            string itemShort;
+                            string giftLabel;
+                            switch (roll)
+                            {
+                                case 0:
+                                    itemShort = "bandage";
+                                    giftLabel = "1 bandage";
+                                    break;
+                                case 1:
+                                    itemShort = "ammo.rifle";
+                                    giftLabel = "1 bullet";
+                                    break;
+                                default:
+                                    itemShort = "wolfmeat.raw";
+                                    giftLabel = "1 meat";
+                                    break;
+                            }
+                            GiveItemToPlayer(target, itemShort, 1);
+                            BroadcastChat(ChatMsg($"{viewerName} triggered HEALING HANDS! {giftLabel} (full health)"));
+                            Puts($"{LogPrefix} Healing Hands: {target.displayName} at full health, gave {giftLabel} ({itemShort})");
                         }
                         else
                         {
