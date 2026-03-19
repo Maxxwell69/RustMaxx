@@ -74,7 +74,7 @@ namespace Oxide.Plugins
         // Countdown seconds between waves:
         // wave 1 -> wave 2 = 20s, wave 2 -> wave 3 = 25s, and default to 30s for the rest (until you tell me different).
         // Index = completedWave - 1 (so [0] is after wave 1).
-        private static readonly int[] ChaosWaveCountdownAfterWaveSeconds = { 20, 25, 30, 30, 30, 30, 30, 30, 30, 0 };
+        private static readonly int[] ChaosWaveCountdownAfterWaveSeconds = { 15, 25, 30, 30, 30, 30, 30, 30, 30, 0 };
         private HashSet<NetworkableId> _chaosWaveBearIds;
         private int _chaosWaveNumber;
         private bool _chaosWaveSubscribed;
@@ -551,7 +551,7 @@ namespace Oxide.Plugins
                 Subscribe(nameof(OnEntityDeath));
                 _chaosWaveSubscribed = true;
             }
-            ShowChaosWaveUIToAll("Wave 1", null);
+            ShowChaosWaveUIToAll("Chaos Bear Wave", "Wave 1");
             Puts($"{LogPrefix} Chaos wave started: wave 1 (1 bear).");
         }
 
@@ -607,13 +607,13 @@ namespace Oxide.Plugins
             if (_chaosWaveCountdown < 0) _chaosWaveCountdown = 0;
             _chaosWaveCountdownTimer?.Destroy();
             _chaosWaveCountdownTimer = timer.Repeat(1f, 0, ChaosWaveCountdownTick);
-            ShowChaosWaveUIToAll($"Wave {_chaosWaveNumber - 1} complete", $"Next wave in {_chaosWaveCountdown}s");
+            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber - 1} complete\nNext wave in {_chaosWaveCountdown}s");
         }
 
         private void ChaosWaveCountdownTick()
         {
             _chaosWaveCountdown--;
-            ShowChaosWaveUIToAll($"Wave {_chaosWaveNumber - 1} complete", _chaosWaveCountdown > 0 ? $"Next wave in {_chaosWaveCountdown}s" : "Spawning…");
+            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber - 1} complete\nNext wave in {_chaosWaveCountdown}s");
             if (_chaosWaveCountdown > 0) return;
 
             _chaosWaveCountdownTimer?.Destroy();
@@ -630,7 +630,7 @@ namespace Oxide.Plugins
             GiveChaosWaveLoadout(streamer, _chaosWaveNumber);
             BroadcastChat($"Chaos wave {_chaosWaveNumber}! {_chaosWaveNumber} bears spawned.");
             Puts($"{LogPrefix} Chaos wave {_chaosWaveNumber}: {_chaosWaveNumber} bears.");
-            ShowChaosWaveUIToAll($"Wave {_chaosWaveNumber}", null);
+            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber}");
         }
 
         private void ShowChaosWaveUIToAll(string line1, string line2)
@@ -736,6 +736,7 @@ namespace Oxide.Plugins
             {
                 case 1:
                     GiveItemWithLog(streamer, 1, "bow.hunting", "Round 1 bow");
+                    GiveItemWithLog(streamer, 50, "arrow.wooden", "Round 1 arrows (50)");
                     GiveFirstItemWithLog(streamer, 1, medCandidates, "Round 1 med stick");
                     break;
 
