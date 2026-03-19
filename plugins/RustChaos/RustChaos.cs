@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Oxide.Game.Rust.Cui;
+using Oxide.Core;
 
 namespace Oxide.Plugins
 {
@@ -78,7 +79,7 @@ namespace Oxide.Plugins
         private int _chaosWaveNumber;
         private bool _chaosWaveSubscribed;
         private int _chaosWaveCountdown;
-        private Oxide.Core.Libraries.Timer _chaosWaveCountdownTimer;
+        private Timer _chaosWaveCountdownTimer;
         private ulong _chaosWaveStreamerUserId;
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
