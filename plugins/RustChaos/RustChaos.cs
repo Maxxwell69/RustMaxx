@@ -152,8 +152,8 @@ namespace Oxide.Plugins
                 return;
             }
 
-            // Only the configured streamer for the current wave can cancel it.
-            if (_chaosWaveStreamerUserId != 0ul && player.userID != _chaosWaveStreamerUserId)
+            // Allow the configured streamer OR server admin to cancel.
+            if (!player.IsAdmin && _chaosWaveStreamerUserId != 0ul && player.userID != _chaosWaveStreamerUserId)
             {
                 SendReply(player, "Only the chaos wave streamer can cancel the wave.");
                 return;
