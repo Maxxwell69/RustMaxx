@@ -74,6 +74,7 @@ namespace Oxide.Plugins
         private bool _chaosWaveSubscribed;
         private int _chaosWaveCountdown;
         private Timer _chaosWaveCountdownTimer;
+        private ulong _chaosWaveStreamerUserId;
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
         private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
@@ -502,6 +503,7 @@ namespace Oxide.Plugins
         {
             _chaosWaveBearIds = new HashSet<NetworkableId>();
             _chaosWaveNumber = 1;
+            _chaosWaveStreamerUserId = streamer != null ? streamer.userID : 0ul;
             SpawnChaosWaveBears(streamer, 1);
             if (!_chaosWaveSubscribed)
             {
@@ -515,6 +517,15 @@ namespace Oxide.Plugins
         private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null || _chaosWaveBearIds == null) return;
+
+            // If the streamer dies mid-wave, cancel the entire wave.
+            BasePlayer deadPlayer = entity as BasePlayer;
+            if (deadPlayer != null && _chaosWaveStreamerUserId != 0ul && deadPlayer.userID == _chaosWaveStreamerUserId)
+            {
+                CancelChaosWave("Chaos wave cancelled (streamer died).");
+                return;
+            }
+
             if (!_chaosWaveBearIds.Remove(entity.net.ID)) return;
             if (_chaosWaveBearIds.Count > 0) return;
 
@@ -654,6 +665,7 @@ namespace Oxide.Plugins
                 _chaosWaveBearIds = null;
                 _chaosWaveNumber = 0;
                 _chaosWaveCountdown = 0;
+            _chaosWaveStreamerUserId = 0ul;
                 _chaosWaveCountdownTimer?.Destroy();
                 _chaosWaveCountdownTimer = null;
                 if (_chaosWaveSubscribed)
