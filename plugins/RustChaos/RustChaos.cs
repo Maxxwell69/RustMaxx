@@ -76,7 +76,7 @@ namespace Oxide.Plugins
         // Countdown seconds between waves:
         // wave 1 -> wave 2 = 20s, wave 2 -> wave 3 = 25s, and default to 30s for the rest (until you tell me different).
         // Index = completedWave - 1 (so [0] is after wave 1).
-        private static readonly int[] ChaosWaveCountdownAfterWaveSeconds = { 15, 25, 30, 30, 30, 30, 30, 30, 30, 0 };
+        private static readonly int[] ChaosWaveCountdownAfterWaveSeconds = { 20, 25, 30, 30, 30, 30, 30, 30, 30, 0 };
         private HashSet<NetworkableId> _chaosWaveBearIds;
         private int _chaosWaveNumber;
         private bool _chaosWaveSubscribed;
@@ -766,9 +766,14 @@ namespace Oxide.Plugins
         {
             float maxRadius = Mathf.Clamp(_config?.ChaosWaveBearRadius ?? 25f, 10f, 80f);
             float minRadius = 6f;
+            // Ensure we spawn bears within leash distance so they don't get killed immediately.
+            float leashDistance = Mathf.Clamp(_config?.ChaosWaveBearLeashDistance ?? 18f, 5f, 80f);
+            float effectiveMaxRadius = Mathf.Min(maxRadius, leashDistance - 1f);
+            if (effectiveMaxRadius < minRadius)
+                effectiveMaxRadius = minRadius;
             for (int i = 0; i < count; i++)
             {
-                Vector3 pos = GetPositionWithinRadius(streamer, minRadius, maxRadius);
+                Vector3 pos = GetPositionWithinRadius(streamer, minRadius, effectiveMaxRadius);
                 if (pos == Vector3.zero) pos = GetPositionNear(streamer);
                 BaseEntity bear = GameManager.server.CreateEntity(BearPrefab, pos, Quaternion.identity, true);
                 if (bear != null)
