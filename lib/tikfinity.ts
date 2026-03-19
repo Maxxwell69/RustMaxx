@@ -18,6 +18,7 @@ export const TIKTRIGGER_ACTIONS = [
   "likes",
   "chaos",
   "scientistboat",
+  "chaoswave",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
@@ -49,6 +50,8 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Chaos: "chaos",
   "Scientist Boat": "scientistboat",
   ScientistBoat: "scientistboat",
+  "Chaos Wave": "chaoswave",
+  ChaosWave: "chaoswave",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -77,6 +80,8 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   Chaos: 50,
   "Scientist Boat": 150,
   ScientistBoat: 150,
+  "Chaos Wave": 200,
+  ChaosWave: 200,
 };
 
 /** Human-readable label and description for each action (for admin UI). */
@@ -148,6 +153,11 @@ export const ACTION_META: Record<
     label: "Scientist Boat",
     description: "Spawn scientist RHIB or PT boat (AI + turrets) in water (streamer must be swimming or on boat)",
     exampleGifts: ["Scientist Boat", "ScientistBoat"],
+  },
+  chaoswave: {
+    label: "Chaos Wave",
+    description: "Land only: 1 bear, then 2, 3 … up to 10 (next wave when all current bears killed)",
+    exampleGifts: ["Chaos Wave", "ChaosWave"],
   },
 };
 
@@ -272,6 +282,7 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   test: "test",
   chaos: "chaos",
   scientistboat: "scientistboat",
+  chaoswave: "chaoswave",
 };
 
 /** Get raw action/event name from body (action, actionName, or event) for admin-connection lookup. */

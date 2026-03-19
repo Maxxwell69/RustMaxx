@@ -10,11 +10,12 @@
 // Install: copy this file into servers/Rust/oxide/plugins/
 
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.7.0")]
+    [Info("RustChaos", "RustMaxx", "1.8.0")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustChaos : RustPlugin
     {
@@ -60,7 +61,12 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave" };
+
+        // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead).
+        private HashSet<uint> _chaosWaveBearIds;
+        private int _chaosWaveNumber;
+        private bool _chaosWaveSubscribed;
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
         private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
@@ -232,6 +238,25 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "chaoswave":
+                    if (target != null)
+                    {
+                        ChaosLocation loc = GetStreamerChaosLocation(target);
+                        if (loc != ChaosLocation.Land)
+                        {
+                            BroadcastChat(ChatMsg($"Chaos wave is land only. {viewerName} sent {giftName}!"));
+                            break;
+                        }
+                        if (_chaosWaveBearIds != null && _chaosWaveBearIds.Count > 0)
+                        {
+                            BroadcastChat(ChatMsg("Chaos wave already in progress!"));
+                            break;
+                        }
+                        BroadcastChat(ChatMsg($"{viewerName} started a CHAOS WAVE! Kill the bears…"));
+                        StartLandChaosWave(target);
+                    }
+                    break;
+
                 case "scientistboat":
                     if (target != null)
                     {
@@ -304,7 +329,7 @@ namespace Oxide.Plugins
 
         private static bool ActionRequiresPlayer(string action)
         {
-            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "bear" || action == "shark" || action == "pig" || action == "supply" || action == "likes" || action == "chaos" || action == "scientistboat";
+            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "bear" || action == "shark" || action == "pig" || action == "supply" || action == "likes" || action == "chaos" || action == "scientistboat" || action == "chaoswave";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -455,6 +480,69 @@ namespace Oxide.Plugins
                             Puts($"{LogPrefix} Chaos (Modular Boat): scientist PT boat");
                     });
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Land chaos wave: spawn 1 bear; when all dead spawn 2, then 3 … up to 10. Requires Land.
+        /// </summary>
+        private void StartLandChaosWave(BasePlayer streamer)
+        {
+            _chaosWaveBearIds = new HashSet<uint>();
+            _chaosWaveNumber = 1;
+            SpawnChaosWaveBears(streamer, 1);
+            if (!_chaosWaveSubscribed)
+            {
+                Subscribe(nameof(OnEntityDeath));
+                _chaosWaveSubscribed = true;
+            }
+            Puts($"{LogPrefix} Chaos wave started: wave 1 (1 bear).");
+        }
+
+        private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
+        {
+            if (entity == null || _chaosWaveBearIds == null) return;
+            uint id = entity.net.ID;
+            if (!_chaosWaveBearIds.Remove(id)) return;
+            if (_chaosWaveBearIds.Count > 0) return;
+
+            _chaosWaveNumber++;
+            if (_chaosWaveNumber > 10)
+            {
+                _chaosWaveBearIds = null;
+                if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
+                BroadcastChat("Chaos wave complete! All 10 waves cleared.");
+                Puts($"{LogPrefix} Chaos wave finished.");
+                return;
+            }
+
+            BasePlayer streamer = GetStreamerPlayer();
+            if (streamer == null || !streamer.IsValid())
+            {
+                Puts($"{LogPrefix} Chaos wave aborted: streamer offline.");
+                _chaosWaveBearIds = null;
+                if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
+                return;
+            }
+            SpawnChaosWaveBears(streamer, _chaosWaveNumber);
+            BroadcastChat($"Chaos wave {_chaosWaveNumber}! {_chaosWaveNumber} bears spawned.");
+            Puts($"{LogPrefix} Chaos wave {_chaosWaveNumber}: {_chaosWaveNumber} bears.");
+        }
+
+        /// <summary>
+        /// Spawns N bears near streamer and adds their net IDs to _chaosWaveBearIds.
+        /// </summary>
+        private void SpawnChaosWaveBears(BasePlayer streamer, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 pos = GetPositionNear(streamer);
+                BaseEntity bear = GameManager.server.CreateEntity(BearPrefab, pos, Quaternion.identity, true);
+                if (bear != null)
+                {
+                    bear.Spawn();
+                    _chaosWaveBearIds.Add(bear.net.ID);
+                }
             }
         }
 
