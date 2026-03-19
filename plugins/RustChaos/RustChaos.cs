@@ -974,7 +974,7 @@ namespace Oxide.Plugins
             // "Wall" handling: give wooden barricades (as requested).
             // If your server uses a different mapping, plugin will log which item shortnames are missing.
             string[] wallCandidates = { "barricade.cover.wood", "barricade.cover.wood_double", "barricade.wood.cover", "barricade.wood", "barricade.woodwire" };
-            string[] buildingPlanCandidates = { "planner", "building.planner" };
+            string[] buildingPlanCandidates = { "planner", "building.planner", "building.plan", "building_plan" };
 
             // Med stick + bandage (cloth bandage) shortnames
             string[] medCandidates = { "medstick" };
@@ -986,7 +986,7 @@ namespace Oxide.Plugins
                 case 1:
                     GiveItemToBeltWithLog(streamer, 1, "bow.hunting", "Round 1 bow (belt/arm slot)");
                     GiveItemWithLog(streamer, 100, "arrow.wooden", "Round 1 arrows (100)");
-                    GiveFirstItemWithLog(streamer, 1, buildingPlanCandidates, "Round 1 building plan");
+                    GiveFirstItemToBeltWithLog(streamer, 1, buildingPlanCandidates, "Round 1 building plan (belt/arm slot)");
                     GiveItemWithLog(streamer, 750, "wood", "Round 1 wood (750)");
                     GiveFirstItemToBeltWithLog(streamer, 2, wallCandidates, "Round 1 wooden barricades (2, belt/arm slot)");
                     GiveFirstItemWithLog(streamer, 1, medCandidates, "Round 1 med stick");
