@@ -545,6 +545,11 @@ namespace Oxide.Plugins
             _chaosWaveNumber = 1;
             _chaosWaveStreamerUserId = streamer != null ? streamer.userID : 0ul;
             SpawnChaosWaveBears(streamer, 1);
+            // Full heal at the moment the wave starts.
+            if (streamer != null && streamer.IsValid())
+            {
+                streamer.Heal(99999f);
+            }
             GiveChaosWaveLoadout(streamer, 1);
             if (!_chaosWaveSubscribed)
             {
@@ -723,9 +728,9 @@ namespace Oxide.Plugins
 
         private void GiveChaosWaveLoadout(BasePlayer streamer, int wave)
         {
-            // "Wall" handling: give a deployable wall item. We use the most common wood external wall shortname.
+            // "Wall" handling: give wooden barricades (as requested).
             // If your server uses a different mapping, plugin will log which item shortnames are missing.
-            string[] wallCandidates = { "wall.external.high", "wall.external.high.legacy", "wall.external.high.stone", "wall.external.high.ice" };
+            string[] wallCandidates = { "barricade.wood", "barricade.wood.cover", "barricade.woodwire" };
 
             // Med stick + bandage (cloth bandage) shortnames
             string[] medCandidates = { "medstick" };
