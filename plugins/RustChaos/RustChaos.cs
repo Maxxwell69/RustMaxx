@@ -575,7 +575,6 @@ namespace Oxide.Plugins
             _chaosWaveBearIds = new HashSet<NetworkableId>();
             _chaosWaveNumber = 1;
             _chaosWaveStreamerUserId = streamer != null ? streamer.userID : 0ul;
-            SpawnChaosWaveBears(streamer, 1);
             // Full heal at the moment the wave starts.
             if (streamer != null && streamer.IsValid())
             {
@@ -588,8 +587,27 @@ namespace Oxide.Plugins
                 _chaosWaveSubscribed = true;
             }
             StartChaosWaveLeashTimer();
-            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave 1\nEnemies left: {_chaosWaveTargetBearCount}");
-            Puts($"{LogPrefix} Chaos wave started: wave 1 (1 bear).");
+            _chaosWaveTargetBearCount = 1;
+            _chaosWaveSpawnedBearCount = 0;
+            _chaosWaveKilledBearCount = 0;
+            _chaosWaveSpawning = true;
+            int firstWaveSpawnDelaySeconds = 20;
+            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave 1\nFirst enemy in {firstWaveSpawnDelaySeconds}s");
+            timer.Once(firstWaveSpawnDelaySeconds, () =>
+            {
+                if (_chaosWaveBearIds == null) return;
+                BasePlayer s = GetStreamerPlayer();
+                if (s == null || !s.IsValid())
+                {
+                    CancelChaosWave("Chaos wave cancelled (streamer offline).");
+                    return;
+                }
+                SpawnChaosWaveBears(s, 1);
+                BroadcastChat("Chaos wave 1! 1 bear spawned.");
+                Puts($"{LogPrefix} Chaos wave 1: 1 bear spawned after delay.");
+                ShowChaosWaveUIToAll("Chaos Bear Wave", "Wave 1\nEnemies left: 1");
+            });
+            Puts($"{LogPrefix} Chaos wave started: wave 1 queued (20s delay).");
         }
 
         private void StartChaosWaveLeashTimer()
@@ -969,6 +987,7 @@ namespace Oxide.Plugins
                     GiveItemWithLog(streamer, 100, "arrow.wooden", "Round 1 arrows (100)");
                     GiveFirstItemToBeltWithLog(streamer, 2, wallCandidates, "Round 1 wooden barricades (2, belt/arm slot)");
                     GiveFirstItemWithLog(streamer, 1, medCandidates, "Round 1 med stick");
+                    GiveItemWithLog(streamer, 3, bandageShort, "Round 1 bandages (3)");
                     break;
 
                 case 2:
