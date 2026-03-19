@@ -34,6 +34,8 @@ namespace Oxide.Plugins
             public string ScientistPtBoatPrefabPath { get; set; } = "";
             /// <summary>Chaos wave: max distance (meters) from streamer that bears can spawn. Bears spawn between 6m and this radius.</summary>
             public float ChaosWaveBearRadius { get; set; } = 25f;
+            /// <summary>Chaos wave: maximum distance (meters) a bear is allowed to roam from the streamer before it gets killed/returned.</summary>
+            public float ChaosWaveBearLeashDistance { get; set; } = 18f;
             /// <summary>Healing Hands: amount of health added to the streamer per trigger.</summary>
             public float HealingHandsAmount { get; set; } = 10f;
         }
@@ -81,6 +83,7 @@ namespace Oxide.Plugins
         private int _chaosWaveCountdown;
         private Timer _chaosWaveCountdownTimer;
         private ulong _chaosWaveStreamerUserId;
+        private Timer _chaosWaveLeashTimer;
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
         private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
@@ -556,8 +559,66 @@ namespace Oxide.Plugins
                 Subscribe(nameof(OnEntityDeath));
                 _chaosWaveSubscribed = true;
             }
+            StartChaosWaveLeashTimer();
             ShowChaosWaveUIToAll("Chaos Bear Wave", "Wave 1");
             Puts($"{LogPrefix} Chaos wave started: wave 1 (1 bear).");
+        }
+
+        private void StartChaosWaveLeashTimer()
+        {
+            _chaosWaveLeashTimer?.Destroy();
+            _chaosWaveLeashTimer = null;
+            float leash = Mathf.Clamp(_config?.ChaosWaveBearLeashDistance ?? 18f, 5f, 80f);
+            _chaosWaveLeashTimer = timer.Repeat(1f, 0, () => CheckChaosWaveLeash(leash));
+        }
+
+        private void CheckChaosWaveLeash(float leashDistance)
+        {
+            if (_chaosWaveBearIds == null || _chaosWaveBearIds.Count == 0) return;
+
+            // Find the current streamer position by userID (stable even if name changes).
+            Vector3? streamerPos = null;
+            foreach (var p in BasePlayer.activePlayerList)
+            {
+                if (p != null && p.IsConnected && p.userID == _chaosWaveStreamerUserId)
+                {
+                    streamerPos = p.transform.position;
+                    break;
+                }
+            }
+            if (streamerPos == null)
+            {
+                // streamer offline -> cancel wave
+                CancelChaosWave("Chaos wave cancelled (streamer offline).");
+                return;
+            }
+
+            float leashSqr = leashDistance * leashDistance;
+            // Copy ids to avoid mutation during enumeration.
+            List<NetworkableId> ids = Pool.Get<List<NetworkableId>>();
+            try
+            {
+                ids.AddRange(_chaosWaveBearIds);
+                foreach (var nid in ids)
+                {
+                    try
+                    {
+                        var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                        if (ent == null || ent.IsDestroyed) continue;
+                        Vector3 d = ent.transform.position - streamerPos.Value;
+                        if (d.sqrMagnitude > leashSqr)
+                        {
+                            // Kill will trigger OnEntityDeath and advance the wave.
+                            ent.Kill();
+                        }
+                    }
+                    catch { }
+                }
+            }
+            finally
+            {
+                Pool.FreeUnmanaged(ref ids);
+            }
         }
 
         private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
@@ -580,6 +641,8 @@ namespace Oxide.Plugins
             {
                 // Final reward after wave 10 cleared
                 _chaosWaveBearIds = null;
+                _chaosWaveLeashTimer?.Destroy();
+                _chaosWaveLeashTimer = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
                 DestroyChaosWaveUIForAll();
                 var rocketStreamer = GetStreamerPlayer();
@@ -598,6 +661,8 @@ namespace Oxide.Plugins
             {
                 Puts($"{LogPrefix} Chaos wave aborted: streamer offline.");
                 _chaosWaveBearIds = null;
+                _chaosWaveLeashTimer?.Destroy();
+                _chaosWaveLeashTimer = null;
                 _chaosWaveCountdownTimer?.Destroy();
                 _chaosWaveCountdownTimer = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
@@ -627,6 +692,8 @@ namespace Oxide.Plugins
             if (streamer == null || !streamer.IsValid())
             {
                 _chaosWaveBearIds = null;
+                _chaosWaveLeashTimer?.Destroy();
+                _chaosWaveLeashTimer = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
                 DestroyChaosWaveUIForAll();
                 return;
@@ -831,7 +898,9 @@ namespace Oxide.Plugins
                 _chaosWaveBearIds = null;
                 _chaosWaveNumber = 0;
                 _chaosWaveCountdown = 0;
-            _chaosWaveStreamerUserId = 0ul;
+                _chaosWaveStreamerUserId = 0ul;
+                _chaosWaveLeashTimer?.Destroy();
+                _chaosWaveLeashTimer = null;
                 _chaosWaveCountdownTimer?.Destroy();
                 _chaosWaveCountdownTimer = null;
                 if (_chaosWaveSubscribed)
