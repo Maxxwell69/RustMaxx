@@ -67,7 +67,7 @@ namespace Oxide.Plugins
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
         private const int ChaosWaveCountdownSeconds = 10;
-        private HashSet<uint> _chaosWaveBearIds;
+        private HashSet<NetworkableId> _chaosWaveBearIds;
         private int _chaosWaveNumber;
         private bool _chaosWaveSubscribed;
         private int _chaosWaveCountdown;
@@ -493,7 +493,7 @@ namespace Oxide.Plugins
         /// </summary>
         private void StartLandChaosWave(BasePlayer streamer)
         {
-            _chaosWaveBearIds = new HashSet<uint>();
+            _chaosWaveBearIds = new HashSet<NetworkableId>();
             _chaosWaveNumber = 1;
             SpawnChaosWaveBears(streamer, 1);
             if (!_chaosWaveSubscribed)
@@ -508,8 +508,7 @@ namespace Oxide.Plugins
         private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null || _chaosWaveBearIds == null) return;
-            uint id = entity.net.ID;
-            if (!_chaosWaveBearIds.Remove(id)) return;
+            if (!_chaosWaveBearIds.Remove(entity.net.ID)) return;
             if (_chaosWaveBearIds.Count > 0) return;
 
             _chaosWaveNumber++;
