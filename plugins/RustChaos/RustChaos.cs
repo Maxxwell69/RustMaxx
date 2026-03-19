@@ -576,11 +576,11 @@ namespace Oxide.Plugins
                 _chaosWaveBearIds = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
                 DestroyChaosWaveUIForAll();
-                var streamer = GetStreamerPlayer();
-                if (streamer != null && streamer.IsValid())
+                var rocketStreamer = GetStreamerPlayer();
+                if (rocketStreamer != null && rocketStreamer.IsValid())
                 {
-                    GiveItemWithLog(streamer, 1, "rocket.launcher", "ChaosWave final reward (rocket launcher)");
-                    GiveItemWithLog(streamer, 3, "ammo.rocket.basic", "ChaosWave final reward (rockets)");
+                    GiveItemWithLog(rocketStreamer, 1, "rocket.launcher", "ChaosWave final reward (rocket launcher)");
+                    GiveItemWithLog(rocketStreamer, 3, "ammo.rocket.basic", "ChaosWave final reward (rockets)");
                 }
                 BroadcastChat("Chaos wave complete! All 10 waves cleared. Final rockets inbound.");
                 Puts($"{LogPrefix} Chaos wave finished.");
