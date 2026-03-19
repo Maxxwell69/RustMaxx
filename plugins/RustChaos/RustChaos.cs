@@ -64,7 +64,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavecancel" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -262,6 +262,11 @@ namespace Oxide.Plugins
                         BroadcastChat(ChatMsg($"{viewerName} started a CHAOS WAVE! Kill the bears…"));
                         StartLandChaosWave(target);
                     }
+                    break;
+
+                case "chaoswavecancel":
+                    // Admin/admin-like RCON stop button for a glitched wave.
+                    CancelChaosWave(ChatMsg("Chaos wave cancelled."));
                     break;
 
                 case "scientistboat":
@@ -620,6 +625,45 @@ namespace Oxide.Plugins
                     bear.Spawn();
                     _chaosWaveBearIds.Add(bear.net.ID);
                 }
+            }
+        }
+
+        private void CancelChaosWave(string chatMessage)
+        {
+            // Kill tracked bears (if any) and reset wave state.
+            try
+            {
+                if (_chaosWaveBearIds != null)
+                {
+                    foreach (var nid in _chaosWaveBearIds)
+                    {
+                        try
+                        {
+                            // NetworkableId -> uint for lookup.
+                            uint id = nid.Value;
+                            var ent = BaseNetworkable.serverEntities.Find(id) as BaseCombatEntity;
+                            if (ent != null && !ent.IsDestroyed)
+                                ent.Kill();
+                        }
+                        catch { }
+                    }
+                }
+            }
+            finally
+            {
+                _chaosWaveBearIds = null;
+                _chaosWaveNumber = 0;
+                _chaosWaveCountdown = 0;
+                _chaosWaveCountdownTimer?.Destroy();
+                _chaosWaveCountdownTimer = null;
+                if (_chaosWaveSubscribed)
+                {
+                    Unsubscribe(nameof(OnEntityDeath));
+                    _chaosWaveSubscribed = false;
+                }
+                DestroyChaosWaveUIForAll();
+                if (!string.IsNullOrEmpty(chatMessage))
+                    BroadcastChat(chatMessage);
             }
         }
 
