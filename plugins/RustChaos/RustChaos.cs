@@ -86,6 +86,7 @@ namespace Oxide.Plugins
         private Timer _chaosWaveLeashTimer;
         private int _chaosWaveTargetBearCount;
         private int _chaosWaveSpawnedBearCount;
+        private int _chaosWaveKilledBearCount;
         private bool _chaosWaveSpawning;
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
@@ -587,7 +588,7 @@ namespace Oxide.Plugins
                 _chaosWaveSubscribed = true;
             }
             StartChaosWaveLeashTimer();
-            ShowChaosWaveUIToAll("Chaos Bear Wave", "Wave 1");
+            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave 1\nBears left: {_chaosWaveTargetBearCount}");
             Puts($"{LogPrefix} Chaos wave started: wave 1 (1 bear).");
         }
 
@@ -689,6 +690,9 @@ namespace Oxide.Plugins
             }
 
             if (!_chaosWaveBearIds.Remove(entity.net.ID)) return;
+            _chaosWaveKilledBearCount++;
+            int bearsLeftThisWave = Math.Max(0, _chaosWaveTargetBearCount - _chaosWaveKilledBearCount);
+            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber}\nBears left: {bearsLeftThisWave}");
             if (_chaosWaveBearIds.Count > 0) return;
 
             // If we're still in the middle of staged spawning, don't advance the wave yet.
@@ -714,6 +718,7 @@ namespace Oxide.Plugins
                 _chaosWaveSpawning = false;
                 _chaosWaveTargetBearCount = 0;
                 _chaosWaveSpawnedBearCount = 0;
+                _chaosWaveKilledBearCount = 0;
                 _chaosWaveLeashTimer?.Destroy();
                 _chaosWaveLeashTimer = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
@@ -759,7 +764,7 @@ namespace Oxide.Plugins
             SpawnChaosWaveBears(streamer, _chaosWaveNumber);
             BroadcastChat($"Chaos wave {_chaosWaveNumber}! {_chaosWaveNumber} bears spawned.");
             Puts($"{LogPrefix} Chaos wave {_chaosWaveNumber}: {_chaosWaveNumber} bears.");
-            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber}");
+            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber}\nBears left: {_chaosWaveTargetBearCount}");
         }
 
         private void ShowChaosWaveUIToAll(string line1, string line2)
@@ -809,6 +814,7 @@ namespace Oxide.Plugins
             // until all staged spawns have happened.
             _chaosWaveTargetBearCount = count;
             _chaosWaveSpawnedBearCount = 0;
+            _chaosWaveKilledBearCount = 0;
             _chaosWaveSpawning = count >= 4;
 
             float maxRadius = Mathf.Clamp(_config?.ChaosWaveBearRadius ?? 25f, 10f, 80f);
@@ -1036,6 +1042,7 @@ namespace Oxide.Plugins
                 _chaosWaveNumber = 0;
                 _chaosWaveTargetBearCount = 0;
                 _chaosWaveSpawnedBearCount = 0;
+                _chaosWaveKilledBearCount = 0;
                 _chaosWaveSpawning = false;
                 _chaosWaveCountdown = 0;
                 _chaosWaveStreamerUserId = 0ul;
