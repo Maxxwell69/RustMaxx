@@ -70,7 +70,10 @@ namespace Oxide.Plugins
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
-        private const int ChaosWaveCountdownSeconds = 10;
+        // Countdown seconds between waves:
+        // wave 1 -> wave 2 = 20s, wave 2 -> wave 3 = 25s, and default to 30s for the rest (until you tell me different).
+        // Index = completedWave - 1 (so [0] is after wave 1).
+        private static readonly int[] ChaosWaveCountdownAfterWaveSeconds = { 20, 25, 30, 30, 30, 30, 30, 30, 30, 0 };
         private HashSet<NetworkableId> _chaosWaveBearIds;
         private int _chaosWaveNumber;
         private bool _chaosWaveSubscribed;
@@ -529,6 +532,7 @@ namespace Oxide.Plugins
             _chaosWaveNumber = 1;
             _chaosWaveStreamerUserId = streamer != null ? streamer.userID : 0ul;
             SpawnChaosWaveBears(streamer, 1);
+            GiveChaosWaveLoadout(streamer, 1);
             if (!_chaosWaveSubscribed)
             {
                 Subscribe(nameof(OnEntityDeath));
@@ -556,10 +560,17 @@ namespace Oxide.Plugins
             _chaosWaveNumber++;
             if (_chaosWaveNumber > 10)
             {
+                // Final reward after wave 10 cleared
                 _chaosWaveBearIds = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
                 DestroyChaosWaveUIForAll();
-                BroadcastChat("Chaos wave complete! All 10 waves cleared.");
+                var streamer = GetStreamerPlayer();
+                if (streamer != null && streamer.IsValid())
+                {
+                    GiveItemWithLog(streamer, 1, "rocket.launcher", "ChaosWave final reward (rocket launcher)");
+                    GiveItemWithLog(streamer, 3, "ammo.rocket.basic", "ChaosWave final reward (rockets)");
+                }
+                BroadcastChat("Chaos wave complete! All 10 waves cleared. Final rockets inbound.");
                 Puts($"{LogPrefix} Chaos wave finished.");
                 return;
             }
@@ -576,8 +587,11 @@ namespace Oxide.Plugins
                 return;
             }
 
-            // 10 second countdown before next wave
-            _chaosWaveCountdown = ChaosWaveCountdownSeconds;
+            int completedWave = _chaosWaveNumber - 1;
+            if (completedWave < 1) completedWave = 1;
+            if (completedWave > 10) completedWave = 10;
+            _chaosWaveCountdown = ChaosWaveCountdownAfterWaveSeconds[completedWave - 1];
+            if (_chaosWaveCountdown < 0) _chaosWaveCountdown = 0;
             _chaosWaveCountdownTimer?.Destroy();
             _chaosWaveCountdownTimer = timer.Repeat(1f, 0, ChaosWaveCountdownTick);
             ShowChaosWaveUIToAll($"Wave {_chaosWaveNumber - 1} complete", $"Next wave in {_chaosWaveCountdown}s");
@@ -600,6 +614,7 @@ namespace Oxide.Plugins
                 return;
             }
             SpawnChaosWaveBears(streamer, _chaosWaveNumber);
+            GiveChaosWaveLoadout(streamer, _chaosWaveNumber);
             BroadcastChat($"Chaos wave {_chaosWaveNumber}! {_chaosWaveNumber} bears spawned.");
             Puts($"{LogPrefix} Chaos wave {_chaosWaveNumber}: {_chaosWaveNumber} bears.");
             ShowChaosWaveUIToAll($"Wave {_chaosWaveNumber}", null);
@@ -660,6 +675,115 @@ namespace Oxide.Plugins
                     bear.Spawn();
                     _chaosWaveBearIds.Add(bear.net.ID);
                 }
+            }
+        }
+
+        private void GiveItemWithLog(BasePlayer player, int amount, string shortName, string context)
+        {
+            if (player == null || !player.IsValid() || amount <= 0 || string.IsNullOrWhiteSpace(shortName)) return;
+            var def = ItemManager.FindItemDefinition(shortName);
+            if (def == null)
+            {
+                PrintWarning($"{LogPrefix} ChaosWave: item not found '{shortName}' ({context}).");
+                return;
+            }
+            Item item = ItemManager.Create(def, amount, 0ul);
+            if (item == null) return;
+            item.MoveToContainer(player.inventory.containerMain);
+        }
+
+        private void GiveFirstItemWithLog(BasePlayer player, int amount, string[] candidates, string context)
+        {
+            if (player == null || !player.IsValid() || amount <= 0 || candidates == null || candidates.Length == 0) return;
+            foreach (var s in candidates)
+            {
+                if (string.IsNullOrWhiteSpace(s)) continue;
+                var def = ItemManager.FindItemDefinition(s);
+                if (def == null) continue;
+                Item item = ItemManager.Create(def, amount, 0ul);
+                if (item == null) return;
+                item.MoveToContainer(player.inventory.containerMain);
+                return;
+            }
+            PrintWarning($"{LogPrefix} ChaosWave: none of the wall/med candidates were found ({context}).");
+        }
+
+        private void GiveChaosWaveLoadout(BasePlayer streamer, int wave)
+        {
+            // "Wall" handling: give a deployable wall item. We use the most common wood external wall shortname.
+            // If your server uses a different mapping, plugin will log which item shortnames are missing.
+            string[] wallCandidates = { "wall.external.high", "wall.external.high.legacy", "wall.external.high.stone", "wall.external.high.ice" };
+
+            // Med stick + bandage (cloth bandage) shortnames
+            string[] medCandidates = { "medstick" };
+            const string bandageShort = "bandage";
+
+            // Weapons & ammo
+            switch (wave)
+            {
+                case 1:
+                    GiveItemWithLog(streamer, 1, "bow.hunting", "Round 1 bow");
+                    GiveFirstItemWithLog(streamer, 1, medCandidates, "Round 1 med stick");
+                    break;
+
+                case 2:
+                    GiveFirstItemWithLog(streamer, 2, medCandidates, "Round 2 med sticks");
+                    GiveItemWithLog(streamer, 2, bandageShort, "Round 2 cloth bandages");
+                    GiveFirstItemWithLog(streamer, 1, wallCandidates, "Round 2 wall");
+                    break;
+
+                case 3:
+                    GiveItemWithLog(streamer, 1, "smg.2", "Round 3 custom SMG");
+                    GiveItemWithLog(streamer, 50, "ammo.pistol", "Round 3 pistol ammo (50)");
+                    GiveFirstItemWithLog(streamer, 2, medCandidates, "Round 3 med sticks");
+                    GiveItemWithLog(streamer, 3, bandageShort, "Round 3 bandages (3)");
+                    break;
+
+                case 4:
+                    GiveItemWithLog(streamer, 100, "ammo.pistol", "Round 4 pistol ammo (100)");
+                    GiveFirstItemWithLog(streamer, 3, medCandidates, "Round 4 med sticks");
+                    GiveItemWithLog(streamer, 2, bandageShort, "Round 4 bandages (2)");
+                    GiveFirstItemWithLog(streamer, 2, wallCandidates, "Round 4 walls (2)");
+                    break;
+
+                case 5:
+                    GiveItemWithLog(streamer, 1, "rifle.semiauto", "Round 5 semi-auto rifle");
+                    GiveItemWithLog(streamer, 25, "ammo.rifle", "Round 5 5.56 ammo (25)");
+                    GiveFirstItemWithLog(streamer, 3, medCandidates, "Round 5 med sticks");
+                    GiveItemWithLog(streamer, 2, bandageShort, "Round 5 bandages (2)");
+                    GiveFirstItemWithLog(streamer, 1, wallCandidates, "Round 5 wall (1)");
+                    break;
+
+                case 6:
+                    GiveItemWithLog(streamer, 100, "ammo.rifle", "Round 6 5.56 ammo (100)");
+                    GiveFirstItemWithLog(streamer, 2, medCandidates, "Round 6 med sticks");
+                    GiveItemWithLog(streamer, 2, bandageShort, "Round 6 bandages (2)");
+                    break;
+
+                case 7:
+                    GiveItemWithLog(streamer, 5, "grenade.f1", "Round 7 grenades (5)");
+                    GiveItemWithLog(streamer, 100, "ammo.rifle", "Round 7 5.56 ammo (100)");
+                    GiveFirstItemWithLog(streamer, 3, medCandidates, "Round 7 med sticks");
+                    GiveItemWithLog(streamer, 2, bandageShort, "Round 7 bandages (2)");
+                    break;
+
+                case 8:
+                    GiveItemWithLog(streamer, 1, "rifle.ak", "Round 8 AK");
+                    GiveItemWithLog(streamer, 100, "ammo.rifle", "Round 8 5.56 ammo (100)");
+                    GiveFirstItemWithLog(streamer, 3, medCandidates, "Round 8 med sticks");
+                    break;
+
+                case 9:
+                    GiveItemWithLog(streamer, 100, "ammo.rifle", "Round 9 5.56 ammo (100)");
+                    GiveFirstItemWithLog(streamer, 2, medCandidates, "Round 9 med sticks");
+                    GiveItemWithLog(streamer, 3, bandageShort, "Round 9 bandages (3)");
+                    break;
+
+                case 10:
+                    GiveItemWithLog(streamer, 100, "ammo.rifle", "Round 10 5.56 ammo (100)");
+                    GiveFirstItemWithLog(streamer, 2, medCandidates, "Round 10 med sticks");
+                    GiveItemWithLog(streamer, 3, "grenade.f1", "Round 10 grenades (3)");
+                    break;
             }
         }
 
