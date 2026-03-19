@@ -20,6 +20,7 @@ export const TIKTRIGGER_ACTIONS = [
   "scientistboat",
   "chaoswave",
   "healinghands",
+  "fullheal",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
@@ -55,6 +56,8 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   ChaosWave: "chaoswave",
   "Healing Hands": "healinghands",
   HealingHands: "healinghands",
+  "Full Health": "fullheal",
+  FullHealth: "fullheal",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -87,6 +90,8 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   ChaosWave: 200,
   "Healing Hands": 50,
   HealingHands: 50,
+  "Full Health": 75,
+  FullHealth: 75,
 };
 
 /** Human-readable label and description for each action (for admin UI). */
@@ -168,6 +173,11 @@ export const ACTION_META: Record<
     label: "Healing Hands",
     description: "Heals the streamer +10 health every trigger",
     exampleGifts: ["Healing Hands", "HealingHands"],
+  },
+  fullheal: {
+    label: "Full Health",
+    description: "Heals the streamer to full health",
+    exampleGifts: ["Full Health", "FullHealth"],
   },
 };
 
@@ -294,6 +304,7 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   scientistboat: "scientistboat",
   chaoswave: "chaoswave",
   healinghands: "healinghands",
+  fullheal: "fullheal",
 };
 
 /** Get raw action/event name from body (action, actionName, or event) for admin-connection lookup. */

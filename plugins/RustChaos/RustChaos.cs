@@ -66,7 +66,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavecancel", "healinghands" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavecancel", "healinghands", "fullheal" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -225,6 +225,17 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "fullheal":
+                    if (target != null)
+                    {
+                        // Heal() should cap at the player's max health.
+                        float big = 99999f;
+                        target.Heal(big);
+                        BroadcastChat(ChatMsg($"{viewerName} triggered FULL HEALTH!"));
+                        Puts($"{LogPrefix} Set streamer {target.displayName} to full health (Heal({big})).");
+                    }
+                    break;
+
                 case "shark":
                     if (target != null)
                     {
@@ -363,6 +374,7 @@ namespace Oxide.Plugins
                    action == "wolf" ||
                    action == "bear" ||
                    action == "healinghands" ||
+                   action == "fullheal" ||
                    action == "shark" ||
                    action == "pig" ||
                    action == "supply" ||
