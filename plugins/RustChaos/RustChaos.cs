@@ -629,8 +629,26 @@ namespace Oxide.Plugins
                     Vector3 d = ent.transform.position - streamerPos.Value;
                     if (d.sqrMagnitude > leashSqr)
                     {
-                        // Kill will trigger OnEntityDeath and advance the wave.
-                        ent.Kill();
+                        // Don't kill (player expects bears to "run back" and not disappear).
+                        // Soft leash: reposition the bear back inside the leash radius near the streamer.
+                        Vector3 offset = UnityEngine.Random.insideUnitSphere;
+                        offset.y = 0f;
+                        if (offset.sqrMagnitude < 0.01f) offset = Vector3.forward;
+                        offset.Normalize();
+                        float distance = UnityEngine.Random.Range(3f, Mathf.Max(3f, leashDistance - 1f));
+                        Vector3 newPos = streamerPos.Value + offset * distance;
+                        ent.transform.position = newPos;
+
+                        // If the bear has a rigidbody, zero velocity so it immediately "commits" to the new spot.
+                        var rb = ent.GetComponent<Rigidbody>();
+                        if (rb != null)
+                        {
+                            rb.velocity = Vector3.zero;
+                            rb.angularVelocity = Vector3.zero;
+                        }
+
+                        // Try to force a network sync (method exists on BaseEntity in most Rust/Oxide builds).
+                        try { ent.SendNetworkUpdate(); } catch { }
                     }
                 }
                 catch { }
