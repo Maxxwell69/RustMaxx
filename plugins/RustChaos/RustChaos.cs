@@ -935,11 +935,27 @@ namespace Oxide.Plugins
             PrintWarning($"{LogPrefix} ChaosWave: none of the wall/med candidates were found ({context}).");
         }
 
+        private void GiveFirstItemToBeltWithLog(BasePlayer player, int amount, string[] candidates, string context)
+        {
+            if (player == null || !player.IsValid() || amount <= 0 || candidates == null || candidates.Length == 0) return;
+            foreach (var s in candidates)
+            {
+                if (string.IsNullOrWhiteSpace(s)) continue;
+                var def = ItemManager.FindItemDefinition(s);
+                if (def == null) continue;
+                Item item = ItemManager.Create(def, amount, 0ul);
+                if (item == null) return;
+                item.MoveToContainer(player.inventory.containerBelt);
+                return;
+            }
+            PrintWarning($"{LogPrefix} ChaosWave: none of the belt item candidates were found ({context}).");
+        }
+
         private void GiveChaosWaveLoadout(BasePlayer streamer, int wave)
         {
             // "Wall" handling: give wooden barricades (as requested).
             // If your server uses a different mapping, plugin will log which item shortnames are missing.
-            string[] wallCandidates = { "barricade.wood", "barricade.wood.cover", "barricade.woodwire" };
+            string[] wallCandidates = { "barricade.cover.wood", "barricade.cover.wood_double", "barricade.wood.cover", "barricade.wood", "barricade.woodwire" };
 
             // Med stick + bandage (cloth bandage) shortnames
             string[] medCandidates = { "medstick" };
@@ -951,6 +967,7 @@ namespace Oxide.Plugins
                 case 1:
                     GiveItemToBeltWithLog(streamer, 1, "bow.hunting", "Round 1 bow (belt/arm slot)");
                     GiveItemWithLog(streamer, 100, "arrow.wooden", "Round 1 arrows (100)");
+                    GiveFirstItemToBeltWithLog(streamer, 2, wallCandidates, "Round 1 wooden barricades (2, belt/arm slot)");
                     GiveFirstItemWithLog(streamer, 1, medCandidates, "Round 1 med stick");
                     break;
 
