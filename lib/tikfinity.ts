@@ -19,6 +19,9 @@ export const TIKTRIGGER_ACTIONS = [
   "chaos",
   "scientistboat",
   "chaoswave",
+  "chaoswavewolf",
+  "chaoswavepig",
+  "chaoswaverandom",
   "healinghands",
   "fullheal",
 ] as const;
@@ -54,6 +57,12 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   ScientistBoat: "scientistboat",
   "Chaos Wave": "chaoswave",
   ChaosWave: "chaoswave",
+  "Wolf Chaos Wave": "chaoswavewolf",
+  WolfChaosWave: "chaoswavewolf",
+  "Pig Chaos Wave": "chaoswavepig",
+  PigChaosWave: "chaoswavepig",
+  "Random Chaos Wave": "chaoswaverandom",
+  RandomChaosWave: "chaoswaverandom",
   "Healing Hands": "healinghands",
   HealingHands: "healinghands",
   "Full Health": "fullheal",
@@ -88,6 +97,12 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   ScientistBoat: 150,
   "Chaos Wave": 200,
   ChaosWave: 200,
+  "Wolf Chaos Wave": 200,
+  WolfChaosWave: 200,
+  "Pig Chaos Wave": 200,
+  PigChaosWave: 200,
+  "Random Chaos Wave": 200,
+  RandomChaosWave: 200,
   "Healing Hands": 50,
   HealingHands: 50,
   "Full Health": 75,
@@ -168,6 +183,24 @@ export const ACTION_META: Record<
     label: "Chaos Wave",
     description: "Land only: bear wave 1→10 (next wave when all bears killed). Each wave also gives the streamer weapons/meds/walls per your configured rounds; countdowns: 20s after wave1, 25s after wave2, 30s otherwise.",
     exampleGifts: ["Chaos Wave", "ChaosWave"],
+  },
+  chaoswavewolf: {
+    label: "Chaos Wolf Wave",
+    description:
+      "Same as Chaos Wave but spawns wolves (1→10). Same loadouts, countdowns, UI, and land-only rules.",
+    exampleGifts: ["Wolf Chaos Wave", "WolfChaosWave"],
+  },
+  chaoswavepig: {
+    label: "Chaos Pig Wave",
+    description:
+      "Same as Chaos Wave but spawns pigs/boars (1→10). Same loadouts, countdowns, UI, and land-only rules.",
+    exampleGifts: ["Pig Chaos Wave", "PigChaosWave"],
+  },
+  chaoswaverandom: {
+    label: "Chaos Random Wave",
+    description:
+      "Same as Chaos Wave but each spawn picks a random enemy type (wolf, bear, pig, scientists, heavies, zombies, etc.; prefabs vary by server build).",
+    exampleGifts: ["Random Chaos Wave", "RandomChaosWave"],
   },
   healinghands: {
     label: "Healing Hands",
@@ -303,6 +336,9 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   chaos: "chaos",
   scientistboat: "scientistboat",
   chaoswave: "chaoswave",
+  chaoswavewolf: "chaoswavewolf",
+  chaoswavepig: "chaoswavepig",
+  chaoswaverandom: "chaoswaverandom",
   healinghands: "healinghands",
   fullheal: "fullheal",
 };

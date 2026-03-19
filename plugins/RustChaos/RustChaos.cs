@@ -17,7 +17,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.9.0")]
+    [Info("RustChaos", "RustMaxx", "1.10.0")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustChaos : RustPlugin
     {
@@ -69,7 +69,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavecancel", "healinghands", "fullheal" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -77,7 +77,7 @@ namespace Oxide.Plugins
         // wave 1 -> wave 2 = 20s, wave 2 -> wave 3 = 25s, and default to 30s for the rest (until you tell me different).
         // Index = completedWave - 1 (so [0] is after wave 1).
         private static readonly int[] ChaosWaveCountdownAfterWaveSeconds = { 20, 25, 30, 30, 30, 30, 30, 30, 30, 0 };
-        private HashSet<NetworkableId> _chaosWaveBearIds;
+        private HashSet<NetworkableId> _chaosWaveEnemyIds;
         private int _chaosWaveNumber;
         private bool _chaosWaveSubscribed;
         private int _chaosWaveCountdown;
@@ -88,9 +88,14 @@ namespace Oxide.Plugins
         private int _chaosWaveSpawnedBearCount;
         private int _chaosWaveKilledBearCount;
         private bool _chaosWaveSpawning;
+        private ChaosWaveMode _chaosWaveMode;
+        private string _chaosWaveUiTitle = "Chaos Wave";
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
         private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
+
+        /// <summary>Land chaos wave enemy family (same progression + loadouts as bear wave).</summary>
+        private enum ChaosWaveMode { Bear, Wolf, Boar, Random }
 
         // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
         private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
@@ -101,6 +106,22 @@ namespace Oxide.Plugins
         private const string BearPrefab = "assets/rust.ai/agents/bear/bear.prefab";
         private const string BoarPrefab = "assets/rust.ai/agents/boar/boar.prefab";
         private const string CargoPlanePrefab = "assets/prefabs/npc/cargo plane/cargo_plane.prefab";
+
+        /// <summary>Prefabs for chaoswaverandom — paths differ by build; failed paths are skipped.</summary>
+        private static readonly string[] ChaosWaveRandomPrefabPool =
+        {
+            WolfPrefab,
+            BearPrefab,
+            BoarPrefab,
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
+            "assets/prefabs/npc/scientist/scientist.prefab",
+            "assets/content/npc/scientist/scientist.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_bradley_heavy.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_oilrig.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+            "assets/prefabs/npc/halloween/zombie/zombie.prefab"
+        };
 
         #endregion
 
@@ -150,7 +171,7 @@ namespace Oxide.Plugins
         private void ChatChaosWaveCancel(BasePlayer player, string command, string[] args)
         {
             if (player == null || !player.IsConnected) return;
-            if (_chaosWaveBearIds == null || _chaosWaveBearIds.Count == 0)
+            if (!_chaosWaveSubscribed)
             {
                 SendReply(player, "No chaos wave is currently active.");
                 return;
@@ -306,21 +327,22 @@ namespace Oxide.Plugins
 
                 case "chaoswave":
                     if (target != null)
-                    {
-                        ChaosLocation loc = GetStreamerChaosLocation(target);
-                        if (loc != ChaosLocation.Land)
-                        {
-                            BroadcastChat(ChatMsg($"Chaos wave is land only. {viewerName} sent {giftName}!"));
-                            break;
-                        }
-                        if (_chaosWaveBearIds != null && _chaosWaveBearIds.Count > 0)
-                        {
-                            BroadcastChat(ChatMsg("Chaos wave already in progress!"));
-                            break;
-                        }
-                        BroadcastChat(ChatMsg($"{viewerName} started a CHAOS WAVE! Kill the bears…"));
-                        StartLandChaosWave(target);
-                    }
+                        TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Bear);
+                    break;
+
+                case "chaoswavewolf":
+                    if (target != null)
+                        TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Wolf);
+                    break;
+
+                case "chaoswavepig":
+                    if (target != null)
+                        TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Boar);
+                    break;
+
+                case "chaoswaverandom":
+                    if (target != null)
+                        TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Random);
                     break;
 
                 case "chaoswavecancel":
@@ -413,7 +435,10 @@ namespace Oxide.Plugins
                    action == "likes" ||
                    action == "chaos" ||
                    action == "scientistboat" ||
-                   action == "chaoswave";
+                   action == "chaoswave" ||
+                   action == "chaoswavewolf" ||
+                   action == "chaoswavepig" ||
+                   action == "chaoswaverandom";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -567,12 +592,113 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>
-        /// Land chaos wave: spawn 1 bear; when all dead spawn 2, then 3 … up to 10. Requires Land.
-        /// </summary>
-        private void StartLandChaosWave(BasePlayer streamer)
+        private bool TryStartLandChaosWave(BasePlayer target, string viewerName, string giftName, Func<string, string> chatMsg, ChaosWaveMode mode)
         {
-            _chaosWaveBearIds = new HashSet<NetworkableId>();
+            if (target == null || !target.IsValid()) return false;
+            ChaosLocation loc = GetStreamerChaosLocation(target);
+            if (loc != ChaosLocation.Land)
+            {
+                BroadcastChat(chatMsg($"Chaos wave is land only. {viewerName} sent {giftName}!"));
+                return false;
+            }
+            if (_chaosWaveSubscribed)
+            {
+                BroadcastChat(chatMsg("Chaos wave already in progress!"));
+                return false;
+            }
+            if (mode == ChaosWaveMode.Bear)
+                BroadcastChat(chatMsg($"{viewerName} started a CHAOS WAVE! Kill the bears…"));
+            else
+                BroadcastChat(chatMsg($"{viewerName} started {ChaosWaveUiTitleForMode(mode)}!"));
+            StartLandChaosWave(target, mode);
+            return true;
+        }
+
+        private static string ChaosWaveUiTitleForMode(ChaosWaveMode mode)
+        {
+            switch (mode)
+            {
+                case ChaosWaveMode.Wolf: return "Chaos Wolf Wave";
+                case ChaosWaveMode.Boar: return "Chaos Pig Wave";
+                case ChaosWaveMode.Random: return "Chaos Random Wave";
+                default: return "Chaos Bear Wave";
+            }
+        }
+
+        private string ChaosWaveSpawnBroadcastLine(int waveNum, int spawnedCount)
+        {
+            if (spawnedCount <= 0) return $"Chaos wave {waveNum}! Enemy spawn failed — check server console / prefabs.";
+            string noun = _chaosWaveMode == ChaosWaveMode.Wolf ? "wolves"
+                : _chaosWaveMode == ChaosWaveMode.Boar ? "pigs"
+                : _chaosWaveMode == ChaosWaveMode.Random ? "enemies"
+                : "bears";
+            if (spawnedCount == 1)
+            {
+                if (_chaosWaveMode == ChaosWaveMode.Wolf) return $"Chaos wave {waveNum}! 1 wolf spawned.";
+                if (_chaosWaveMode == ChaosWaveMode.Boar) return $"Chaos wave {waveNum}! 1 pig spawned.";
+                if (_chaosWaveMode == ChaosWaveMode.Random) return $"Chaos wave {waveNum}! 1 enemy spawned.";
+                return $"Chaos wave {waveNum}! 1 bear spawned.";
+            }
+            return $"Chaos wave {waveNum}! {spawnedCount} {noun} spawned.";
+        }
+
+        /// <summary>Creates one chaos-wave enemy (prefab depends on <see cref="_chaosWaveMode"/>).</summary>
+        private BaseEntity CreateChaosWaveEnemyEntity(Vector3 pos)
+        {
+            if (pos == Vector3.zero) return null;
+            if (_chaosWaveMode == ChaosWaveMode.Random)
+            {
+                for (int t = 0; t < 18; t++)
+                {
+                    string p = ChaosWaveRandomPrefabPool[UnityEngine.Random.Range(0, ChaosWaveRandomPrefabPool.Length)];
+                    BaseEntity e = GameManager.server.CreateEntity(p, pos, Quaternion.identity, true);
+                    if (e != null) return e;
+                }
+                return GameManager.server.CreateEntity(WolfPrefab, pos, Quaternion.identity, true);
+            }
+            string prefab = _chaosWaveMode == ChaosWaveMode.Wolf ? WolfPrefab : _chaosWaveMode == ChaosWaveMode.Boar ? BoarPrefab : BearPrefab;
+            return GameManager.server.CreateEntity(prefab, pos, Quaternion.identity, true);
+        }
+
+        private bool TrySpawnOneChaosWaveEnemy(BasePlayer streamer, float minRadius, float maxRadius)
+        {
+            for (int att = 0; att < 35; att++)
+            {
+                Vector3 pos = GetPositionWithinRadius(streamer, minRadius, maxRadius);
+                if (pos == Vector3.zero) pos = GetPositionNear(streamer);
+                BaseEntity ent = CreateChaosWaveEnemyEntity(pos);
+                if (ent == null) continue;
+                ent.Spawn();
+                _chaosWaveEnemyIds.Add(ent.net.ID);
+                return true;
+            }
+            return false;
+        }
+
+        private int SpawnManyChaosWaveEnemies(BasePlayer streamer, int countWanted, float minRadius, float maxRadius)
+        {
+            int spawned = 0;
+            for (int i = 0; i < countWanted; i++)
+            {
+                if (TrySpawnOneChaosWaveEnemy(streamer, minRadius, maxRadius))
+                    spawned++;
+                else
+                {
+                    PrintWarning($"{LogPrefix} Chaos wave: could not spawn enemy {i + 1}/{countWanted}.");
+                    break;
+                }
+            }
+            return spawned;
+        }
+
+        /// <summary>
+        /// Land chaos wave: spawn 1..10 enemies (same rules for bear / wolf / pig / random). Requires Land.
+        /// </summary>
+        private void StartLandChaosWave(BasePlayer streamer, ChaosWaveMode mode)
+        {
+            _chaosWaveMode = mode;
+            _chaosWaveUiTitle = ChaosWaveUiTitleForMode(mode);
+            _chaosWaveEnemyIds = new HashSet<NetworkableId>();
             _chaosWaveNumber = 1;
             _chaosWaveStreamerUserId = streamer != null ? streamer.userID : 0ul;
             // Full heal at the moment the wave starts.
@@ -592,10 +718,10 @@ namespace Oxide.Plugins
             _chaosWaveKilledBearCount = 0;
             _chaosWaveSpawning = true;
             int firstWaveSpawnDelaySeconds = 20;
-            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave 1\nFirst enemy in {firstWaveSpawnDelaySeconds}s");
+            ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave 1\nFirst enemy in {firstWaveSpawnDelaySeconds}s");
             timer.Once(firstWaveSpawnDelaySeconds, () =>
             {
-                if (_chaosWaveBearIds == null) return;
+                if (_chaosWaveEnemyIds == null) return;
                 BasePlayer s = GetStreamerPlayer();
                 if (s == null || !s.IsValid())
                 {
@@ -603,11 +729,12 @@ namespace Oxide.Plugins
                     return;
                 }
                 SpawnChaosWaveBears(s, 1);
-                BroadcastChat("Chaos wave 1! 1 bear spawned.");
-                Puts($"{LogPrefix} Chaos wave 1: 1 bear spawned after delay.");
-                ShowChaosWaveUIToAll("Chaos Bear Wave", "Wave 1\nEnemies left: 1");
+                int n = _chaosWaveTargetBearCount;
+                BroadcastChat(ChaosWaveSpawnBroadcastLine(1, n));
+                Puts($"{LogPrefix} Chaos wave 1: {n} enemies spawned after delay ({_chaosWaveMode}).");
+                ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave 1\nEnemies left: {Mathf.Max(0, n)}");
             });
-            Puts($"{LogPrefix} Chaos wave started: wave 1 queued (20s delay).");
+            Puts($"{LogPrefix} Chaos wave started ({_chaosWaveMode}): wave 1 queued (20s delay).");
         }
 
         private void StartChaosWaveLeashTimer()
@@ -620,7 +747,7 @@ namespace Oxide.Plugins
 
         private void CheckChaosWaveLeash(float leashDistance)
         {
-            if (_chaosWaveBearIds == null || _chaosWaveBearIds.Count == 0) return;
+            if (_chaosWaveEnemyIds == null || _chaosWaveEnemyIds.Count == 0) return;
 
             // Find the current streamer position by userID (stable even if name changes).
             Vector3? streamerPos = null;
@@ -641,7 +768,7 @@ namespace Oxide.Plugins
 
             float leashSqr = leashDistance * leashDistance;
             // Copy ids to avoid mutation during enumeration.
-            var ids = new List<NetworkableId>(_chaosWaveBearIds);
+            var ids = new List<NetworkableId>(_chaosWaveEnemyIds);
             foreach (var nid in ids)
             {
                 try
@@ -697,7 +824,7 @@ namespace Oxide.Plugins
 
         private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
         {
-            if (entity == null || _chaosWaveBearIds == null) return;
+            if (entity == null || _chaosWaveEnemyIds == null) return;
 
             // If the streamer dies mid-wave, cancel the entire wave.
             BasePlayer deadPlayer = entity as BasePlayer;
@@ -707,11 +834,11 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (!_chaosWaveBearIds.Remove(entity.net.ID)) return;
+            if (!_chaosWaveEnemyIds.Remove(entity.net.ID)) return;
             _chaosWaveKilledBearCount++;
             int bearsLeftThisWave = Math.Max(0, _chaosWaveTargetBearCount - _chaosWaveKilledBearCount);
-            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber}\nEnemies left: {bearsLeftThisWave}");
-            if (_chaosWaveBearIds.Count > 0) return;
+            ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave {_chaosWaveNumber}\nEnemies left: {bearsLeftThisWave}");
+            if (_chaosWaveEnemyIds.Count > 0) return;
 
             // If we're still in the middle of staged spawning, don't advance the wave yet.
             // This prevents "wave complete" when the first group of bears died but later bears haven't spawned.
@@ -732,7 +859,7 @@ namespace Oxide.Plugins
             if (completedWave >= 10)
             {
                 // Final reward after wave 10 cleared
-                _chaosWaveBearIds = null;
+                _chaosWaveEnemyIds = null;
                 _chaosWaveSpawning = false;
                 _chaosWaveTargetBearCount = 0;
                 _chaosWaveSpawnedBearCount = 0;
@@ -758,13 +885,13 @@ namespace Oxide.Plugins
             if (_chaosWaveCountdown < 0) _chaosWaveCountdown = 0;
             _chaosWaveCountdownTimer?.Destroy();
             _chaosWaveCountdownTimer = timer.Repeat(1f, 0, ChaosWaveCountdownTick);
-            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {completedWave} complete\nNext wave in {_chaosWaveCountdown}s");
+            ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave {completedWave} complete\nNext wave in {_chaosWaveCountdown}s");
         }
 
         private void ChaosWaveCountdownTick()
         {
             _chaosWaveCountdown--;
-            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber - 1} complete\nNext wave in {_chaosWaveCountdown}s");
+            ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave {_chaosWaveNumber - 1} complete\nNext wave in {_chaosWaveCountdown}s");
             if (_chaosWaveCountdown > 0) return;
 
             _chaosWaveCountdownTimer?.Destroy();
@@ -772,7 +899,7 @@ namespace Oxide.Plugins
             BasePlayer streamer = GetStreamerPlayer();
             if (streamer == null || !streamer.IsValid())
             {
-                _chaosWaveBearIds = null;
+                _chaosWaveEnemyIds = null;
                 _chaosWaveLeashTimer?.Destroy();
                 _chaosWaveLeashTimer = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
@@ -780,9 +907,10 @@ namespace Oxide.Plugins
                 return;
             }
             SpawnChaosWaveBears(streamer, _chaosWaveNumber);
-            BroadcastChat($"Chaos wave {_chaosWaveNumber}! {_chaosWaveNumber} bears spawned.");
-            Puts($"{LogPrefix} Chaos wave {_chaosWaveNumber}: {_chaosWaveNumber} bears.");
-            ShowChaosWaveUIToAll("Chaos Bear Wave", $"Wave {_chaosWaveNumber}\nEnemies left: {_chaosWaveTargetBearCount}");
+            int spawnedNow = _chaosWaveTargetBearCount;
+            BroadcastChat(ChaosWaveSpawnBroadcastLine(_chaosWaveNumber, spawnedNow));
+            Puts($"{LogPrefix} Chaos wave {_chaosWaveNumber}: {spawnedNow} enemies ({_chaosWaveMode}).");
+            ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave {_chaosWaveNumber}\nEnemies left: {spawnedNow}");
         }
 
         private void ShowChaosWaveUIToAll(string line1, string line2)
@@ -824,20 +952,16 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Spawns N bears within ChaosWaveBearRadius of the streamer and adds their net IDs to _chaosWaveBearIds.
+        /// Spawns N chaos-wave enemies within ChaosWaveBearRadius of the streamer and tracks their net IDs.
         /// </summary>
         private void SpawnChaosWaveBears(BasePlayer streamer, int count)
         {
-            // Wave spawn state used by OnEntityDeath so we don't "complete the wave"
-            // until all staged spawns have happened.
-            _chaosWaveTargetBearCount = count;
             _chaosWaveSpawnedBearCount = 0;
             _chaosWaveKilledBearCount = 0;
             _chaosWaveSpawning = count >= 4;
 
             float maxRadius = Mathf.Clamp(_config?.ChaosWaveBearRadius ?? 25f, 10f, 80f);
             float minRadius = 6f;
-            // Ensure we spawn bears within leash distance so they don't get corrected/killed immediately.
             float leashDistance = Mathf.Clamp(_config?.ChaosWaveBearLeashDistance ?? 18f, 5f, 80f);
             float effectiveMaxRadius = Mathf.Min(maxRadius, leashDistance - 1f);
             if (effectiveMaxRadius < minRadius)
@@ -846,24 +970,17 @@ namespace Oxide.Plugins
             // Spawn everything at once for waves 1-3.
             if (!_chaosWaveSpawning)
             {
-                for (int i = 0; i < count; i++)
-                {
-                    Vector3 pos = GetPositionWithinRadius(streamer, minRadius, effectiveMaxRadius);
-                    if (pos == Vector3.zero) pos = GetPositionNear(streamer);
-                    BaseEntity bear = GameManager.server.CreateEntity(BearPrefab, pos, Quaternion.identity, true);
-                    if (bear != null)
-                    {
-                        bear.Spawn();
-                        _chaosWaveBearIds.Add(bear.net.ID);
-                    }
-                }
-                _chaosWaveSpawnedBearCount = count;
+                int spawned = SpawnManyChaosWaveEnemies(streamer, count, minRadius, effectiveMaxRadius);
+                _chaosWaveTargetBearCount = spawned;
+                _chaosWaveSpawnedBearCount = spawned;
+                if (spawned < count)
+                    PrintWarning($"{LogPrefix} Chaos wave: wanted {count} enemies, spawned {spawned} ({_chaosWaveMode}).");
                 return;
             }
 
-            // From wave 4 onward: staged group spawns.
-            // Even waves: spawn 2 bears per group.
-            // Odd waves: spawn 1 bear per group.
+            _chaosWaveTargetBearCount = count;
+
+            // From wave 4 onward: staged group spawns (even waves: 2 per tick, odd: 1 per tick).
             int groupSize = (count % 2 == 0) ? 2 : 1;
             float interval = (count % 2 == 0) ? 1.5f : 1f;
 
@@ -879,8 +996,7 @@ namespace Oxide.Plugins
 
                 timer.Once(delay, () =>
                 {
-                    // If wave was canceled, stop spawning.
-                    if (_chaosWaveBearIds == null || scheduledCount <= 0) return;
+                    if (_chaosWaveEnemyIds == null || scheduledCount <= 0) return;
 
                     BasePlayer s = GetStreamerPlayer();
                     if (s == null || !s.IsValid())
@@ -889,21 +1005,30 @@ namespace Oxide.Plugins
                         return;
                     }
 
+                    int got = 0;
                     for (int i = 0; i < scheduledCount; i++)
                     {
-                        Vector3 pos = GetPositionWithinRadius(s, minRadius, effectiveMaxRadius);
-                        if (pos == Vector3.zero) pos = GetPositionNear(s);
-                        BaseEntity bear = GameManager.server.CreateEntity(BearPrefab, pos, Quaternion.identity, true);
-                        if (bear != null)
-                        {
-                            bear.Spawn();
-                            _chaosWaveBearIds.Add(bear.net.ID);
-                        }
+                        if (TrySpawnOneChaosWaveEnemy(s, minRadius, effectiveMaxRadius))
+                            got++;
                     }
-
-                    _chaosWaveSpawnedBearCount += scheduledCount;
+                    _chaosWaveSpawnedBearCount += got;
                     if (_chaosWaveSpawnedBearCount >= _chaosWaveTargetBearCount)
                         _chaosWaveSpawning = false;
+                });
+            }
+
+            // Ensure spawn phase ends even if some slots failed (random prefabs / limits).
+            if (groupIndex > 0)
+            {
+                float settleDelay = (groupIndex - 1) * interval + 2.5f;
+                timer.Once(settleDelay, () =>
+                {
+                    if (_chaosWaveEnemyIds == null) return;
+                    if (!_chaosWaveSpawning) return;
+                    _chaosWaveTargetBearCount = _chaosWaveSpawnedBearCount;
+                    _chaosWaveSpawning = false;
+                    if (_chaosWaveSpawnedBearCount < count)
+                        PrintWarning($"{LogPrefix} Chaos wave: staged spawn ended with {_chaosWaveSpawnedBearCount}/{count} enemies ({_chaosWaveMode}).");
                 });
             }
         }
@@ -1060,9 +1185,9 @@ namespace Oxide.Plugins
             // Kill tracked bears (if any) and reset wave state.
             try
             {
-                if (_chaosWaveBearIds != null)
+                if (_chaosWaveEnemyIds != null)
                 {
-                    foreach (var nid in _chaosWaveBearIds)
+                    foreach (var nid in _chaosWaveEnemyIds)
                     {
                         try
                         {
@@ -1077,7 +1202,7 @@ namespace Oxide.Plugins
             }
             finally
             {
-                _chaosWaveBearIds = null;
+                _chaosWaveEnemyIds = null;
                 _chaosWaveNumber = 0;
                 _chaosWaveTargetBearCount = 0;
                 _chaosWaveSpawnedBearCount = 0;
