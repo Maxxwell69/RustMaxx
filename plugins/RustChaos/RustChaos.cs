@@ -139,6 +139,30 @@ namespace Oxide.Plugins
             arg.ReplyWith($"OK: {action}" + (scrapAmount > 0 ? $" +{scrapAmount} scrap" : ""));
         }
 
+        // User-side cancel so waves can be stopped even if RCON is unavailable/bugged.
+        // Usage in-game (by the streamer who started the wave):
+        //   /chaoswavecancel
+        [ChatCommand("chaoswavecancel")]
+        private void ChatChaosWaveCancel(BasePlayer player, string command, string[] args)
+        {
+            if (player == null || !player.IsConnected) return;
+            if (_chaosWaveBearIds == null || _chaosWaveBearIds.Count == 0)
+            {
+                SendReply(player, "No chaos wave is currently active.");
+                return;
+            }
+
+            // Only the configured streamer for the current wave can cancel it.
+            if (_chaosWaveStreamerUserId != 0ul && player.userID != _chaosWaveStreamerUserId)
+            {
+                SendReply(player, "Only the chaos wave streamer can cancel the wave.");
+                return;
+            }
+
+            CancelChaosWave("Chaos wave cancelled by user.");
+            SendReply(player, "Chaos wave cancelled.");
+        }
+
         private static bool IsAllowedAction(string action)
         {
             foreach (string a in AllowedActions)
