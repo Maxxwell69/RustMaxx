@@ -12,10 +12,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Oxide.Game.Rust.Cui;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.8.0")]
+    [Info("RustChaos", "RustMaxx", "1.9.0")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustChaos : RustPlugin
     {
@@ -63,10 +64,14 @@ namespace Oxide.Plugins
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
         private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave" };
 
-        // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead).
+        // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
+        private const string ChaosWaveUiName = "RustChaos_WaveUI";
+        private const int ChaosWaveCountdownSeconds = 10;
         private HashSet<uint> _chaosWaveBearIds;
         private int _chaosWaveNumber;
         private bool _chaosWaveSubscribed;
+        private int _chaosWaveCountdown;
+        private Timer _chaosWaveCountdownTimer;
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
         private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
@@ -496,6 +501,7 @@ namespace Oxide.Plugins
                 Subscribe(nameof(OnEntityDeath));
                 _chaosWaveSubscribed = true;
             }
+            ShowChaosWaveUIToAll("Wave 1", null);
             Puts($"{LogPrefix} Chaos wave started: wave 1 (1 bear).");
         }
 
@@ -511,6 +517,7 @@ namespace Oxide.Plugins
             {
                 _chaosWaveBearIds = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
+                DestroyChaosWaveUIForAll();
                 BroadcastChat("Chaos wave complete! All 10 waves cleared.");
                 Puts($"{LogPrefix} Chaos wave finished.");
                 return;
@@ -521,12 +528,78 @@ namespace Oxide.Plugins
             {
                 Puts($"{LogPrefix} Chaos wave aborted: streamer offline.");
                 _chaosWaveBearIds = null;
+                _chaosWaveCountdownTimer?.Destroy();
+                _chaosWaveCountdownTimer = null;
                 if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
+                DestroyChaosWaveUIForAll();
+                return;
+            }
+
+            // 10 second countdown before next wave
+            _chaosWaveCountdown = ChaosWaveCountdownSeconds;
+            _chaosWaveCountdownTimer?.Destroy();
+            _chaosWaveCountdownTimer = timer.Repeat(1f, 0, ChaosWaveCountdownTick);
+            ShowChaosWaveUIToAll($"Wave {_chaosWaveNumber - 1} complete", $"Next wave in {_chaosWaveCountdown}s");
+        }
+
+        private void ChaosWaveCountdownTick()
+        {
+            _chaosWaveCountdown--;
+            ShowChaosWaveUIToAll($"Wave {_chaosWaveNumber - 1} complete", _chaosWaveCountdown > 0 ? $"Next wave in {_chaosWaveCountdown}s" : "Spawning…");
+            if (_chaosWaveCountdown > 0) return;
+
+            _chaosWaveCountdownTimer?.Destroy();
+            _chaosWaveCountdownTimer = null;
+            BasePlayer streamer = GetStreamerPlayer();
+            if (streamer == null || !streamer.IsValid())
+            {
+                _chaosWaveBearIds = null;
+                if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
+                DestroyChaosWaveUIForAll();
                 return;
             }
             SpawnChaosWaveBears(streamer, _chaosWaveNumber);
             BroadcastChat($"Chaos wave {_chaosWaveNumber}! {_chaosWaveNumber} bears spawned.");
             Puts($"{LogPrefix} Chaos wave {_chaosWaveNumber}: {_chaosWaveNumber} bears.");
+            ShowChaosWaveUIToAll($"Wave {_chaosWaveNumber}", null);
+        }
+
+        private void ShowChaosWaveUIToAll(string line1, string line2)
+        {
+            foreach (var player in BasePlayer.activePlayerList)
+            {
+                if (player != null && player.IsConnected)
+                    ShowChaosWaveUI(player, line1, line2);
+            }
+        }
+
+        private void ShowChaosWaveUI(BasePlayer player, string line1, string line2)
+        {
+            if (player == null) return;
+            CuiHelper.DestroyUi(player, ChaosWaveUiName);
+            var container = new CuiElementContainer();
+            container.Add(new CuiPanel
+            {
+                Image = { Color = "0.1 0.1 0.15 0.85" },
+                RectTransform = { AnchorMin = "0.02 0.88", AnchorMax = "0.28 0.98" }
+            }, "Overlay", ChaosWaveUiName);
+            string text = line1;
+            if (!string.IsNullOrEmpty(line2)) text += "\n" + line2;
+            container.Add(new CuiLabel
+            {
+                Text = { Text = text, FontSize = 14, Align = TextAnchor.UpperLeft, Color = "1 0.9 0.3 1" },
+                RectTransform = { AnchorMin = "0.05 0.1", AnchorMax = "0.95 0.9" }
+            }, ChaosWaveUiName);
+            CuiHelper.AddUi(player, container);
+        }
+
+        private void DestroyChaosWaveUIForAll()
+        {
+            foreach (var player in BasePlayer.activePlayerList)
+            {
+                if (player != null && player.IsConnected)
+                    CuiHelper.DestroyUi(player, ChaosWaveUiName);
+            }
         }
 
         /// <summary>
