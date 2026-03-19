@@ -33,6 +33,8 @@ namespace Oxide.Plugins
             public string ScientistPtBoatPrefabPath { get; set; } = "";
             /// <summary>Chaos wave: max distance (meters) from streamer that bears can spawn. Bears spawn between 6m and this radius.</summary>
             public float ChaosWaveBearRadius { get; set; } = 25f;
+            /// <summary>Healing Hands: amount of health added to the streamer per trigger.</summary>
+            public float HealingHandsAmount { get; set; } = 10f;
         }
 
         private PluginConfig _config;
@@ -64,7 +66,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavecancel" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavecancel", "healinghands" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -210,6 +212,16 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "healinghands":
+                    if (target != null)
+                    {
+                        float amount = Mathf.Max(0f, _config?.HealingHandsAmount ?? 10f);
+                        target.Heal(amount);
+                        BroadcastChat(ChatMsg($"{viewerName} triggered HEALING HANDS! +{amount:0} health"));
+                        Puts($"{LogPrefix} Healed streamer {target.displayName} by {amount}");
+                    }
+                    break;
+
                 case "shark":
                     if (target != null)
                     {
@@ -342,7 +354,19 @@ namespace Oxide.Plugins
 
         private static bool ActionRequiresPlayer(string action)
         {
-            return action == "smoke" || action == "fireworks" || action == "scientist" || action == "wolf" || action == "bear" || action == "shark" || action == "pig" || action == "supply" || action == "likes" || action == "chaos" || action == "scientistboat" || action == "chaoswave";
+            return action == "smoke" ||
+                   action == "fireworks" ||
+                   action == "scientist" ||
+                   action == "wolf" ||
+                   action == "bear" ||
+                   action == "healinghands" ||
+                   action == "shark" ||
+                   action == "pig" ||
+                   action == "supply" ||
+                   action == "likes" ||
+                   action == "chaos" ||
+                   action == "scientistboat" ||
+                   action == "chaoswave";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
