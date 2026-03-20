@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-[Info("RustChaos", "RustMaxx", "1.13.2")]
+    [Info("RustChaos", "RustMaxx", "1.14.0")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -50,6 +50,10 @@ namespace Oxide.Plugins
             public string PatrolHelicopterPrefabPath { get; set; } = "";
             /// <summary>Optional. Hackable locked crate prefab (empty = built-in list).</summary>
             public string HackableLockedCratePrefabPath { get; set; } = "";
+            /// <summary>Optional. Tiger chaos wave: prefab path if your build differs (empty = built-in candidate list).</summary>
+            public string TigerPrefabPath { get; set; } = "";
+            /// <summary>Optional. Panther chaos wave: prefab path if your build differs (empty = built-in candidate list).</summary>
+            public string PantherPrefabPath { get; set; } = "";
         }
 
         private PluginConfig _config;
@@ -87,7 +91,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -135,7 +139,7 @@ namespace Oxide.Plugins
         private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
 
         /// <summary>Land chaos wave enemy family (same progression + loadouts as bear wave).</summary>
-        private enum ChaosWaveMode { Bear, Wolf, Boar, Random }
+        private enum ChaosWaveMode { Bear, Wolf, Boar, Tiger, Panther, Random }
 
         // Effect prefab paths (full paths; short names like "fx/..." are not valid in current Rust).
         private const string EffectSmoke = "assets/bundled/prefabs/fx/smoke_signal_full.prefab";
@@ -147,12 +151,34 @@ namespace Oxide.Plugins
         private const string BoarPrefab = "assets/rust.ai/agents/boar/boar.prefab";
         private const string CargoPlanePrefab = "assets/prefabs/npc/cargo plane/cargo_plane.prefab";
 
+        /// <summary>Candidate prefabs for tiger chaos / random pool — override first via TigerPrefabPath in config.</summary>
+        private static readonly string[] TigerPrefabCandidates =
+        {
+            "assets/rust.ai/agents/tiger/tiger.prefab",
+            "assets/rust.ai/agents/bigcat/tiger.prefab",
+            "assets/rust.ai/agents/cat/tiger.prefab"
+        };
+
+        /// <summary>Candidate prefabs for panther chaos / random pool — override first via PantherPrefabPath in config.</summary>
+        private static readonly string[] PantherPrefabCandidates =
+        {
+            "assets/rust.ai/agents/panther/panther.prefab",
+            "assets/rust.ai/agents/bigcat/panther.prefab",
+            "assets/rust.ai/agents/cat/panther.prefab"
+        };
+
         /// <summary>Prefabs for chaoswaverandom — paths differ by build; failed paths are skipped.</summary>
         private static readonly string[] ChaosWaveRandomPrefabPool =
         {
             WolfPrefab,
             BearPrefab,
             BoarPrefab,
+            TigerPrefabCandidates[0],
+            TigerPrefabCandidates[1],
+            TigerPrefabCandidates[2],
+            PantherPrefabCandidates[0],
+            PantherPrefabCandidates[1],
+            PantherPrefabCandidates[2],
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
             "assets/prefabs/npc/scientist/scientist.prefab",
             "assets/content/npc/scientist/scientist.prefab",
@@ -448,6 +474,16 @@ namespace Oxide.Plugins
                         TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Boar);
                     break;
 
+                case "chaoswavetiger":
+                    if (target != null)
+                        TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Tiger);
+                    break;
+
+                case "chaoswavepanther":
+                    if (target != null)
+                        TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Panther);
+                    break;
+
                 case "chaoswaverandom":
                     if (target != null)
                         TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Random);
@@ -724,6 +760,8 @@ namespace Oxide.Plugins
                    action == "chaoswave" ||
                    action == "chaoswavewolf" ||
                    action == "chaoswavepig" ||
+                   action == "chaoswavetiger" ||
+                   action == "chaoswavepanther" ||
                    action == "chaoswaverandom" ||
                    action == "revivechaos" ||
                    action == "chaosheli";
@@ -931,6 +969,8 @@ namespace Oxide.Plugins
             {
                 case ChaosWaveMode.Wolf: return "Chaos Wolf Wave";
                 case ChaosWaveMode.Boar: return "Chaos Pig Wave";
+                case ChaosWaveMode.Tiger: return "Chaos Tiger Wave";
+                case ChaosWaveMode.Panther: return "Chaos Panther Wave";
                 case ChaosWaveMode.Random: return "Chaos Random Wave";
                 default: return "Chaos Bear Wave";
             }
@@ -941,12 +981,16 @@ namespace Oxide.Plugins
             if (spawnedCount <= 0) return $"Chaos wave {waveNum}! Enemy spawn failed — check server console / prefabs.";
             string noun = _chaosWaveMode == ChaosWaveMode.Wolf ? "wolves"
                 : _chaosWaveMode == ChaosWaveMode.Boar ? "pigs"
+                : _chaosWaveMode == ChaosWaveMode.Tiger ? "tigers"
+                : _chaosWaveMode == ChaosWaveMode.Panther ? "panthers"
                 : _chaosWaveMode == ChaosWaveMode.Random ? "enemies"
                 : "bears";
             if (spawnedCount == 1)
             {
                 if (_chaosWaveMode == ChaosWaveMode.Wolf) return $"Chaos wave {waveNum}! 1 wolf spawned.";
                 if (_chaosWaveMode == ChaosWaveMode.Boar) return $"Chaos wave {waveNum}! 1 pig spawned.";
+                if (_chaosWaveMode == ChaosWaveMode.Tiger) return $"Chaos wave {waveNum}! 1 tiger spawned.";
+                if (_chaosWaveMode == ChaosWaveMode.Panther) return $"Chaos wave {waveNum}! 1 panther spawned.";
                 if (_chaosWaveMode == ChaosWaveMode.Random) return $"Chaos wave {waveNum}! 1 enemy spawned.";
                 return $"Chaos wave {waveNum}! 1 bear spawned.";
             }
@@ -977,6 +1021,8 @@ namespace Oxide.Plugins
             if (x.Contains("zombie")) return "Zombie";
             if (x.Contains("boar")) return "Pig";
             if (x.Contains("wolf")) return "Wolf";
+            if (x.Contains("tiger")) return "Tiger";
+            if (x.Contains("panther")) return "Panther";
             if (x.Contains("/bear") || x.Contains("bear.")) return "Bear";
             if (x.Contains("bradley_heavy") || x.Contains("scientistnpc_heavy")) return "Heavy scientist";
             if (x.Contains("oilrig")) return "Oil rig scientist";
@@ -1027,8 +1073,42 @@ namespace Oxide.Plugins
                 }
                 return GameManager.server.CreateEntity(WolfPrefab, pos, Quaternion.identity, true);
             }
-            string prefab = _chaosWaveMode == ChaosWaveMode.Wolf ? WolfPrefab : _chaosWaveMode == ChaosWaveMode.Boar ? BoarPrefab : BearPrefab;
-            return GameManager.server.CreateEntity(prefab, pos, Quaternion.identity, true);
+            if (_chaosWaveMode == ChaosWaveMode.Wolf)
+                return GameManager.server.CreateEntity(WolfPrefab, pos, Quaternion.identity, true);
+            if (_chaosWaveMode == ChaosWaveMode.Boar)
+                return GameManager.server.CreateEntity(BoarPrefab, pos, Quaternion.identity, true);
+            if (_chaosWaveMode == ChaosWaveMode.Tiger)
+                return TryCreateEntityFromPrefabCandidates(EnumerateTigerPrefabPaths(), pos);
+            if (_chaosWaveMode == ChaosWaveMode.Panther)
+                return TryCreateEntityFromPrefabCandidates(EnumeratePantherPrefabPaths(), pos);
+            return GameManager.server.CreateEntity(BearPrefab, pos, Quaternion.identity, true);
+        }
+
+        private IEnumerable<string> EnumerateTigerPrefabPaths()
+        {
+            if (!string.IsNullOrWhiteSpace(_config?.TigerPrefabPath))
+                yield return _config.TigerPrefabPath.Trim();
+            foreach (var p in TigerPrefabCandidates)
+                yield return p;
+        }
+
+        private IEnumerable<string> EnumeratePantherPrefabPaths()
+        {
+            if (!string.IsNullOrWhiteSpace(_config?.PantherPrefabPath))
+                yield return _config.PantherPrefabPath.Trim();
+            foreach (var p in PantherPrefabCandidates)
+                yield return p;
+        }
+
+        private static BaseEntity TryCreateEntityFromPrefabCandidates(IEnumerable<string> paths, Vector3 pos)
+        {
+            foreach (var p in paths)
+            {
+                if (string.IsNullOrEmpty(p)) continue;
+                BaseEntity e = GameManager.server.CreateEntity(p, pos, Quaternion.identity, true);
+                if (e != null) return e;
+            }
+            return null;
         }
 
         private bool TrySpawnOneChaosWaveEnemy(BasePlayer streamer, float minRadius, float maxRadius)

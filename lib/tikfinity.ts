@@ -21,6 +21,8 @@ export const TIKTRIGGER_ACTIONS = [
   "chaoswave",
   "chaoswavewolf",
   "chaoswavepig",
+  "chaoswavetiger",
+  "chaoswavepanther",
   "chaoswaverandom",
   "healinghands",
   "fullheal",
@@ -63,6 +65,10 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   WolfChaosWave: "chaoswavewolf",
   "Pig Chaos Wave": "chaoswavepig",
   PigChaosWave: "chaoswavepig",
+  "Tiger Chaos Wave": "chaoswavetiger",
+  TigerChaosWave: "chaoswavetiger",
+  "Panther Chaos Wave": "chaoswavepanther",
+  PantherChaosWave: "chaoswavepanther",
   "Random Chaos Wave": "chaoswaverandom",
   RandomChaosWave: "chaoswaverandom",
   "Healing Hands": "healinghands",
@@ -107,6 +113,10 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   WolfChaosWave: 200,
   "Pig Chaos Wave": 200,
   PigChaosWave: 200,
+  "Tiger Chaos Wave": 200,
+  TigerChaosWave: 200,
+  "Panther Chaos Wave": 200,
+  PantherChaosWave: 200,
   "Random Chaos Wave": 200,
   RandomChaosWave: 200,
   "Healing Hands": 50,
@@ -206,10 +216,22 @@ export const ACTION_META: Record<
       "Same as Chaos Wave but spawns pigs/boars (1→10). Same loadouts, countdowns, UI, and land-only rules.",
     exampleGifts: ["Pig Chaos Wave", "PigChaosWave"],
   },
+  chaoswavetiger: {
+    label: "Chaos Tiger Wave",
+    description:
+      "Same as Chaos Wave but spawns tigers (1→10). Prefab paths vary by Rust build; set TigerPrefabPath in RustChaos.json if spawns fail. Same loadouts, countdowns, UI, and land-only rules.",
+    exampleGifts: ["Tiger Chaos Wave", "TigerChaosWave"],
+  },
+  chaoswavepanther: {
+    label: "Chaos Panther Wave",
+    description:
+      "Same as Chaos Wave but spawns panthers (1→10). Prefab paths vary by Rust build; set PantherPrefabPath in RustChaos.json if spawns fail. Same loadouts, countdowns, UI, and land-only rules.",
+    exampleGifts: ["Panther Chaos Wave", "PantherChaosWave"],
+  },
   chaoswaverandom: {
     label: "Chaos Random Wave",
     description:
-      "Like Chaos Wave (1→10 land waves) with random enemy types; start bonus 3000 stone + 1 metal door + 1 reinforced glass window. Between waves, chat/UI preview the exact next-wave lineup.",
+      "Like Chaos Wave (1→10 land waves) with random enemy types (wolves, bears, pigs, tigers, panthers, scientists, zombies, etc.); start bonus 3000 stone + 1 metal door + 1 reinforced glass window. Between waves, chat/UI preview the exact next-wave lineup.",
     exampleGifts: ["Random Chaos Wave", "RandomChaosWave"],
   },
   healinghands: {
@@ -361,6 +383,8 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   chaoswave: "chaoswave",
   chaoswavewolf: "chaoswavewolf",
   chaoswavepig: "chaoswavepig",
+  chaoswavetiger: "chaoswavetiger",
+  chaoswavepanther: "chaoswavepanther",
   chaoswaverandom: "chaoswaverandom",
   healinghands: "healinghands",
   fullheal: "fullheal",
