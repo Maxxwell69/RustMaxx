@@ -25,6 +25,7 @@ export const TIKTRIGGER_ACTIONS = [
   "healinghands",
   "fullheal",
   "revivechaos",
+  "chaosheli",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
@@ -70,6 +71,8 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   FullHealth: "fullheal",
   "Revive Chaos": "revivechaos",
   ReviveChaos: "revivechaos",
+  "Heli Chaos": "chaosheli",
+  HeliChaos: "chaosheli",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -112,6 +115,8 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   FullHealth: 75,
   "Revive Chaos": 150,
   ReviveChaos: 150,
+  "Heli Chaos": 250,
+  HeliChaos: 250,
 };
 
 /** Human-readable label and description for each action (for admin UI). */
@@ -223,6 +228,12 @@ export const ACTION_META: Record<
     description:
       "If the streamer is wounded (downed/crawling), revives them like a teammate pick-up; small heal after. Does nothing if they are already up or fully dead (respawn screen).",
     exampleGifts: ["Revive Chaos", "ReviveChaos"],
+  },
+  chaosheli: {
+    label: "Heli Chaos",
+    description:
+      "Land only: gives homing missile launcher + 20 seeker missiles, then spawns a Chinook-style hackable locked crate near the streamer, then a patrol/attack helicopter. While the session is active, shooting down a counter-helicopter drops another locked crate (cooldown; minis/scrap heli/Ch47 excluded). Delays configurable in RustChaos.json.",
+    exampleGifts: ["Heli Chaos", "HeliChaos"],
   },
 };
 
@@ -354,6 +365,7 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   healinghands: "healinghands",
   fullheal: "fullheal",
   revivechaos: "revivechaos",
+  chaosheli: "chaosheli",
 };
 
 /** Get raw action/event name from body (action, actionName, or event) for admin-connection lookup. */

@@ -18,8 +18,8 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.12.0")]
-    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer. revivechaos picks up the streamer from wounded.")]
+    [Info("RustChaos", "RustMaxx", "1.13.0")]
+    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
         #region Configuration
@@ -39,6 +39,17 @@ namespace Oxide.Plugins
             public float ChaosWaveBearLeashDistance { get; set; } = 18f;
             /// <summary>Healing Hands: amount of health added to the streamer per trigger.</summary>
             public float HealingHandsAmount { get; set; } = 10f;
+
+            /// <summary>Heli Chaos: seconds after trigger before spawning the locked (hackable) crate near the streamer.</summary>
+            public float HeliChaosCrateDelaySeconds { get; set; } = 8f;
+            /// <summary>Heli Chaos: seconds after trigger before spawning the patrol helicopter.</summary>
+            public float HeliChaosPatrolDelaySeconds { get; set; } = 75f;
+            /// <summary>Heli Chaos: minimum seconds between bonus locked crates when helis are shot down during an active session.</summary>
+            public float HeliChaosCrateBonusCooldownSeconds { get; set; } = 60f;
+            /// <summary>Optional. Patrol helicopter prefab if your build path differs (empty = built-in list).</summary>
+            public string PatrolHelicopterPrefabPath { get; set; } = "";
+            /// <summary>Optional. Hackable locked crate prefab (empty = built-in list).</summary>
+            public string HackableLockedCratePrefabPath { get; set; } = "";
         }
 
         private PluginConfig _config;
@@ -65,12 +76,18 @@ namespace Oxide.Plugins
 
         #endregion
 
+        private void Init()
+        {
+            // Always on: chaos-wave kills + heli-chaos bonus crates (see OnEntityDeath).
+            Subscribe(nameof(OnEntityDeath));
+        }
+
         #region Constants
 
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -80,7 +97,6 @@ namespace Oxide.Plugins
         private static readonly int[] ChaosWaveCountdownAfterWaveSeconds = { 20, 25, 30, 30, 30, 30, 30, 30, 30, 0 };
         private HashSet<NetworkableId> _chaosWaveEnemyIds;
         private int _chaosWaveNumber;
-        private bool _chaosWaveSubscribed;
         private int _chaosWaveCountdown;
         private Timer _chaosWaveCountdownTimer;
         private ulong _chaosWaveStreamerUserId;
@@ -97,6 +113,23 @@ namespace Oxide.Plugins
         /// <summary>Random wave: prefabs for the upcoming wave, built when the previous wave ends.</summary>
         private List<string> _chaosWaveRandomPrefabsNext;
         private string _chaosWaveRandomNextWavePreview;
+
+        /// <summary>Heli Chaos: session active (bonus crate on counter-heli kill).</summary>
+        private bool _heliChaosActive;
+        private ulong _heliChaosStreamerUserId;
+        private float _heliChaosNextBonusCrateTime;
+
+        private static readonly string[] HackableLockedCratePrefabCandidates =
+        {
+            "assets/prefabs/deployable/chinooklockedcrate/codelockedhackablecrate.prefab",
+            "assets/prefabs/misc/chinooklockedcrate/codelockedhackablecrate.prefab"
+        };
+
+        private static readonly string[] PatrolHelicopterPrefabCandidates =
+        {
+            "assets/prefabs/npc/patrol helicopter/patrolhelicopter.prefab",
+            "assets/content/vehicles/attackhelicopter/attackhelicopter.entity.prefab"
+        };
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
         private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
@@ -178,7 +211,7 @@ namespace Oxide.Plugins
         private void ChatChaosWaveCancel(BasePlayer player, string command, string[] args)
         {
             if (player == null || !player.IsConnected) return;
-            if (!_chaosWaveSubscribed)
+            if (_chaosWaveEnemyIds == null)
             {
                 SendReply(player, "No chaos wave is currently active.");
                 return;
@@ -352,6 +385,18 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "chaosheli":
+                    if (target != null)
+                    {
+                        if (GetStreamerChaosLocation(target) != ChaosLocation.Land)
+                        {
+                            BroadcastChat(ChatMsg($"Heli Chaos is land only. {viewerName} sent {giftName}!"));
+                            break;
+                        }
+                        StartHeliChaosEvent(target, ChatMsg, viewerName, giftName);
+                    }
+                    break;
+
                 case "shark":
                     if (target != null)
                     {
@@ -455,6 +500,156 @@ namespace Oxide.Plugins
             }
         }
 
+        private void StartHeliChaosEvent(BasePlayer target, Func<string, string> chatMsg, string viewerName, string giftName)
+        {
+            _heliChaosActive = true;
+            _heliChaosStreamerUserId = target.userID;
+            _heliChaosNextBonusCrateTime = 0f;
+            GiveItemWithLog(target, 1, "homingmissile.launcher", "Heli chaos (homing launcher)");
+            for (int i = 0; i < 20; i++)
+                GiveItemWithLog(target, 1, "ammo.rocket.seeker", "Heli chaos (seeker missile)");
+            BroadcastChat(chatMsg($"{viewerName} triggered HELI CHAOS! Homing launcher + 20 missiles — locked crate first, patrol helicopter after."));
+            float cDelay = Mathf.Max(2f, _config?.HeliChaosCrateDelaySeconds ?? 8f);
+            float pDelay = Mathf.Max(cDelay + 15f, _config?.HeliChaosPatrolDelaySeconds ?? 75f);
+            ulong uid = target.userID;
+            timer.Once(cDelay, () => HeliChaosDeliverCrate(uid));
+            timer.Once(pDelay, () => HeliChaosSpawnPatrol(uid));
+            Puts($"{LogPrefix} Heli chaos for {target.displayName}: locked crate ~{cDelay:0}s, patrol heli ~{pDelay:0}s.");
+        }
+
+        private void HeliChaosDeliverCrate(ulong userId)
+        {
+            if (!_heliChaosActive) return;
+            BasePlayer p = FindConnectedPlayerByUserId(userId);
+            if (p == null || !p.IsValid())
+            {
+                PrintWarning($"{LogPrefix} Heli chaos: initial crate skipped (streamer offline or dead).");
+                return;
+            }
+            if (TrySpawnHackableLockedCrateNear(p, "Heli chaos — Chinook locked crate"))
+                BroadcastChat("Chinook locked crate delivered near the streamer!");
+        }
+
+        private void HeliChaosSpawnPatrol(ulong userId)
+        {
+            if (!_heliChaosActive) return;
+            BasePlayer p = FindConnectedPlayerByUserId(userId);
+            if (p == null || !p.IsValid())
+            {
+                PrintWarning($"{LogPrefix} Heli chaos: patrol helicopter skipped (streamer offline or dead).");
+                return;
+            }
+            if (TrySpawnPatrolHelicopterNear(p))
+                BroadcastChat("Patrol helicopter inbound on the streamer!");
+            else
+                PrintWarning($"{LogPrefix} Heli chaos: patrol helicopter spawn failed (check PatrolHelicopterPrefabPath in config).");
+        }
+
+        private bool TrySpawnHackableLockedCrateNear(BasePlayer streamer, string logContext)
+        {
+            if (streamer == null || !streamer.IsValid()) return false;
+            Vector3 flat = GetPositionNear(streamer);
+            if (flat == Vector3.zero) flat = streamer.transform.position;
+            Vector3 ground = SnapLandNpcSpawnToGround(flat) + Vector3.up * 0.25f;
+            Quaternion rot = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
+
+            string custom = _config?.HackableLockedCratePrefabPath;
+            if (!string.IsNullOrWhiteSpace(custom))
+            {
+                if (TryCreateAndSpawnHackableCrate(custom.Trim(), ground, rot, logContext))
+                    return true;
+            }
+
+            foreach (string path in HackableLockedCratePrefabCandidates)
+            {
+                if (TryCreateAndSpawnHackableCrate(path, ground, rot, logContext))
+                    return true;
+            }
+            PrintWarning($"{LogPrefix} {logContext}: no hackable crate prefab worked. Set HackableLockedCratePrefabPath from PrefabSniffer / F1.");
+            return false;
+        }
+
+        private bool TryCreateAndSpawnHackableCrate(string prefabPath, Vector3 pos, Quaternion rot, string logContext)
+        {
+            try
+            {
+                BaseEntity ent = GameManager.server.CreateEntity(prefabPath, pos, rot, true);
+                if (ent == null) return false;
+                ent.Spawn();
+                try { ent.SendMessage("SetWasDropped"); } catch { }
+                Puts($"{LogPrefix} {logContext}: spawned {prefabPath}");
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TrySpawnPatrolHelicopterNear(BasePlayer streamer)
+        {
+            if (streamer == null || !streamer.IsValid()) return false;
+            Vector3 anchor = streamer.transform.position;
+            Vector3 h = UnityEngine.Random.insideUnitSphere;
+            h.y = 0f;
+            if (h.sqrMagnitude < 0.01f) h = Vector3.forward;
+            h.Normalize();
+            Vector3 spawnPos = anchor + Vector3.up * 80f + h * UnityEngine.Random.Range(30f, 60f);
+
+            string custom = _config?.PatrolHelicopterPrefabPath;
+            if (!string.IsNullOrWhiteSpace(custom) && TryCreateAndSpawnEntityAt(custom.Trim(), spawnPos))
+                return true;
+
+            foreach (string path in PatrolHelicopterPrefabCandidates)
+            {
+                if (TryCreateAndSpawnEntityAt(path, spawnPos))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool TryCreateAndSpawnEntityAt(string prefabPath, Vector3 pos)
+        {
+            try
+            {
+                BaseEntity ent = GameManager.server.CreateEntity(prefabPath, pos, Quaternion.identity, true);
+                if (ent == null) return false;
+                ent.Spawn();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsCounterHelicopterForHeliChaos(BaseCombatEntity entity)
+        {
+            if (entity == null) return false;
+            string p = entity.PrefabName ?? "";
+            if (string.IsNullOrEmpty(p)) return false;
+            if (p.IndexOf("minicopter", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (p.IndexOf("scraptransport", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (p.IndexOf("ch47", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (p.IndexOf("hotair", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (p.IndexOf("patrol helicopter", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (p.IndexOf("patrolhelicopter", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (p.IndexOf("attackhelicopter", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        private static BasePlayer FindConnectedPlayerByUserId(ulong userId)
+        {
+            if (userId == 0ul) return null;
+            foreach (BasePlayer p in BasePlayer.activePlayerList)
+            {
+                if (p == null || !p.IsConnected || p.userID != userId) continue;
+                if (p.IsDead()) continue;
+                return p;
+            }
+            return null;
+        }
+
         /// <summary>
         /// Gives an item (e.g. supply.signal) to the player. Used for supply/likes trigger.
         /// </summary>
@@ -502,7 +697,8 @@ namespace Oxide.Plugins
                    action == "chaoswavewolf" ||
                    action == "chaoswavepig" ||
                    action == "chaoswaverandom" ||
-                   action == "revivechaos";
+                   action == "revivechaos" ||
+                   action == "chaosheli";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -688,7 +884,7 @@ namespace Oxide.Plugins
                 BroadcastChat(chatMsg($"Chaos wave is land only. {viewerName} sent {giftName}!"));
                 return false;
             }
-            if (_chaosWaveSubscribed)
+            if (_chaosWaveEnemyIds != null)
             {
                 BroadcastChat(chatMsg("Chaos wave already in progress!"));
                 return false;
@@ -868,11 +1064,6 @@ namespace Oxide.Plugins
                 GiveItemWithLog(streamer, 1, "wall.window.glass.reinforced", "Chaos Random Wave start (reinforced window)");
                 BroadcastChat("Chaos Random Wave: streamer received 3000 stone, 1 metal door, 1 reinforced glass window.");
             }
-            if (!_chaosWaveSubscribed)
-            {
-                Subscribe(nameof(OnEntityDeath));
-                _chaosWaveSubscribed = true;
-            }
             StartChaosWaveLeashTimer();
             _chaosWaveTargetBearCount = 1;
             _chaosWaveSpawnedBearCount = 0;
@@ -985,7 +1176,25 @@ namespace Oxide.Plugins
 
         private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
         {
-            if (entity == null || _chaosWaveEnemyIds == null) return;
+            if (entity == null) return;
+
+            if (_heliChaosActive && IsCounterHelicopterForHeliChaos(entity))
+            {
+                float now = UnityEngine.Time.realtimeSinceStartup;
+                if (now >= _heliChaosNextBonusCrateTime)
+                {
+                    float cd = Mathf.Max(15f, _config?.HeliChaosCrateBonusCooldownSeconds ?? 60f);
+                    _heliChaosNextBonusCrateTime = now + cd;
+                    BasePlayer crateTarget = FindConnectedPlayerByUserId(_heliChaosStreamerUserId) ?? GetStreamerPlayer();
+                    if (crateTarget != null && crateTarget.IsValid())
+                    {
+                        if (TrySpawnHackableLockedCrateNear(crateTarget, "Heli chaos — bonus crate (helicopter destroyed)"))
+                            BroadcastChat("Helicopter destroyed! Chinook-style locked crate dropped near the streamer.");
+                    }
+                }
+            }
+
+            if (_chaosWaveEnemyIds == null) return;
 
             // If the streamer dies mid-wave, cancel the entire wave.
             BasePlayer deadPlayer = entity as BasePlayer;
@@ -1027,7 +1236,6 @@ namespace Oxide.Plugins
                 _chaosWaveKilledBearCount = 0;
                 _chaosWaveLeashTimer?.Destroy();
                 _chaosWaveLeashTimer = null;
-                if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
                 DestroyChaosWaveUIForAll();
                 GiveItemWithLog(streamer, 1, "rocket.launcher", "ChaosWave final reward (rocket launcher)");
                 GiveItemWithLog(streamer, 3, "ammo.rocket.basic", "ChaosWave final reward (rockets)");
@@ -1076,7 +1284,6 @@ namespace Oxide.Plugins
                 _chaosWaveEnemyIds = null;
                 _chaosWaveLeashTimer?.Destroy();
                 _chaosWaveLeashTimer = null;
-                if (_chaosWaveSubscribed) { Unsubscribe(nameof(OnEntityDeath)); _chaosWaveSubscribed = false; }
                 DestroyChaosWaveUIForAll();
                 return;
             }
@@ -1410,11 +1617,6 @@ namespace Oxide.Plugins
                 _chaosWaveLeashTimer = null;
                 _chaosWaveCountdownTimer?.Destroy();
                 _chaosWaveCountdownTimer = null;
-                if (_chaosWaveSubscribed)
-                {
-                    Unsubscribe(nameof(OnEntityDeath));
-                    _chaosWaveSubscribed = false;
-                }
                 DestroyChaosWaveUIForAll();
                 if (!string.IsNullOrEmpty(chatMessage))
                     BroadcastChat(chatMessage);
