@@ -12,12 +12,13 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Rust;
 using Oxide.Game.Rust.Cui;
 using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.11.0")]
+    [Info("RustChaos", "RustMaxx", "1.11.1")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustChaos : RustPlugin
     {
@@ -573,6 +574,29 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// Snap spawn XZ to ground under that column (terrain or construction). Stops scientists/animals spawning at the streamer's Y on hills or platforms.
+        /// </summary>
+        private static Vector3 SnapLandNpcSpawnToGround(Vector3 worldPos)
+        {
+            if (worldPos == Vector3.zero) return worldPos;
+            const float rayTop = 400f;
+            const float rayLen = 600f;
+            Vector3 origin = new Vector3(worldPos.x, rayTop, worldPos.z);
+            RaycastHit hit;
+            if (Physics.Raycast(origin, Vector3.down, out hit, rayLen, Layers.Solid, QueryTriggerInteraction.Ignore))
+                return hit.point;
+            try
+            {
+                worldPos.y = TerrainMeta.HeightMap.GetHeight(worldPos);
+                return worldPos;
+            }
+            catch
+            {
+                return worldPos;
+            }
+        }
+
+        /// <summary>
         /// Runs chaos event rules on a timer based on streamer location (Land / Sea / Swimming).
         /// Each location has its own sequence of delayed spawns and effects.
         /// </summary>
@@ -710,11 +734,17 @@ namespace Oxide.Plugins
             return "Enemy";
         }
 
-        private string ChaosWaveCountdownUiBody(int completedWave)
+        /// <summary>Line 1 during inter-wave countdown — timer stays visible (line 2 can be long for Random preview).</summary>
+        private string ChaosWaveCountdownTitleWithTimer()
+        {
+            return $"{_chaosWaveUiTitle}    Next in {_chaosWaveCountdown}s";
+        }
+
+        private string ChaosWaveCountdownSubtext(int completedWave)
         {
             if (_chaosWaveMode == ChaosWaveMode.Random && !string.IsNullOrEmpty(_chaosWaveRandomNextWavePreview))
-                return $"Wave {completedWave} complete\n{_chaosWaveRandomNextWavePreview}\nNext wave in {_chaosWaveCountdown}s";
-            return $"Wave {completedWave} complete\nNext wave in {_chaosWaveCountdown}s";
+                return $"Wave {completedWave} complete\n{_chaosWaveRandomNextWavePreview}";
+            return $"Wave {completedWave} complete";
         }
 
         /// <summary>Creates one chaos-wave enemy (prefab depends on <see cref="_chaosWaveMode"/>).</summary>
@@ -755,6 +785,7 @@ namespace Oxide.Plugins
             {
                 Vector3 pos = GetPositionWithinRadius(streamer, minRadius, maxRadius);
                 if (pos == Vector3.zero) pos = GetPositionNear(streamer);
+                pos = SnapLandNpcSpawnToGround(pos);
                 BaseEntity ent = CreateChaosWaveEnemyEntity(pos);
                 if (ent == null) continue;
                 ent.Spawn();
@@ -998,7 +1029,7 @@ namespace Oxide.Plugins
             if (_chaosWaveCountdown < 0) _chaosWaveCountdown = 0;
             _chaosWaveCountdownTimer?.Destroy();
             _chaosWaveCountdownTimer = timer.Repeat(1f, 0, ChaosWaveCountdownTick);
-            ShowChaosWaveUIToAll(_chaosWaveUiTitle, ChaosWaveCountdownUiBody(completedWave));
+            ShowChaosWaveUIToAll(ChaosWaveCountdownTitleWithTimer(), ChaosWaveCountdownSubtext(completedWave));
             if (_chaosWaveMode == ChaosWaveMode.Random && !string.IsNullOrEmpty(_chaosWaveRandomNextWavePreview))
                 BroadcastChat(_chaosWaveRandomNextWavePreview);
         }
@@ -1006,7 +1037,7 @@ namespace Oxide.Plugins
         private void ChaosWaveCountdownTick()
         {
             _chaosWaveCountdown--;
-            ShowChaosWaveUIToAll(_chaosWaveUiTitle, ChaosWaveCountdownUiBody(_chaosWaveNumber - 1));
+            ShowChaosWaveUIToAll(ChaosWaveCountdownTitleWithTimer(), ChaosWaveCountdownSubtext(_chaosWaveNumber - 1));
             if (_chaosWaveCountdown > 0) return;
 
             _chaosWaveCountdownTimer?.Destroy();
@@ -1045,14 +1076,14 @@ namespace Oxide.Plugins
             container.Add(new CuiPanel
             {
                 Image = { Color = "0.1 0.1 0.15 0.85" },
-                RectTransform = { AnchorMin = "0.02 0.88", AnchorMax = "0.28 0.98" }
+                RectTransform = { AnchorMin = "0.02 0.78", AnchorMax = "0.38 0.99" }
             }, "Overlay", ChaosWaveUiName);
             string text = line1;
             if (!string.IsNullOrEmpty(line2)) text += "\n" + line2;
             container.Add(new CuiLabel
             {
-                Text = { Text = text, FontSize = 14, Align = TextAnchor.UpperLeft, Color = "1 0.9 0.3 1" },
-                RectTransform = { AnchorMin = "0.05 0.1", AnchorMax = "0.95 0.9" }
+                Text = { Text = text, FontSize = 13, Align = TextAnchor.UpperLeft, Color = "1 0.9 0.3 1" },
+                RectTransform = { AnchorMin = "0.04 0.06", AnchorMax = "0.96 0.94" }
             }, ChaosWaveUiName);
             CuiHelper.AddUi(player, container);
         }
@@ -1410,6 +1441,7 @@ namespace Oxide.Plugins
         private static void SpawnNPC(string prefabPath, Vector3 position)
         {
             if (string.IsNullOrEmpty(prefabPath) || position == Vector3.zero) return;
+            position = SnapLandNpcSpawnToGround(position);
             BaseEntity entity = GameManager.server.CreateEntity(prefabPath, position, Quaternion.identity, true);
             if (entity != null)
             {
@@ -1426,6 +1458,7 @@ namespace Oxide.Plugins
         /// </summary>
         private static bool SpawnScientist(Vector3 position)
         {
+            position = SnapLandNpcSpawnToGround(position);
             string[] prefabs = {
                 "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
                 "assets/prefabs/npc/scientist/scientist.prefab",
