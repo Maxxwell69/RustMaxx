@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.14.0")]
+    [Info("RustChaos", "RustMaxx", "1.15.0")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -91,7 +91,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "tiger", "panther", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -331,6 +331,36 @@ namespace Oxide.Plugins
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
                         SpawnNPC(BearPrefab, GetPositionNear(target));
                         Puts($"{LogPrefix} Spawned 1 bear near {target.displayName}");
+                    }
+                    break;
+
+                case "tiger":
+                    if (target != null)
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        GivePistolAndAmmoToStreamerBelt(target, "Tiger spawn");
+                        if (TrySpawnTigerOneNearStreamer(target))
+                            Puts($"{LogPrefix} Spawned 1 tiger near {target.displayName}");
+                        else
+                        {
+                            BroadcastChat(ChatMsg($"{viewerName} sent a tiger but spawn failed — set TigerPrefabPath in RustChaos.json."));
+                            PrintWarning($"{LogPrefix} Tiger spawn failed (all prefab candidates).");
+                        }
+                    }
+                    break;
+
+                case "panther":
+                    if (target != null)
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        GivePistolAndAmmoToStreamerBelt(target, "Panther spawn");
+                        if (TrySpawnPantherOneNearStreamer(target))
+                            Puts($"{LogPrefix} Spawned 1 panther near {target.displayName}");
+                        else
+                        {
+                            BroadcastChat(ChatMsg($"{viewerName} sent a panther but spawn failed — set PantherPrefabPath in RustChaos.json."));
+                            PrintWarning($"{LogPrefix} Panther spawn failed (all prefab candidates).");
+                        }
                     }
                     break;
 
@@ -749,6 +779,8 @@ namespace Oxide.Plugins
                    action == "scientist" ||
                    action == "wolf" ||
                    action == "bear" ||
+                   action == "tiger" ||
+                   action == "panther" ||
                    action == "healinghands" ||
                    action == "fullheal" ||
                    action == "shark" ||
@@ -1109,6 +1141,39 @@ namespace Oxide.Plugins
                 if (e != null) return e;
             }
             return null;
+        }
+
+        /// <summary>1× semi-auto pistol + 10 pistol rounds on belt (arm slot) for tiger/panther single spawns.</summary>
+        private void GivePistolAndAmmoToStreamerBelt(BasePlayer player, string context)
+        {
+            const string pistolShort = "pistol.semiauto";
+            const string ammoShort = "ammo.pistol";
+            GiveItemToBeltWithLog(player, 1, pistolShort, $"{context} (pistol, belt)");
+            GiveItemToBeltWithLog(player, 10, ammoShort, $"{context} (ammo, belt)");
+        }
+
+        private bool TrySpawnTigerOneNearStreamer(BasePlayer streamer)
+        {
+            if (streamer == null || !streamer.IsValid()) return false;
+            Vector3 pos = GetPositionNear(streamer);
+            if (pos == Vector3.zero) pos = streamer.transform.position;
+            pos = SnapLandNpcSpawnToGround(pos);
+            BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumerateTigerPrefabPaths(), pos);
+            if (ent == null) return false;
+            ent.Spawn();
+            return true;
+        }
+
+        private bool TrySpawnPantherOneNearStreamer(BasePlayer streamer)
+        {
+            if (streamer == null || !streamer.IsValid()) return false;
+            Vector3 pos = GetPositionNear(streamer);
+            if (pos == Vector3.zero) pos = streamer.transform.position;
+            pos = SnapLandNpcSpawnToGround(pos);
+            BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumeratePantherPrefabPaths(), pos);
+            if (ent == null) return false;
+            ent.Spawn();
+            return true;
         }
 
         private bool TrySpawnOneChaosWaveEnemy(BasePlayer streamer, float minRadius, float maxRadius)
