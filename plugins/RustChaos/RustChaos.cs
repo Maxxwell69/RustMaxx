@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.13.0")]
+[Info("RustChaos", "RustMaxx", "1.13.2")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -546,15 +546,23 @@ namespace Oxide.Plugins
                 PrintWarning($"{LogPrefix} Heli chaos: patrol helicopter skipped (streamer offline or dead).");
                 return;
             }
-            if (TrySpawnPatrolHelicopterNear(p))
+            // Most reliable: explicitly call the vanilla patrol heli to the player.
+            // This prevents "spawned but AI retreated / resumed route" behavior.
+            try
             {
-                BroadcastChat("Patrol helicopter inbound on the streamer!");
+                p.SendConsoleCommand("heli.calltome");
+                BroadcastChat("Patrol helicopter called to you (heli.calltome).");
             }
+            catch { }
+
+            // Backup: also try to spawn a heli near the streamer in case calltome is blocked.
+            if (TrySpawnPatrolHelicopterNear(p))
+                BroadcastChat("Patrol helicopter inbound (spawned/backup).");
             else
             {
                 string custom = _config?.PatrolHelicopterPrefabPath;
-                BroadcastChat($"Heli Chaos: patrol helicopter spawn failed. Check PatrolHelicopterPrefabPath in RustChaos.json. (custom='{custom ?? ""}')");
-                PrintWarning($"{LogPrefix} Heli chaos: patrol helicopter spawn failed (check PatrolHelicopterPrefabPath in config).");
+                BroadcastChat($"Heli Chaos: patrol helicopter backup spawn failed. Check PatrolHelicopterPrefabPath in RustChaos.json. (custom='{custom ?? ""}')");
+                PrintWarning($"{LogPrefix} Heli chaos: patrol helicopter backup spawn failed (check PatrolHelicopterPrefabPath in config).");
             }
         }
 
@@ -1209,7 +1217,11 @@ namespace Oxide.Plugins
                     if (crateTarget != null && crateTarget.IsValid())
                     {
                         if (TrySpawnHackableLockedCrateNear(crateTarget, "Heli chaos — bonus crate (helicopter destroyed)"))
+                        {
                             BroadcastChat("Helicopter destroyed! Chinook-style locked crate dropped near the streamer.");
+                            // End the session after the first counter-heli kill to avoid crates from unrelated future helis.
+                            _heliChaosActive = false;
+                        }
                     }
                 }
             }
