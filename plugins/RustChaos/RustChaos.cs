@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.1")]
+    [Info("RustChaos", "RustMaxx", "1.15.2")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -388,8 +388,8 @@ namespace Oxide.Plugins
                                     giftLabel = "1 bandage";
                                     break;
                                 case 1:
-                                    itemShort = "ammo.rifle";
-                                    giftLabel = "1 bullet";
+                                    itemShort = "ammo.pistol";
+                                    giftLabel = "1 pistol bullet";
                                     break;
                                 default:
                                     itemShort = "wolfmeat.raw";
