@@ -594,7 +594,13 @@ namespace Oxide.Plugins
             h.y = 0f;
             if (h.sqrMagnitude < 0.01f) h = Vector3.forward;
             h.Normalize();
-            Vector3 spawnPos = anchor + Vector3.up * 80f + h * UnityEngine.Random.Range(30f, 60f);
+            // Spawn closer than before so the heli AI reliably "gets you" quickly.
+            // Too far horizontally can cause the heli to continue its route without coming in.
+            float horizontalMin = 8f;
+            float horizontalMax = 22f;
+            float heightMin = 55f;
+            float heightMax = 70f;
+            Vector3 spawnPos = anchor + Vector3.up * UnityEngine.Random.Range(heightMin, heightMax) + h * UnityEngine.Random.Range(horizontalMin, horizontalMax);
 
             string custom = _config?.PatrolHelicopterPrefabPath;
             if (!string.IsNullOrWhiteSpace(custom) && TryCreateAndSpawnEntityAt(custom.Trim(), spawnPos))
