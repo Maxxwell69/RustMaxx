@@ -24,6 +24,7 @@ export const TIKTRIGGER_ACTIONS = [
   "chaoswaverandom",
   "healinghands",
   "fullheal",
+  "revivechaos",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
@@ -67,6 +68,8 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   HealingHands: "healinghands",
   "Full Health": "fullheal",
   FullHealth: "fullheal",
+  "Revive Chaos": "revivechaos",
+  ReviveChaos: "revivechaos",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -107,6 +110,8 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   HealingHands: 50,
   "Full Health": 75,
   FullHealth: 75,
+  "Revive Chaos": 150,
+  ReviveChaos: 150,
 };
 
 /** Human-readable label and description for each action (for admin UI). */
@@ -212,6 +217,12 @@ export const ACTION_META: Record<
     label: "Full Health",
     description: "Heals the streamer to full health",
     exampleGifts: ["Full Health", "FullHealth"],
+  },
+  revivechaos: {
+    label: "Revive Chaos",
+    description:
+      "If the streamer is wounded (downed/crawling), revives them like a teammate pick-up; small heal after. Does nothing if they are already up or fully dead (respawn screen).",
+    exampleGifts: ["Revive Chaos", "ReviveChaos"],
   },
 };
 
@@ -342,6 +353,7 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   chaoswaverandom: "chaoswaverandom",
   healinghands: "healinghands",
   fullheal: "fullheal",
+  revivechaos: "revivechaos",
 };
 
 /** Get raw action/event name from body (action, actionName, or event) for admin-connection lookup. */

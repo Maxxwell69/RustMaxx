@@ -18,8 +18,8 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.11.1")]
-    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
+    [Info("RustChaos", "RustMaxx", "1.12.0")]
+    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer. revivechaos picks up the streamer from wounded.")]
     public class RustChaos : RustPlugin
     {
         #region Configuration
@@ -70,7 +70,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -325,6 +325,33 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "revivechaos":
+                    if (target != null)
+                    {
+                        // Wounded/crawling — same as being revived/picked up by another player (RecoverFromWounded).
+                        try
+                        {
+                            bool down = target.IsWounded() || target.HasPlayerFlag(BasePlayer.PlayerFlags.Incapacitated);
+                            if (down)
+                            {
+                                target.RecoverFromWounded();
+                                target.Heal(25f);
+                                BroadcastChat(ChatMsg($"{viewerName} triggered REVIVE CHAOS! {target.displayName} is back up!"));
+                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName} from wounded/incapacitated.");
+                            }
+                            else
+                            {
+                                BroadcastChat(ChatMsg($"{viewerName} sent Revive Chaos — streamer isn't wounded."));
+                                Puts($"{LogPrefix} Revive Chaos: {target.displayName} not wounded; no-op.");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            PrintWarning($"{LogPrefix} Revive Chaos failed for {target.displayName}: {ex.Message}");
+                        }
+                    }
+                    break;
+
                 case "shark":
                     if (target != null)
                     {
@@ -474,7 +501,8 @@ namespace Oxide.Plugins
                    action == "chaoswave" ||
                    action == "chaoswavewolf" ||
                    action == "chaoswavepig" ||
-                   action == "chaoswaverandom";
+                   action == "chaoswaverandom" ||
+                   action == "revivechaos";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
