@@ -9,6 +9,7 @@ import {
   getPayloadKeysForDebug,
   getGiftValueFromPayload,
   getDefaultGiftValue,
+  extractViewerNameFromWebhookBody,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
 import { getConnectionByEventName } from "@/lib/tikfinity-connections";
@@ -65,6 +66,8 @@ export async function POST(request: NextRequest) {
 
 async function runWebhook(request: NextRequest, body: unknown) {
 
+  const viewerFromBody = () => extractViewerNameFromWebhookBody(body) ?? "Viewer";
+
   // Action from URL query (e.g. ?action=likes) – one webhook URL per TikFinity action
   const queryAction = request.nextUrl.searchParams.get("action")?.trim().toLowerCase();
   const actionFromQuery = queryAction ? getActionFromPayload({ action: queryAction }) : null;
@@ -77,13 +80,13 @@ async function runWebhook(request: NextRequest, body: unknown) {
   }
   if (!action && actionFromQuery) {
     action = actionFromQuery;
-    payload = { viewerName: "TikFinity", giftName: actionFromQuery };
+    payload = { viewerName: viewerFromBody(), giftName: actionFromQuery };
   }
   if (!action) {
     const directAction = getActionFromPayload(body);
     if (directAction) {
       action = directAction;
-      payload = { viewerName: "TikFinity", giftName: directAction };
+      payload = { viewerName: viewerFromBody(), giftName: directAction };
     }
   }
   let connectionFromAdmin: Awaited<ReturnType<typeof getConnectionByEventName>> = null;
@@ -93,7 +96,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
       connectionFromAdmin = await getConnectionByEventName(rawName);
       if (connectionFromAdmin) {
         action = connectionFromAdmin.server_action;
-        payload = { viewerName: "TikFinity", giftName: connectionFromAdmin.server_action };
+        payload = { viewerName: viewerFromBody(), giftName: connectionFromAdmin.server_action };
       }
     }
   }
@@ -123,7 +126,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
   }
 
   if (!payload) {
-    payload = { viewerName: "TikFinity", giftName: action };
+    payload = { viewerName: viewerFromBody(), giftName: action };
   }
 
   if (!TIKFINITY_SERVER_ID) {

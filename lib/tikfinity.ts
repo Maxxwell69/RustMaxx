@@ -290,24 +290,60 @@ export function getActionForGift(giftName: string): TikTriggerAction | null {
   return null;
 }
 
+function trimNonEmptyString(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t ? t.replace(/^@+/, "") : null;
+}
+
+/**
+ * Best-effort TikTok / TikFinity viewer id for RCON chat. Prefers handle (uniqueId) over display nickname.
+ */
+function viewerNameFromRecord(o: Record<string, unknown>): string | null {
+  const directKeys = [
+    "uniqueId",
+    "unique_id",
+    "viewerName",
+    "viewer_name",
+    "userName",
+    "user_name",
+    "username",
+    "tiktokUsername",
+    "tiktok_username",
+    "nickname",
+    "sender",
+    "displayName",
+    "display_name",
+  ];
+  for (const k of directKeys) {
+    const v = trimNonEmptyString(o[k]);
+    if (v) return v;
+  }
+  const nestedKeys = ["user", "viewer", "sender", "from", "author", "data"];
+  for (const nk of nestedKeys) {
+    const inner = o[nk];
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      const v = viewerNameFromRecord(inner as Record<string, unknown>);
+      if (v) return v;
+    }
+  }
+  return null;
+}
+
+/** Viewer name from webhook body when action is resolved without a full gift payload (or to supplement it). */
+export function extractViewerNameFromWebhookBody(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+  const fromRoot = viewerNameFromRecord(o);
+  if (fromRoot) return fromRoot;
+  const nested = (o.data ?? o.event ?? o.payload) as Record<string, unknown> | undefined;
+  if (nested && typeof nested === "object") return viewerNameFromRecord(nested);
+  return null;
+}
+
 /** Try to get viewer and gift from a plain object (any nesting level). */
 function extractFromObject(o: Record<string, unknown>): { viewerName: string; giftName: string } | null {
-  const viewerName =
-    typeof o.viewerName === "string"
-      ? o.viewerName.trim()
-      : typeof o.viewer_name === "string"
-        ? o.viewer_name.trim()
-        : typeof o.userName === "string"
-          ? o.userName.trim()
-          : typeof o.user_name === "string"
-            ? o.user_name.trim()
-            : typeof o.nickname === "string"
-              ? o.nickname.trim()
-              : typeof o.username === "string"
-                ? o.username.trim()
-                : typeof o.sender === "string"
-                  ? o.sender.trim()
-                  : "";
+  const viewerName = viewerNameFromRecord(o) ?? "";
   const giftName =
     typeof o.giftName === "string"
       ? o.giftName.trim()
@@ -330,15 +366,23 @@ export function normalizeWebhookPayload(body: unknown): {
   if (!body || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
 
+  const withBestViewer = (p: { viewerName: string; giftName: string }) => {
+    const fromFullBody = extractViewerNameFromWebhookBody(body);
+    return {
+      ...p,
+      viewerName: fromFullBody ?? p.viewerName,
+    };
+  };
+
   // Flat body
   const flat = extractFromObject(o);
-  if (flat) return flat;
+  if (flat) return withBestViewer(flat);
 
   // Nested: body.data or body.event or body.payload
   const nested = (o.data ?? o.event ?? o.payload) as Record<string, unknown> | undefined;
   if (nested && typeof nested === "object") {
     const fromNested = extractFromObject(nested as Record<string, unknown>);
-    if (fromNested) return fromNested;
+    if (fromNested) return withBestViewer(fromNested);
   }
 
   return null;
