@@ -17,7 +17,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.10.0")]
+    [Info("RustChaos", "RustMaxx", "1.11.0")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Supply/likes call in an airdrop automatically at the streamer.")]
     public class RustChaos : RustPlugin
     {
@@ -90,6 +90,12 @@ namespace Oxide.Plugins
         private bool _chaosWaveSpawning;
         private ChaosWaveMode _chaosWaveMode;
         private string _chaosWaveUiTitle = "Chaos Wave";
+        /// <summary>Random wave: planned prefab per spawn slot (matches preview shown between waves).</summary>
+        private List<string> _chaosWaveRandomWavePlan;
+        private int _chaosWaveRandomPlanIndex;
+        /// <summary>Random wave: prefabs for the upcoming wave, built when the previous wave ends.</summary>
+        private List<string> _chaosWaveRandomPrefabsNext;
+        private string _chaosWaveRandomNextWavePreview;
 
         /// <summary>Streamer location for chaos event: determines which timer rules run.</summary>
         private enum ChaosLocation { Land, Sea, Swimming, ModularBoat }
@@ -671,12 +677,66 @@ namespace Oxide.Plugins
             return $"Chaos wave {waveNum}! {spawnedCount} {noun} spawned.";
         }
 
+        private static List<string> BuildRandomWavePrefabPlan(int count)
+        {
+            var list = new List<string>(Mathf.Max(0, count));
+            for (int i = 0; i < count; i++)
+                list.Add(ChaosWaveRandomPrefabPool[UnityEngine.Random.Range(0, ChaosWaveRandomPrefabPool.Length)]);
+            return list;
+        }
+
+        private static string FormatRandomWaveEnemyRollCall(List<string> prefabs)
+        {
+            if (prefabs == null || prefabs.Count == 0) return "";
+            var parts = new List<string>(prefabs.Count);
+            foreach (var p in prefabs)
+                parts.Add(PrefabPathToFriendlyChaosName(p));
+            return string.Join(", ", parts);
+        }
+
+        private static string PrefabPathToFriendlyChaosName(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "Enemy";
+            string x = path.ToLowerInvariant();
+            if (x.Contains("zombie")) return "Zombie";
+            if (x.Contains("boar")) return "Pig";
+            if (x.Contains("wolf")) return "Wolf";
+            if (x.Contains("/bear") || x.Contains("bear.")) return "Bear";
+            if (x.Contains("bradley_heavy") || x.Contains("scientistnpc_heavy")) return "Heavy scientist";
+            if (x.Contains("oilrig")) return "Oil rig scientist";
+            if (x.Contains("roam")) return "Roam scientist";
+            if (x.Contains("lr300") || x.Contains("humannpc")) return "Scientist";
+            if (x.Contains("npc/scientist") || x.EndsWith("scientist.prefab")) return "Scientist";
+            return "Enemy";
+        }
+
+        private string ChaosWaveCountdownUiBody(int completedWave)
+        {
+            if (_chaosWaveMode == ChaosWaveMode.Random && !string.IsNullOrEmpty(_chaosWaveRandomNextWavePreview))
+                return $"Wave {completedWave} complete\n{_chaosWaveRandomNextWavePreview}\nNext wave in {_chaosWaveCountdown}s";
+            return $"Wave {completedWave} complete\nNext wave in {_chaosWaveCountdown}s";
+        }
+
         /// <summary>Creates one chaos-wave enemy (prefab depends on <see cref="_chaosWaveMode"/>).</summary>
         private BaseEntity CreateChaosWaveEnemyEntity(Vector3 pos)
         {
             if (pos == Vector3.zero) return null;
             if (_chaosWaveMode == ChaosWaveMode.Random)
             {
+                if (_chaosWaveRandomWavePlan != null)
+                {
+                    while (_chaosWaveRandomPlanIndex < _chaosWaveRandomWavePlan.Count)
+                    {
+                        string planned = _chaosWaveRandomWavePlan[_chaosWaveRandomPlanIndex];
+                        BaseEntity pe = GameManager.server.CreateEntity(planned, pos, Quaternion.identity, true);
+                        if (pe != null)
+                        {
+                            _chaosWaveRandomPlanIndex++;
+                            return pe;
+                        }
+                        _chaosWaveRandomPlanIndex++;
+                    }
+                }
                 for (int t = 0; t < 18; t++)
                 {
                     string p = ChaosWaveRandomPrefabPool[UnityEngine.Random.Range(0, ChaosWaveRandomPrefabPool.Length)];
@@ -730,12 +790,25 @@ namespace Oxide.Plugins
             _chaosWaveEnemyIds = new HashSet<NetworkableId>();
             _chaosWaveNumber = 1;
             _chaosWaveStreamerUserId = streamer != null ? streamer.userID : 0ul;
+            _chaosWaveRandomWavePlan = null;
+            _chaosWaveRandomPlanIndex = 0;
+            _chaosWaveRandomPrefabsNext = null;
+            _chaosWaveRandomNextWavePreview = null;
             // Full heal at the moment the wave starts.
             if (streamer != null && streamer.IsValid())
             {
                 streamer.Heal(99999f);
             }
             GiveChaosWaveLoadout(streamer, 1);
+            if (mode == ChaosWaveMode.Random && streamer != null && streamer.IsValid())
+            {
+                // Vanilla stone stack is 1000; three stacks = 3000.
+                for (int si = 0; si < 3; si++)
+                    GiveItemWithLog(streamer, 1000, "stones", "Chaos Random Wave start (stone)");
+                GiveItemWithLog(streamer, 1, "door.hinged.metal", "Chaos Random Wave start (metal door)");
+                GiveItemWithLog(streamer, 1, "wall.window.glass.reinforced", "Chaos Random Wave start (reinforced window)");
+                BroadcastChat("Chaos Random Wave: streamer received 3000 stone, 1 metal door, 1 reinforced glass window.");
+            }
             if (!_chaosWaveSubscribed)
             {
                 Subscribe(nameof(OnEntityDeath));
@@ -910,17 +983,30 @@ namespace Oxide.Plugins
 
             // Advance to next wave and start countdown.
             _chaosWaveNumber = completedWave + 1;
+            if (_chaosWaveMode == ChaosWaveMode.Random)
+            {
+                _chaosWaveRandomPrefabsNext = BuildRandomWavePrefabPlan(_chaosWaveNumber);
+                _chaosWaveRandomNextWavePreview =
+                    $"Next: Wave {_chaosWaveNumber} ({_chaosWaveRandomPrefabsNext.Count} enemies) — {FormatRandomWaveEnemyRollCall(_chaosWaveRandomPrefabsNext)}";
+            }
+            else
+            {
+                _chaosWaveRandomPrefabsNext = null;
+                _chaosWaveRandomNextWavePreview = null;
+            }
             _chaosWaveCountdown = ChaosWaveCountdownAfterWaveSeconds[completedWave - 1];
             if (_chaosWaveCountdown < 0) _chaosWaveCountdown = 0;
             _chaosWaveCountdownTimer?.Destroy();
             _chaosWaveCountdownTimer = timer.Repeat(1f, 0, ChaosWaveCountdownTick);
-            ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave {completedWave} complete\nNext wave in {_chaosWaveCountdown}s");
+            ShowChaosWaveUIToAll(_chaosWaveUiTitle, ChaosWaveCountdownUiBody(completedWave));
+            if (_chaosWaveMode == ChaosWaveMode.Random && !string.IsNullOrEmpty(_chaosWaveRandomNextWavePreview))
+                BroadcastChat(_chaosWaveRandomNextWavePreview);
         }
 
         private void ChaosWaveCountdownTick()
         {
             _chaosWaveCountdown--;
-            ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave {_chaosWaveNumber - 1} complete\nNext wave in {_chaosWaveCountdown}s");
+            ShowChaosWaveUIToAll(_chaosWaveUiTitle, ChaosWaveCountdownUiBody(_chaosWaveNumber - 1));
             if (_chaosWaveCountdown > 0) return;
 
             _chaosWaveCountdownTimer?.Destroy();
@@ -985,6 +1071,24 @@ namespace Oxide.Plugins
         /// </summary>
         private void SpawnChaosWaveBears(BasePlayer streamer, int count)
         {
+            if (_chaosWaveMode == ChaosWaveMode.Random)
+            {
+                _chaosWaveRandomNextWavePreview = null;
+                if (_chaosWaveRandomPrefabsNext != null && _chaosWaveRandomPrefabsNext.Count == count)
+                {
+                    _chaosWaveRandomWavePlan = _chaosWaveRandomPrefabsNext;
+                    _chaosWaveRandomPrefabsNext = null;
+                }
+                else
+                    _chaosWaveRandomWavePlan = BuildRandomWavePrefabPlan(count);
+                _chaosWaveRandomPlanIndex = 0;
+            }
+            else
+            {
+                _chaosWaveRandomWavePlan = null;
+                _chaosWaveRandomPlanIndex = 0;
+            }
+
             _chaosWaveSpawnedBearCount = 0;
             _chaosWaveKilledBearCount = 0;
             _chaosWaveSpawning = count >= 4;
@@ -1233,6 +1337,10 @@ namespace Oxide.Plugins
             {
                 _chaosWaveEnemyIds = null;
                 _chaosWaveNumber = 0;
+                _chaosWaveRandomWavePlan = null;
+                _chaosWaveRandomPlanIndex = 0;
+                _chaosWaveRandomPrefabsNext = null;
+                _chaosWaveRandomNextWavePreview = null;
                 _chaosWaveTargetBearCount = 0;
                 _chaosWaveSpawnedBearCount = 0;
                 _chaosWaveKilledBearCount = 0;

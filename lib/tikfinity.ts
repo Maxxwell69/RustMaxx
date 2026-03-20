@@ -199,7 +199,7 @@ export const ACTION_META: Record<
   chaoswaverandom: {
     label: "Chaos Random Wave",
     description:
-      "Same as Chaos Wave but each spawn picks a random enemy type (wolf, bear, pig, scientists, heavies, zombies, etc.; prefabs vary by server build).",
+      "Like Chaos Wave (1→10 land waves) with random enemy types; start bonus 3000 stone + 1 metal door + 1 reinforced glass window. Between waves, chat/UI preview the exact next-wave lineup.",
     exampleGifts: ["Random Chaos Wave", "RandomChaosWave"],
   },
   healinghands: {
