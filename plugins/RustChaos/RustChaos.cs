@@ -41,9 +41,9 @@ namespace Oxide.Plugins
             public float HealingHandsAmount { get; set; } = 10f;
 
             /// <summary>Heli Chaos: seconds after trigger before spawning the locked (hackable) crate near the streamer.</summary>
-            public float HeliChaosCrateDelaySeconds { get; set; } = 8f;
+            public float HeliChaosCrateDelaySeconds { get; set; } = 6f;
             /// <summary>Heli Chaos: seconds after trigger before spawning the patrol helicopter.</summary>
-            public float HeliChaosPatrolDelaySeconds { get; set; } = 75f;
+            public float HeliChaosPatrolDelaySeconds { get; set; } = 30f;
             /// <summary>Heli Chaos: minimum seconds between bonus locked crates when helis are shot down during an active session.</summary>
             public float HeliChaosCrateBonusCooldownSeconds { get; set; } = 60f;
             /// <summary>Optional. Patrol helicopter prefab if your build path differs (empty = built-in list).</summary>
@@ -508,12 +508,13 @@ namespace Oxide.Plugins
             GiveItemWithLog(target, 1, "homingmissile.launcher", "Heli chaos (homing launcher)");
             for (int i = 0; i < 20; i++)
                 GiveItemWithLog(target, 1, "ammo.rocket.seeker", "Heli chaos (seeker missile)");
-            BroadcastChat(chatMsg($"{viewerName} triggered HELI CHAOS! Homing launcher + 20 missiles — locked crate first, patrol helicopter after."));
+            BroadcastChat(chatMsg($"{viewerName} triggered HELI CHAOS! Homing launcher + 20 missiles. Locked crate first, patrol helicopter after."));
             float cDelay = Mathf.Max(2f, _config?.HeliChaosCrateDelaySeconds ?? 8f);
             float pDelay = Mathf.Max(cDelay + 15f, _config?.HeliChaosPatrolDelaySeconds ?? 75f);
             ulong uid = target.userID;
             timer.Once(cDelay, () => HeliChaosDeliverCrate(uid));
             timer.Once(pDelay, () => HeliChaosSpawnPatrol(uid));
+            BroadcastChat($"Heli Chaos timing: crate in {cDelay:0}s, patrol heli in {pDelay:0}s (land-only).");
             Puts($"{LogPrefix} Heli chaos for {target.displayName}: locked crate ~{cDelay:0}s, patrol heli ~{pDelay:0}s.");
         }
 
@@ -527,7 +528,13 @@ namespace Oxide.Plugins
                 return;
             }
             if (TrySpawnHackableLockedCrateNear(p, "Heli chaos — Chinook locked crate"))
+            {
                 BroadcastChat("Chinook locked crate delivered near the streamer!");
+            }
+            else
+            {
+                BroadcastChat("Heli Chaos: crate spawn failed (server console should show which prefab was missing).");
+            }
         }
 
         private void HeliChaosSpawnPatrol(ulong userId)
@@ -540,9 +547,15 @@ namespace Oxide.Plugins
                 return;
             }
             if (TrySpawnPatrolHelicopterNear(p))
+            {
                 BroadcastChat("Patrol helicopter inbound on the streamer!");
+            }
             else
+            {
+                string custom = _config?.PatrolHelicopterPrefabPath;
+                BroadcastChat($"Heli Chaos: patrol helicopter spawn failed. Check PatrolHelicopterPrefabPath in RustChaos.json. (custom='{custom ?? ""}')");
                 PrintWarning($"{LogPrefix} Heli chaos: patrol helicopter spawn failed (check PatrolHelicopterPrefabPath in config).");
+            }
         }
 
         private bool TrySpawnHackableLockedCrateNear(BasePlayer streamer, string logContext)
@@ -623,8 +636,9 @@ namespace Oxide.Plugins
                 ent.Spawn();
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                PrintWarning($"{LogPrefix} TryCreateAndSpawnEntityAt failed: '{prefabPath}' at {pos}. {ex.Message}");
                 return false;
             }
         }
