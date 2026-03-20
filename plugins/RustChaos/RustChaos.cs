@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.0")]
+    [Info("RustChaos", "RustMaxx", "1.15.1")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -369,6 +369,12 @@ namespace Oxide.Plugins
                     {
                         float amount = Mathf.Max(0f, _config?.HealingHandsAmount ?? 10f);
                         float maxHealth = target.MaxHealth();
+                        // Always show who gave healing in chat (custom TikFinity message must not hide the giver).
+                        string HealingHandsChat(string defaultLine)
+                        {
+                            if (string.IsNullOrEmpty(customMessage)) return defaultLine;
+                            return $"{viewerName} → {target.displayName}: {customMessage}";
+                        }
                         // If already topped off, Heal() would do nothing useful — random small loot.
                         if (target.health >= maxHealth - 0.01f)
                         {
@@ -391,14 +397,14 @@ namespace Oxide.Plugins
                                     break;
                             }
                             GiveItemToPlayer(target, itemShort, 1);
-                            BroadcastChat(ChatMsg($"{viewerName} triggered HEALING HANDS! {giftLabel} (full health)"));
-                            Puts($"{LogPrefix} Healing Hands: {target.displayName} at full health, gave {giftLabel} ({itemShort})");
+                            BroadcastChat(HealingHandsChat($"{viewerName} gave HEALING HANDS to {target.displayName}! {giftLabel} (already full health)"));
+                            Puts($"{LogPrefix} Healing Hands: {target.displayName} at full health, gave {giftLabel} ({itemShort}) from {viewerName}");
                         }
                         else
                         {
                             target.Heal(amount);
-                            BroadcastChat(ChatMsg($"{viewerName} triggered HEALING HANDS! +{amount:0} health"));
-                            Puts($"{LogPrefix} Healed streamer {target.displayName} by {amount}");
+                            BroadcastChat(HealingHandsChat($"{viewerName} gave HEALING HANDS to {target.displayName}! +{amount:0} health"));
+                            Puts($"{LogPrefix} Healed streamer {target.displayName} by {amount} (from {viewerName})");
                         }
                     }
                     break;

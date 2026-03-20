@@ -255,7 +255,7 @@ export const ACTION_META: Record<
   healinghands: {
     label: "Healing Hands",
     description:
-      "Heals the streamer +10 health per trigger (configurable on server); if already at full health, gives 1 bandage, 1 rifle round, or 1 meat at random",
+      "Heals the streamer +10 health per trigger (configurable on server); if already at full health, gives 1 bandage, 1 rifle round, or 1 meat at random. In-game chat always shows the viewer who gave it and the streamer name.",
     exampleGifts: ["Healing Hands", "HealingHands"],
   },
   fullheal: {
