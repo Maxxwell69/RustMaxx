@@ -638,7 +638,7 @@ namespace Oxide.Plugins
             }
             catch (Exception ex)
             {
-                PrintWarning($"{LogPrefix} TryCreateAndSpawnEntityAt failed: '{prefabPath}' at {pos}. {ex.Message}");
+                UnityEngine.Debug.LogWarning($"{LogPrefix} TryCreateAndSpawnEntityAt failed: '{prefabPath}' at {pos}. {ex.Message}");
                 return false;
             }
         }
