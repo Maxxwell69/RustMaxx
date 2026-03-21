@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.4")]
+    [Info("RustChaos", "RustMaxx", "1.15.5")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -105,6 +105,8 @@ namespace Oxide.Plugins
         private Timer _chaosWaveCountdownTimer;
         private ulong _chaosWaveStreamerUserId;
         private Timer _chaosWaveLeashTimer;
+        /// <summary>High-frequency steering for HumanNPC scientists (Brain.Navigator); separate from 1s animal leash.</summary>
+        private Timer _chaosWaveHumanNpcSteerTimer;
         private int _chaosWaveTargetBearCount;
         private int _chaosWaveSpawnedBearCount;
         private int _chaosWaveKilledBearCount;
@@ -183,8 +185,7 @@ namespace Oxide.Plugins
             "assets/prefabs/npc/scientist/scientist.prefab",
             "assets/content/npc/scientist/scientist.prefab",
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
-            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_bradley_heavy.prefab",
-            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_oilrig.prefab",
+            // Bradley / oil rig variants are tuned for monuments; they often ignore open-world combat.
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
             "assets/prefabs/npc/halloween/zombie/zombie.prefab"
         };
@@ -1193,13 +1194,26 @@ namespace Oxide.Plugins
                 if (ent == null) continue;
                 ent.Spawn();
                 _chaosWaveEnemyIds.Add(ent.net.ID);
-                // Human NPCs (scientists, etc.) need Brain.Navigator destinations; raw Spawn() often leaves them idle off patrol graphs.
+                // Human NPCs: navigator + a tiny "provoke" hit so AI treats the streamer as enemy (SetDestination alone is often ignored).
                 ulong streamerId = _chaosWaveStreamerUserId;
-                timer.Once(0.25f, () =>
+                timer.Once(0.5f, () =>
                 {
                     if (ent == null || ent.IsDestroyed) return;
                     BasePlayer streamer = FindConnectedPlayerByUserId(streamerId);
                     if (streamer == null || !streamer.IsValid()) return;
+                    var human = ent as HumanNPC;
+                    if (human != null)
+                        TryProvokeHumanNpcCombat(human, streamer);
+                    TryChaosWaveSteerHumanNpcToward(ent, streamer.transform.position);
+                });
+                timer.Once(2f, () =>
+                {
+                    if (ent == null || ent.IsDestroyed) return;
+                    BasePlayer streamer = FindConnectedPlayerByUserId(streamerId);
+                    if (streamer == null || !streamer.IsValid()) return;
+                    var human = ent as HumanNPC;
+                    if (human != null)
+                        TryProvokeHumanNpcCombat(human, streamer);
                     TryChaosWaveSteerHumanNpcToward(ent, streamer.transform.position);
                 });
                 return true;
@@ -1281,8 +1295,33 @@ namespace Oxide.Plugins
         {
             _chaosWaveLeashTimer?.Destroy();
             _chaosWaveLeashTimer = null;
+            _chaosWaveHumanNpcSteerTimer?.Destroy();
+            _chaosWaveHumanNpcSteerTimer = null;
             float leash = Mathf.Clamp(_config?.ChaosWaveBearLeashDistance ?? 18f, 5f, 80f);
             _chaosWaveLeashTimer = timer.Repeat(1f, 0, () => CheckChaosWaveLeash(leash));
+            // Scientists need frequent SetDestination + combat state; 1s is too slow for Brain.Navigator to commit.
+            _chaosWaveHumanNpcSteerTimer = timer.Repeat(0.4f, 0, CheckChaosWaveHumanNpcSteer);
+        }
+
+        /// <summary>
+        /// Tiny damage with streamer as initiator — wakes threat / combat AI when spawn alone leaves NPC idle.
+        /// </summary>
+        private static void TryProvokeHumanNpcCombat(HumanNPC target, BasePlayer streamer)
+        {
+            if (target == null || streamer == null || target.IsDestroyed || !streamer.IsValid()) return;
+            try
+            {
+                HitInfo hit = new HitInfo();
+                hit.Initiator = streamer;
+                hit.HitEntity = target;
+                hit.HitPositionWorld = target.transform.position;
+                hit.damageTypes.Add(DamageType.Stab, 0.05f);
+                target.Hurt(hit);
+            }
+            catch
+            {
+                // ignore API differences
+            }
         }
 
         /// <summary>
@@ -1302,7 +1341,13 @@ namespace Oxide.Plugins
                     var nav = brain.Navigator;
                     if (nav.Agent != null && !nav.Agent.isOnNavMesh)
                         nav.PlaceOnNavMesh(0f);
-                    nav.SetDestination(streamerPos, BaseNavigator.NavigationSpeed.Normal);
+                    Vector3 a = humanNpc.transform.position;
+                    Vector3 b = streamerPos;
+                    a.y = 0f;
+                    b.y = 0f;
+                    float dist = Vector3.Distance(a, b);
+                    var speed = dist > 12f ? BaseNavigator.NavigationSpeed.Fast : BaseNavigator.NavigationSpeed.Normal;
+                    nav.SetDestination(streamerPos, speed);
                     return true;
                 }
                 catch
@@ -1333,26 +1378,58 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private void CheckChaosWaveLeash(float leashDistance)
+        private void CheckChaosWaveHumanNpcSteer()
         {
             if (_chaosWaveEnemyIds == null || _chaosWaveEnemyIds.Count == 0) return;
+            if (!TryGetChaosWaveStreamerPosition(out Vector3 streamerPos))
+            {
+                CancelChaosWave("Chaos wave cancelled (streamer offline).");
+                return;
+            }
 
-            // Find the current streamer position by userID (stable even if name changes).
-            Vector3? streamerPos = null;
+            var ids = new List<NetworkableId>(_chaosWaveEnemyIds);
+            foreach (var nid in ids)
+            {
+                try
+                {
+                    var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    if (ent == null || ent.IsDestroyed) continue;
+                    TryChaosWaveSteerHumanNpcToward(ent, streamerPos);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+        }
+
+        private bool TryGetChaosWaveStreamerPosition(out Vector3 pos)
+        {
+            pos = default;
+            if (_chaosWaveStreamerUserId == 0ul) return false;
             foreach (var p in BasePlayer.activePlayerList)
             {
                 if (p != null && p.IsConnected && p.userID == _chaosWaveStreamerUserId)
                 {
-                    streamerPos = p.transform.position;
-                    break;
+                    pos = p.transform.position;
+                    return true;
                 }
             }
-            if (streamerPos == null)
+
+            return false;
+        }
+
+        private void CheckChaosWaveLeash(float leashDistance)
+        {
+            if (_chaosWaveEnemyIds == null || _chaosWaveEnemyIds.Count == 0) return;
+
+            if (!TryGetChaosWaveStreamerPosition(out Vector3 streamerPosVal))
             {
-                // streamer offline -> cancel wave
                 CancelChaosWave("Chaos wave cancelled (streamer offline).");
                 return;
             }
+
+            Vector3 streamerPos = streamerPosVal;
 
             float leashSqr = leashDistance * leashDistance;
             // Copy ids to avoid mutation during enumeration.
@@ -1364,11 +1441,11 @@ namespace Oxide.Plugins
                     var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
                     if (ent == null || ent.IsDestroyed) continue;
 
-                    // Human NPCs: keep Navigator aimed at streamer every tick (inside or outside leash) so they pathfind and fight.
-                    if (TryChaosWaveSteerHumanNpcToward(ent, streamerPos.Value))
+                    // Human NPCs (scientists) are steered by CheckChaosWaveHumanNpcSteer every 0.4s — animal leash only below.
+                    if (ent is HumanNPC)
                         continue;
 
-                    Vector3 d = ent.transform.position - streamerPos.Value;
+                    Vector3 d = ent.transform.position - streamerPos;
                     if (d.sqrMagnitude > leashSqr)
                     {
                         // Don't kill (player expects bears to "run back" and not disappear).
@@ -1376,7 +1453,7 @@ namespace Oxide.Plugins
                         // 1) rotate toward streamer
                         // 2) if NavMeshAgent exists, SetDestination()
                         // 3) otherwise, push rigidbody velocity in that direction
-                        Vector3 toStreamer = streamerPos.Value - ent.transform.position;
+                        Vector3 toStreamer = streamerPos - ent.transform.position;
                         toStreamer.y = 0f;
                         if (toStreamer.sqrMagnitude > 0.01f)
                             toStreamer.Normalize();
@@ -1391,7 +1468,7 @@ namespace Oxide.Plugins
                             if (agent != null)
                             {
                                 agent.isStopped = false;
-                                agent.SetDestination(streamerPos.Value);
+                                agent.SetDestination(streamerPos);
                             }
                         }
                         catch { }
@@ -1481,6 +1558,8 @@ namespace Oxide.Plugins
                 _chaosWaveKilledBearCount = 0;
                 _chaosWaveLeashTimer?.Destroy();
                 _chaosWaveLeashTimer = null;
+                _chaosWaveHumanNpcSteerTimer?.Destroy();
+                _chaosWaveHumanNpcSteerTimer = null;
                 DestroyChaosWaveUIForAll();
                 GiveItemWithLog(streamer, 1, "rocket.launcher", "ChaosWave final reward (rocket launcher)");
                 GiveItemWithLog(streamer, 3, "ammo.rocket.basic", "ChaosWave final reward (rockets)");
@@ -1529,6 +1608,8 @@ namespace Oxide.Plugins
                 _chaosWaveEnemyIds = null;
                 _chaosWaveLeashTimer?.Destroy();
                 _chaosWaveLeashTimer = null;
+                _chaosWaveHumanNpcSteerTimer?.Destroy();
+                _chaosWaveHumanNpcSteerTimer = null;
                 DestroyChaosWaveUIForAll();
                 return;
             }
@@ -1860,6 +1941,8 @@ namespace Oxide.Plugins
                 _chaosWaveStreamerUserId = 0ul;
                 _chaosWaveLeashTimer?.Destroy();
                 _chaosWaveLeashTimer = null;
+                _chaosWaveHumanNpcSteerTimer?.Destroy();
+                _chaosWaveHumanNpcSteerTimer = null;
                 _chaosWaveCountdownTimer?.Destroy();
                 _chaosWaveCountdownTimer = null;
                 DestroyChaosWaveUIForAll();
