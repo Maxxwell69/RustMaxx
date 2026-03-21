@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.3")]
+    [Info("RustChaos", "RustMaxx", "1.15.4")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -1301,7 +1301,7 @@ namespace Oxide.Plugins
                     if (brain == null || brain.Navigator == null) return false;
                     var nav = brain.Navigator;
                     if (nav.Agent != null && !nav.Agent.isOnNavMesh)
-                        nav.PlaceOnNavMesh();
+                        nav.PlaceOnNavMesh(0f);
                     nav.SetDestination(streamerPos, BaseNavigator.NavigationSpeed.Normal);
                     return true;
                 }
