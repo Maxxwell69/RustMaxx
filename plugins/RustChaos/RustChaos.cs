@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.5")]
+    [Info("RustChaos", "RustMaxx", "1.15.6")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -169,7 +169,10 @@ namespace Oxide.Plugins
             "assets/rust.ai/agents/cat/panther.prefab"
         };
 
-        /// <summary>Prefabs for chaoswaverandom — paths differ by build; failed paths are skipped.</summary>
+        /// <summary>
+        /// Land chaos random wave: animals only (no scientists). Human NPCs rarely hunt players in open-world
+        /// spawn; bears/wolves/pigs/etc. use normal animal aggro and respond to provoke + NavMesh toward streamer.
+        /// </summary>
         private static readonly string[] ChaosWaveRandomPrefabPool =
         {
             WolfPrefab,
@@ -181,12 +184,9 @@ namespace Oxide.Plugins
             PantherPrefabCandidates[0],
             PantherPrefabCandidates[1],
             PantherPrefabCandidates[2],
-            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
-            "assets/prefabs/npc/scientist/scientist.prefab",
-            "assets/content/npc/scientist/scientist.prefab",
-            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
-            // Bradley / oil rig variants are tuned for monuments; they often ignore open-world combat.
-            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+            WolfPrefab,
+            BearPrefab,
+            BoarPrefab,
             "assets/prefabs/npc/halloween/zombie/zombie.prefab"
         };
 
@@ -1194,16 +1194,13 @@ namespace Oxide.Plugins
                 if (ent == null) continue;
                 ent.Spawn();
                 _chaosWaveEnemyIds.Add(ent.net.ID);
-                // Human NPCs: navigator + a tiny "provoke" hit so AI treats the streamer as enemy (SetDestination alone is often ignored).
                 ulong streamerId = _chaosWaveStreamerUserId;
                 timer.Once(0.5f, () =>
                 {
                     if (ent == null || ent.IsDestroyed) return;
                     BasePlayer streamer = FindConnectedPlayerByUserId(streamerId);
                     if (streamer == null || !streamer.IsValid()) return;
-                    var human = ent as HumanNPC;
-                    if (human != null)
-                        TryProvokeHumanNpcCombat(human, streamer);
+                    TryProvokeChaosWaveEnemy(ent, streamer);
                     TryChaosWaveSteerHumanNpcToward(ent, streamer.transform.position);
                 });
                 timer.Once(2f, () =>
@@ -1211,9 +1208,7 @@ namespace Oxide.Plugins
                     if (ent == null || ent.IsDestroyed) return;
                     BasePlayer streamer = FindConnectedPlayerByUserId(streamerId);
                     if (streamer == null || !streamer.IsValid()) return;
-                    var human = ent as HumanNPC;
-                    if (human != null)
-                        TryProvokeHumanNpcCombat(human, streamer);
+                    TryProvokeChaosWaveEnemy(ent, streamer);
                     TryChaosWaveSteerHumanNpcToward(ent, streamer.transform.position);
                 });
                 return true;
@@ -1264,7 +1259,7 @@ namespace Oxide.Plugins
                     GiveItemWithLog(streamer, 1000, "stones", "Chaos Random Wave start (stone)");
                 GiveItemWithLog(streamer, 1, "door.hinged.metal", "Chaos Random Wave start (metal door)");
                 GiveItemWithLog(streamer, 1, "wall.window.glass.reinforced", "Chaos Random Wave start (reinforced window)");
-                BroadcastChat("Chaos Random Wave: streamer received 3000 stone, 1 metal door, 1 reinforced glass window.");
+                BroadcastChat("Chaos Random Wave: 3000 stone, 1 metal door, 1 reinforced glass window; round 1 loadout includes 1500 wood + building hammer.");
             }
             StartChaosWaveLeashTimer();
             _chaosWaveTargetBearCount = 1;
@@ -1322,6 +1317,44 @@ namespace Oxide.Plugins
             {
                 // ignore API differences
             }
+        }
+
+        /// <summary>
+        /// Provoke humans (scientists) or animals (bears/wolves) so the streamer registers as a threat.
+        /// </summary>
+        private static void TryProvokeChaosWaveEnemy(BaseEntity ent, BasePlayer streamer)
+        {
+            if (ent == null || streamer == null || !streamer.IsValid()) return;
+            var human = ent as HumanNPC;
+            if (human != null)
+            {
+                TryProvokeHumanNpcCombat(human, streamer);
+                return;
+            }
+
+            var bc = ent as BaseCombatEntity;
+            if (bc == null || bc is BasePlayer) return;
+            try
+            {
+                HitInfo hit = new HitInfo();
+                hit.Initiator = streamer;
+                hit.HitEntity = bc;
+                hit.HitPositionWorld = bc.transform.position;
+                hit.damageTypes.Add(DamageType.Stab, 0.05f);
+                bc.Hurt(hit);
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private static UnityEngine.AI.NavMeshAgent TryGetNavMeshAgentOnEntity(BaseEntity ent)
+        {
+            if (ent == null) return null;
+            var a = ent.GetComponent<UnityEngine.AI.NavMeshAgent>();
+            if (a != null) return a;
+            return ent.GetComponentInChildren<UnityEngine.AI.NavMeshAgent>();
         }
 
         /// <summary>
@@ -1441,9 +1474,21 @@ namespace Oxide.Plugins
                     var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
                     if (ent == null || ent.IsDestroyed) continue;
 
-                    // Human NPCs (scientists) are steered by CheckChaosWaveHumanNpcSteer every 0.4s — animal leash only below.
+                    // Human NPCs (if any) are steered by CheckChaosWaveHumanNpcSteer every 0.4s.
                     if (ent is HumanNPC)
                         continue;
+
+                    // Animals / zombie: always pull NavMesh toward streamer (not only when outside leash) so they close and aggro.
+                    try
+                    {
+                        var agent = TryGetNavMeshAgentOnEntity(ent);
+                        if (agent != null && agent.enabled && agent.isOnNavMesh)
+                        {
+                            agent.isStopped = false;
+                            agent.SetDestination(streamerPos);
+                        }
+                    }
+                    catch { }
 
                     Vector3 d = ent.transform.position - streamerPos;
                     if (d.sqrMagnitude > leashSqr)
@@ -1464,7 +1509,7 @@ namespace Oxide.Plugins
                         // Prefer navigation if present.
                         try
                         {
-                            var agent = ent.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                            var agent = TryGetNavMeshAgentOnEntity(ent);
                             if (agent != null)
                             {
                                 agent.isStopped = false;
@@ -1686,7 +1731,7 @@ namespace Oxide.Plugins
             _chaosWaveSpawning = count >= 4;
 
             float maxRadius = Mathf.Clamp(_config?.ChaosWaveBearRadius ?? 25f, 10f, 80f);
-            float minRadius = 6f;
+            float minRadius = _chaosWaveMode == ChaosWaveMode.Random ? 4f : 6f;
             float leashDistance = Mathf.Clamp(_config?.ChaosWaveBearLeashDistance ?? 18f, 5f, 80f);
             float effectiveMaxRadius = Mathf.Min(maxRadius, leashDistance - 1f);
             if (effectiveMaxRadius < minRadius)
@@ -1825,6 +1870,7 @@ namespace Oxide.Plugins
             // If your server uses a different mapping, plugin will log which item shortnames are missing.
             string[] wallCandidates = { "barricade.cover.wood", "barricade.cover.wood_double", "barricade.wood.cover", "barricade.wood", "barricade.woodwire" };
             string[] buildingPlanCandidates = { "planner", "building.planner", "building.plan", "building_plan" };
+            string[] hammerCandidates = { "hammer", "hammer.building", "hammer.item" };
 
             // Med stick + bandage (cloth bandage) shortnames
             string[] medCandidates = { "medstick" };
@@ -1837,7 +1883,13 @@ namespace Oxide.Plugins
                     GiveItemToBeltWithLog(streamer, 1, "bow.hunting", "Round 1 bow (belt/arm slot)");
                     GiveItemWithLog(streamer, 100, "arrow.wooden", "Round 1 arrows (100)");
                     GiveFirstItemToBeltWithLog(streamer, 1, buildingPlanCandidates, "Round 1 building plan (belt/arm slot)");
-                    GiveItemWithLog(streamer, 750, "wood", "Round 1 wood (750)");
+                    if (_chaosWaveMode == ChaosWaveMode.Random)
+                    {
+                        GiveItemWithLog(streamer, 1500, "wood", "Round 1 wood — Random Chaos (1500)");
+                        GiveFirstItemWithLog(streamer, 1, hammerCandidates, "Round 1 building hammer (main)");
+                    }
+                    else
+                        GiveItemWithLog(streamer, 750, "wood", "Round 1 wood (750)");
                     GiveFirstItemToBeltWithLog(streamer, 2, wallCandidates, "Round 1 wooden barricades (2, belt/arm slot)");
                     GiveFirstItemWithLog(streamer, 1, medCandidates, "Round 1 med stick");
                     GiveItemWithLog(streamer, 3, bandageShort, "Round 1 bandages (3)");
