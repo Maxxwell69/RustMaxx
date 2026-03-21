@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.2")]
+    [Info("RustChaos", "RustMaxx", "1.15.3")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -1193,6 +1193,15 @@ namespace Oxide.Plugins
                 if (ent == null) continue;
                 ent.Spawn();
                 _chaosWaveEnemyIds.Add(ent.net.ID);
+                // Human NPCs (scientists, etc.) need Brain.Navigator destinations; raw Spawn() often leaves them idle off patrol graphs.
+                ulong streamerId = _chaosWaveStreamerUserId;
+                timer.Once(0.25f, () =>
+                {
+                    if (ent == null || ent.IsDestroyed) return;
+                    BasePlayer streamer = FindConnectedPlayerByUserId(streamerId);
+                    if (streamer == null || !streamer.IsValid()) return;
+                    TryChaosWaveSteerHumanNpcToward(ent, streamer.transform.position);
+                });
                 return true;
             }
             return false;
@@ -1276,6 +1285,54 @@ namespace Oxide.Plugins
             _chaosWaveLeashTimer = timer.Repeat(1f, 0, () => CheckChaosWaveLeash(leash));
         }
 
+        /// <summary>
+        /// Scientists / human NPCs use ScientistBrain/HumanNPC Brain.Navigator (NavMesh), not a root NavMeshAgent like bears.
+        /// Without SetDestination toward the streamer they often stand still and never enter combat.
+        /// </summary>
+        private static bool TryChaosWaveSteerHumanNpcToward(BaseEntity ent, Vector3 streamerPos)
+        {
+            var humanNpc = ent as HumanNPC;
+            if (humanNpc != null)
+            {
+                try
+                {
+                    if (humanNpc.IsDestroyed) return true;
+                    var brain = humanNpc.Brain;
+                    if (brain == null || brain.Navigator == null) return false;
+                    var nav = brain.Navigator;
+                    if (nav.Agent != null && !nav.Agent.isOnNavMesh)
+                        nav.PlaceOnNavMesh();
+                    nav.SetDestination(streamerPos, BaseNavigator.NavigationSpeed.Normal);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            var npcPlayer = ent as NPCPlayer;
+            if (npcPlayer != null)
+            {
+                try
+                {
+                    if (npcPlayer.IsDestroyed) return true;
+                    var agent = npcPlayer.NavAgent;
+                    if (agent == null || !agent.enabled) return false;
+                    if (!agent.isOnNavMesh) return false;
+                    agent.isStopped = false;
+                    agent.SetDestination(streamerPos);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
         private void CheckChaosWaveLeash(float leashDistance)
         {
             if (_chaosWaveEnemyIds == null || _chaosWaveEnemyIds.Count == 0) return;
@@ -1306,6 +1363,11 @@ namespace Oxide.Plugins
                 {
                     var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
                     if (ent == null || ent.IsDestroyed) continue;
+
+                    // Human NPCs: keep Navigator aimed at streamer every tick (inside or outside leash) so they pathfind and fight.
+                    if (TryChaosWaveSteerHumanNpcToward(ent, streamerPos.Value))
+                        continue;
+
                     Vector3 d = ent.transform.position - streamerPos.Value;
                     if (d.sqrMagnitude > leashSqr)
                     {
