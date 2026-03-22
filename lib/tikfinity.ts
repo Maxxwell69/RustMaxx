@@ -266,7 +266,7 @@ export const ACTION_META: Record<
   revivechaos: {
     label: "Revive Chaos",
     description:
-      "If the streamer is wounded (downed/crawling), revives them like a teammate pick-up; small heal after. Does nothing if they are already up or fully dead (respawn screen).",
+      "If the streamer is wounded (downed/crawling) or bleeding, picks them up, clears bleeding metabolism, and heals to full health. Does nothing if already healthy (not wounded/bleeding) or fully dead (respawn screen).",
     exampleGifts: ["Revive Chaos", "ReviveChaos"],
   },
   chaosheli: {

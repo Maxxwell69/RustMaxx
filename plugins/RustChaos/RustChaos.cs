@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.8")]
+    [Info("RustChaos", "RustMaxx", "1.15.9")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -448,21 +448,31 @@ namespace Oxide.Plugins
                 case "revivechaos":
                     if (target != null)
                     {
-                        // Wounded/crawling — same as being revived/picked up by another player (RecoverFromWounded).
+                        // Wounded/crawling: pick up + strip hidden bleed + full HP (RecoverFromWounded alone often leaves bleeding ticking).
                         try
                         {
                             bool down = target.IsWounded() || target.HasPlayerFlag(BasePlayer.PlayerFlags.Incapacitated);
-                            if (down)
+                            bool bleeding = false;
+                            try
                             {
-                                target.RecoverFromWounded();
-                                target.Heal(25f);
-                                BroadcastChat(ChatMsg($"{viewerName} triggered REVIVE CHAOS! {target.displayName} is back up!"));
-                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName} from wounded/incapacitated.");
+                                bleeding = target.metabolism != null && target.metabolism.bleeding != null &&
+                                           target.metabolism.bleeding.value > 0f;
+                            }
+                            catch { }
+
+                            if (down || bleeding)
+                            {
+                                if (down)
+                                    target.RecoverFromWounded();
+                                TryClearBleeding(target);
+                                target.Heal(99999f);
+                                BroadcastChat(ChatMsg($"{viewerName} triggered REVIVE CHAOS! {target.displayName} is back up — full health!"));
+                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName}, cleared bleed, full heal.");
                             }
                             else
                             {
-                                BroadcastChat(ChatMsg($"{viewerName} sent Revive Chaos — streamer isn't wounded."));
-                                Puts($"{LogPrefix} Revive Chaos: {target.displayName} not wounded; no-op.");
+                                BroadcastChat(ChatMsg($"{viewerName} sent Revive Chaos — streamer isn't wounded or bleeding."));
+                                Puts($"{LogPrefix} Revive Chaos: {target.displayName} not wounded/bleeding; no-op.");
                             }
                         }
                         catch (Exception ex)
@@ -808,6 +818,21 @@ namespace Oxide.Plugins
             Item item = ItemManager.Create(scrapDef, give, 0ul);
             if (item == null) return;
             item.MoveToContainer(player.inventory.containerMain);
+        }
+
+        /// <summary>RecoverFromWounded() can leave metabolism bleeding active; clear it so the streamer isn't ticking down HP.</summary>
+        private static void TryClearBleeding(BasePlayer player)
+        {
+            if (player == null || !player.IsValid()) return;
+            try
+            {
+                if (player.metabolism != null && player.metabolism.bleeding != null)
+                    player.metabolism.bleeding.value = 0f;
+            }
+            catch
+            {
+                // metabolism API differs on some builds
+            }
         }
 
         private static bool ActionRequiresPlayer(string action)
