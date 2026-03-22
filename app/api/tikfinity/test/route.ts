@@ -74,8 +74,14 @@ export async function POST(request: NextRequest) {
 
   const viewerArg = sanitizeArg(viewerName);
   const giftArg = sanitizeArg(giftName);
-  // Ensure every gift gives at least 1 scrap to streamer (same as webhook).
-  const scrapAmount = Math.min(10000, Math.max(1, typeof body.amount === "number" ? body.amount : getDefaultGiftValue(giftName)));
+  // 1:1 with webhook: optional body.amount, else default gift coin value; 0 allowed.
+  const scrapAmount = (() => {
+    const raw =
+      typeof body.amount === "number" && Number.isFinite(body.amount)
+        ? Math.trunc(body.amount)
+        : getDefaultGiftValue(giftName);
+    return Math.min(10000, Math.max(0, raw));
+  })();
   const command = `rustchaos ${action} ${viewerArg} ${giftArg} ${scrapAmount}`;
 
   const connected = await ensureConnection(

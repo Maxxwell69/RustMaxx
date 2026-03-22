@@ -399,7 +399,17 @@ export function getGiftValueFromPayload(body: unknown): number {
   if (!body || typeof body !== "object") return 0;
   const o = body as Record<string, unknown>;
   const get = (obj: Record<string, unknown>): number => {
-    const v = obj.value ?? obj.coins ?? obj.amount ?? obj.giftValue ?? obj.coinCount ?? obj.repeatCount;
+    const v =
+      obj.value ??
+      obj.coins ??
+      obj.amount ??
+      obj.giftValue ??
+      obj.coinCount ??
+      obj.repeatCount ??
+      obj.likes ??
+      obj.likeCount ??
+      obj.like_count ??
+      obj.count;
     if (typeof v === "number" && !Number.isNaN(v)) return Math.max(0, Math.floor(v));
     if (typeof v === "string") {
       const n = parseInt(v, 10);

@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.6")]
+    [Info("RustChaos", "RustMaxx", "1.15.7")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -86,6 +86,14 @@ namespace Oxide.Plugins
             Subscribe(nameof(OnEntityDeath));
         }
 
+        private void Unload()
+        {
+            _soloWildLeashTimer?.Destroy();
+            _soloWildLeashTimer = null;
+            _soloWildAnimalIds = null;
+            _soloWildStreamerUserId = 0ul;
+        }
+
         #region Constants
 
         private const string LogPrefix = "[RustChaos]";
@@ -107,6 +115,11 @@ namespace Oxide.Plugins
         private Timer _chaosWaveLeashTimer;
         /// <summary>High-frequency steering for HumanNPC scientists (Brain.Navigator); separate from 1s animal leash.</summary>
         private Timer _chaosWaveHumanNpcSteerTimer;
+
+        /// <summary>Standalone wolf/bear/pig/shark: leash + nav toward streamer (same radius as chaos wave).</summary>
+        private HashSet<NetworkableId> _soloWildAnimalIds;
+        private ulong _soloWildStreamerUserId;
+        private Timer _soloWildLeashTimer;
         private int _chaosWaveTargetBearCount;
         private int _chaosWaveSpawnedBearCount;
         private int _chaosWaveKilledBearCount;
@@ -321,8 +334,11 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        SpawnNPC(WolfPrefab, GetPositionNear(target));
-                        Puts($"{LogPrefix} Spawned 1 wolf near {target.displayName}");
+                        GivePistolAndAmmoToStreamerBelt(target, "Wolf gift");
+                        if (TrySpawnSoloWildAnimal(target, WolfPrefab, "wolf"))
+                            Puts($"{LogPrefix} Spawned 1 wolf near {target.displayName}");
+                        else
+                            PrintWarning($"{LogPrefix} Wolf spawn failed (CreateEntity).");
                     }
                     break;
 
@@ -330,8 +346,11 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        SpawnNPC(BearPrefab, GetPositionNear(target));
-                        Puts($"{LogPrefix} Spawned 1 bear near {target.displayName}");
+                        GivePistolAndAmmoToStreamerBelt(target, "Bear gift");
+                        if (TrySpawnSoloWildAnimal(target, BearPrefab, "bear"))
+                            Puts($"{LogPrefix} Spawned 1 bear near {target.displayName}");
+                        else
+                            PrintWarning($"{LogPrefix} Bear spawn failed (CreateEntity).");
                     }
                     break;
 
@@ -464,8 +483,12 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        if (SpawnShark(GetPositionNear(target), _config?.SharkPrefabPath))
+                        GivePistolAndAmmoToStreamerBelt(target, "Shark gift");
+                        Vector3 sharkPos = GetPositionNear(target);
+                        if (TrySpawnSharkGiftWithLeash(target, sharkPos, _config?.SharkPrefabPath))
                             Puts($"{LogPrefix} Spawned 1 shark near {target.displayName}");
+                        else
+                            PrintWarning($"{LogPrefix} Shark spawn failed. Set SharkPrefabPath in RustChaos.json if needed.");
                     }
                     break;
 
@@ -473,8 +496,11 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        SpawnNPC(BoarPrefab, GetPositionNear(target));
-                        Puts($"{LogPrefix} Spawned 1 pig (boar) near {target.displayName}");
+                        GivePistolAndAmmoToStreamerBelt(target, "Pig gift");
+                        if (TrySpawnSoloWildAnimal(target, BoarPrefab, "pig"))
+                            Puts($"{LogPrefix} Spawned 1 pig (boar) near {target.displayName}");
+                        else
+                            PrintWarning($"{LogPrefix} Pig spawn failed (CreateEntity).");
                     }
                     break;
 
@@ -945,20 +971,27 @@ namespace Oxide.Plugins
             switch (loc)
             {
                 case ChaosLocation.Land:
-                    at(3f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(WolfPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): wolf"); } });
-                    at(6f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(BearPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): bear"); } });
-                    at(9f, () => { var t = GetStreamer(); if (t != null) { SpawnNPC(BoarPrefab, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Land): pig"); } });
+                    at(3f, () => { var t = GetStreamer(); if (t != null && TrySpawnSoloWildAnimal(t, WolfPrefab, "Chaos land wolf")) Puts($"{LogPrefix} Chaos (Land): wolf"); });
+                    at(6f, () => { var t = GetStreamer(); if (t != null && TrySpawnSoloWildAnimal(t, BearPrefab, "Chaos land bear")) Puts($"{LogPrefix} Chaos (Land): bear"); });
+                    at(9f, () => { var t = GetStreamer(); if (t != null && TrySpawnSoloWildAnimal(t, BoarPrefab, "Chaos land pig")) Puts($"{LogPrefix} Chaos (Land): pig"); });
                     break;
                 case ChaosLocation.Sea:
-                    at(2f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark"); } });
-                    at(5f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark 2"); } });
+                    at(2f, () => { var t = GetStreamer(); if (t != null && TrySpawnSharkGiftWithLeash(t, GetPositionNear(t), _config?.SharkPrefabPath)) Puts($"{LogPrefix} Chaos (Sea): shark"); });
+                    at(5f, () => { var t = GetStreamer(); if (t != null && TrySpawnSharkGiftWithLeash(t, GetPositionNear(t), _config?.SharkPrefabPath)) Puts($"{LogPrefix} Chaos (Sea): shark 2"); });
                     at(8f, () => { var t = GetStreamer(); if (t != null) { SpawnEffect(EffectFireworks, GetPositionNear(t)); Puts($"{LogPrefix} Chaos (Sea): fireworks"); } });
-                    at(11f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Sea): shark 3"); } });
+                    at(11f, () => { var t = GetStreamer(); if (t != null && TrySpawnSharkGiftWithLeash(t, GetPositionNear(t), _config?.SharkPrefabPath)) Puts($"{LogPrefix} Chaos (Sea): shark 3"); });
                     break;
                 case ChaosLocation.Swimming:
-                    at(1f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): 2 sharks"); } });
-                    at(4f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): shark"); } });
-                    at(7f, () => { var t = GetStreamer(); if (t != null) { SpawnShark(GetPositionNear(t), _config?.SharkPrefabPath); Puts($"{LogPrefix} Chaos (Swimming): shark"); } });
+                    at(1f, () =>
+                    {
+                        var t = GetStreamer();
+                        if (t == null) return;
+                        if (TrySpawnSharkGiftWithLeash(t, GetPositionNear(t), _config?.SharkPrefabPath))
+                            TrySpawnSharkGiftWithLeash(t, GetPositionNear(t), _config?.SharkPrefabPath);
+                        Puts($"{LogPrefix} Chaos (Swimming): sharks");
+                    });
+                    at(4f, () => { var t = GetStreamer(); if (t != null && TrySpawnSharkGiftWithLeash(t, GetPositionNear(t), _config?.SharkPrefabPath)) Puts($"{LogPrefix} Chaos (Swimming): shark"); });
+                    at(7f, () => { var t = GetStreamer(); if (t != null && TrySpawnSharkGiftWithLeash(t, GetPositionNear(t), _config?.SharkPrefabPath)) Puts($"{LogPrefix} Chaos (Swimming): shark"); });
                     break;
                 case ChaosLocation.ModularBoat:
                     // Standing on modular boat hull: port in patrol boats (scientist RHIB + PT boat)
@@ -1168,6 +1201,7 @@ namespace Oxide.Plugins
             BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumerateTigerPrefabPaths(), pos);
             if (ent == null) return false;
             ent.Spawn();
+            RegisterSoloWildEntity(ent, streamer);
             return true;
         }
 
@@ -1180,6 +1214,7 @@ namespace Oxide.Plugins
             BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumeratePantherPrefabPaths(), pos);
             if (ent == null) return false;
             ent.Spawn();
+            RegisterSoloWildEntity(ent, streamer);
             return true;
         }
 
@@ -1250,6 +1285,7 @@ namespace Oxide.Plugins
             if (streamer != null && streamer.IsValid())
             {
                 streamer.Heal(99999f);
+                GivePistolAndAmmoToStreamerBelt(streamer, "Chaos wave start");
             }
             GiveChaosWaveLoadout(streamer, 1);
             if (mode == ChaosWaveMode.Random && streamer != null && streamer.IsValid())
@@ -1357,6 +1393,25 @@ namespace Oxide.Plugins
             return ent.GetComponentInChildren<UnityEngine.AI.NavMeshAgent>();
         }
 
+        /// <summary>Bears/wolves/etc.: keep NavMesh aimed at streamer (chaos wave + solo spawns).</summary>
+        private static void TryChaosWaveSteerAnimalNavTowardStream(BaseEntity ent, Vector3 streamerPos)
+        {
+            if (ent == null || ent is HumanNPC) return;
+            try
+            {
+                var agent = TryGetNavMeshAgentOnEntity(ent);
+                if (agent != null && agent.enabled && agent.isOnNavMesh)
+                {
+                    agent.isStopped = false;
+                    agent.SetDestination(streamerPos);
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
         /// <summary>
         /// Scientists / human NPCs use ScientistBrain/HumanNPC Brain.Navigator (NavMesh), not a root NavMeshAgent like bears.
         /// Without SetDestination toward the streamer they often stand still and never enter combat.
@@ -1427,13 +1482,175 @@ namespace Oxide.Plugins
                 {
                     var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
                     if (ent == null || ent.IsDestroyed) continue;
-                    TryChaosWaveSteerHumanNpcToward(ent, streamerPos);
+                    if (!TryChaosWaveSteerHumanNpcToward(ent, streamerPos))
+                        TryChaosWaveSteerAnimalNavTowardStream(ent, streamerPos);
                 }
                 catch
                 {
                     // ignore
                 }
             }
+        }
+
+        private bool TryGetSoloWildStreamerPosition(out Vector3 pos)
+        {
+            pos = default;
+            if (_soloWildStreamerUserId == 0ul) return false;
+            foreach (var p in BasePlayer.activePlayerList)
+            {
+                if (p != null && p.IsConnected && p.userID == _soloWildStreamerUserId)
+                {
+                    pos = p.transform.position;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void EnsureSoloWildLeashTimer()
+        {
+            if (_soloWildLeashTimer != null) return;
+            float leash = Mathf.Clamp(_config?.ChaosWaveBearLeashDistance ?? 18f, 5f, 80f);
+            _soloWildLeashTimer = timer.Repeat(1f, 0, () => CheckSoloWildLeash(leash));
+        }
+
+        private void StopSoloWildLeashTimer()
+        {
+            _soloWildLeashTimer?.Destroy();
+            _soloWildLeashTimer = null;
+            _soloWildAnimalIds = null;
+            _soloWildStreamerUserId = 0ul;
+        }
+
+        private void CleanupSoloWildAnimalsAndStop()
+        {
+            try
+            {
+                if (_soloWildAnimalIds != null)
+                {
+                    foreach (var nid in _soloWildAnimalIds)
+                    {
+                        try
+                        {
+                            var ent = BaseNetworkable.serverEntities.Find(nid) as BaseCombatEntity;
+                            if (ent != null && !ent.IsDestroyed)
+                                ent.Kill();
+                        }
+                        catch { }
+                    }
+                }
+            }
+            finally
+            {
+                StopSoloWildLeashTimer();
+            }
+        }
+
+        private void CheckSoloWildLeash(float leashDistance)
+        {
+            if (_soloWildAnimalIds == null || _soloWildAnimalIds.Count == 0)
+            {
+                StopSoloWildLeashTimer();
+                return;
+            }
+
+            if (!TryGetSoloWildStreamerPosition(out Vector3 streamerPos))
+            {
+                CleanupSoloWildAnimalsAndStop();
+                return;
+            }
+
+            float leashSqr = leashDistance * leashDistance;
+            var ids = new List<NetworkableId>(_soloWildAnimalIds);
+            foreach (var nid in ids)
+            {
+                try
+                {
+                    var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    if (ent == null || ent.IsDestroyed)
+                    {
+                        _soloWildAnimalIds.Remove(nid);
+                        continue;
+                    }
+
+                    if (ent is HumanNPC)
+                        continue;
+
+                    TryChaosWaveSteerAnimalNavTowardStream(ent, streamerPos);
+
+                    Vector3 d = ent.transform.position - streamerPos;
+                    if (d.sqrMagnitude <= leashSqr) continue;
+
+                    Vector3 toStreamer = streamerPos - ent.transform.position;
+                    toStreamer.y = 0f;
+                    if (toStreamer.sqrMagnitude > 0.01f)
+                        toStreamer.Normalize();
+
+                    try { ent.transform.rotation = Quaternion.LookRotation(toStreamer); } catch { }
+
+                    try
+                    {
+                        var agent = TryGetNavMeshAgentOnEntity(ent);
+                        if (agent != null)
+                        {
+                            agent.isStopped = false;
+                            agent.SetDestination(streamerPos);
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var rb = ent.GetComponent<Rigidbody>();
+                        if (rb != null && toStreamer.sqrMagnitude > 0.01f)
+                        {
+                            float speed = rb.velocity.magnitude;
+                            if (speed < 2f) speed = 2f;
+                            rb.velocity = toStreamer * speed;
+                            rb.angularVelocity = Vector3.zero;
+                        }
+                    }
+                    catch { }
+                }
+                catch { }
+            }
+
+            if (_soloWildAnimalIds.Count == 0)
+                StopSoloWildLeashTimer();
+        }
+
+        private void RegisterSoloWildEntity(BaseEntity entity, BasePlayer streamer)
+        {
+            if (entity == null || streamer == null || !streamer.IsValid()) return;
+            if (_soloWildAnimalIds == null) _soloWildAnimalIds = new HashSet<NetworkableId>();
+            _soloWildAnimalIds.Add(entity.net.ID);
+            _soloWildStreamerUserId = streamer.userID;
+            EnsureSoloWildLeashTimer();
+            ulong sid = streamer.userID;
+            NetworkableId nid = entity.net.ID;
+            timer.Once(0.5f, () =>
+            {
+                var e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                var s = FindConnectedPlayerByUserId(sid);
+                if (e != null && s != null && s.IsValid())
+                    TryProvokeChaosWaveEnemy(e, s);
+            });
+        }
+
+        /// <summary>Wolf/bear/pig gift spawns: track + leash + provoke like chaos wave animals.</summary>
+        private bool TrySpawnSoloWildAnimal(BasePlayer streamer, string prefabPath, string logContext)
+        {
+            if (streamer == null || !streamer.IsValid() || string.IsNullOrEmpty(prefabPath)) return false;
+            Vector3 pos = GetPositionNear(streamer);
+            if (pos == Vector3.zero) pos = streamer.transform.position;
+            pos = SnapLandNpcSpawnToGround(pos);
+            BaseEntity entity = GameManager.server.CreateEntity(prefabPath, pos, Quaternion.identity, true);
+            if (entity == null) return false;
+            entity.Spawn();
+            RegisterSoloWildEntity(entity, streamer);
+            Puts($"{LogPrefix} Solo wild ({logContext}): spawned & leashed for {streamer.displayName}");
+            return true;
         }
 
         private bool TryGetChaosWaveStreamerPosition(out Vector3 pos)
@@ -1478,17 +1695,8 @@ namespace Oxide.Plugins
                     if (ent is HumanNPC)
                         continue;
 
-                    // Animals / zombie: always pull NavMesh toward streamer (not only when outside leash) so they close and aggro.
-                    try
-                    {
-                        var agent = TryGetNavMeshAgentOnEntity(ent);
-                        if (agent != null && agent.enabled && agent.isOnNavMesh)
-                        {
-                            agent.isStopped = false;
-                            agent.SetDestination(streamerPos);
-                        }
-                    }
-                    catch { }
+                    // Animals / zombie: same leash radius as config; NavMesh toward streamer every tick (bear/wolf/pig/tiger/panther/random).
+                    TryChaosWaveSteerAnimalNavTowardStream(ent, streamerPos);
 
                     Vector3 d = ent.transform.position - streamerPos;
                     if (d.sqrMagnitude > leashSqr)
@@ -1540,6 +1748,9 @@ namespace Oxide.Plugins
         private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null) return;
+
+            if (_soloWildAnimalIds != null && _soloWildAnimalIds.Remove(entity.net.ID) && _soloWildAnimalIds.Count == 0)
+                StopSoloWildLeashTimer();
 
             if (_heliChaosActive && IsCounterHelicopterForHeliChaos(entity))
             {
@@ -2130,6 +2341,51 @@ namespace Oxide.Plugins
                 }
             }
             UnityEngine.Debug.LogWarning($"[RustChaos] Shark spawn failed. Set SharkPrefabPath in config (oxide/config/RustChaos.json) to your shark prefab path. To find it: install PrefabSniffer and run 'prefab find shark', or look at a shark in-game and run 'debug.lookingat' in F1.");
+            return false;
+        }
+
+        /// <summary>Shark gift / chaos sea: spawn + solo leash/provoke (same as land animals where NavMesh allows).</summary>
+        private bool TrySpawnSharkGiftWithLeash(BasePlayer streamer, Vector3 position, string configSharkPath = null)
+        {
+            if (streamer == null || !streamer.IsValid()) return false;
+            if (!string.IsNullOrWhiteSpace(configSharkPath))
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(configSharkPath.Trim(), position, Quaternion.identity, true);
+                if (entity != null)
+                {
+                    entity.Spawn();
+                    RegisterSoloWildEntity(entity, streamer);
+                    return true;
+                }
+            }
+            string[] prefabs = {
+                "assets/rust.ai/agents/fish/simpleshark.prefab",
+                "assets/rust.ai/agents/fish/shark/shark.prefab",
+                "assets/content/water/ocean/simpleshark.prefab",
+                "assets/content/water/ocean/greatwhite.prefab",
+                "assets/content/water/ocean/greatwhiteshark.prefab",
+                "assets/prefabs/npc/ocean/simpleshark.prefab",
+                "assets/prefabs/npc/ocean/simpleshark_full.prefab",
+                "assets/prefabs/npc/ocean/greatwhite.prefab",
+                "assets/prefabs/npc/ocean/greatwhiteshark.prefab",
+                "assets/bundled/prefabs/autospawn/animals/simpleshark.prefab",
+                "assets/bundled/prefabs/autospawn/animals/shark.prefab",
+                "assets/bundled/prefabs/autospawn/water/simpleshark.prefab",
+                "assets/rust.ai/agents/greatwhite/greatwhite.prefab",
+                "assets/rust.ai/agents/simpleshark/simpleshark.prefab",
+                "assets/content/entities/ocean/simpleshark.prefab",
+                "assets/content/props/underwater/simpleshark.prefab"
+            };
+            foreach (string path in prefabs)
+            {
+                BaseEntity entity = GameManager.server.CreateEntity(path, position, Quaternion.identity, true);
+                if (entity != null)
+                {
+                    entity.Spawn();
+                    RegisterSoloWildEntity(entity, streamer);
+                    return true;
+                }
+            }
             return false;
         }
 

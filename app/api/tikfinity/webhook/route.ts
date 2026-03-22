@@ -176,13 +176,16 @@ async function runWebhook(request: NextRequest, body: unknown) {
       : fromPayload > 0
         ? fromPayload
         : fromDefault;
-  // Ensure every gift generates at least 1 scrap for the streamer (coins → inventory).
-  const giftValue = Math.min(10000, Math.max(1, rawValue));
+  // 1 scrap per TikTok coin / like count from payload (or admin connection default). No minimum when value is 0.
+  const rawNum =
+    typeof rawValue === "number" && Number.isFinite(rawValue)
+      ? Math.trunc(rawValue)
+      : Number.parseInt(String(rawValue), 10);
+  const giftValue = Math.min(10000, Math.max(0, Number.isFinite(rawNum) ? rawNum : 0));
   const messageArg =
     connectionFromAdmin?.message?.trim() != null && connectionFromAdmin.message.trim() !== ""
       ? sanitizeArg(connectionFromAdmin.message.trim(), 128)
       : null;
-  // Always include scrap amount so streamer always receives coins (giftValue is min 1).
   const command =
     messageArg != null
       ? `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
