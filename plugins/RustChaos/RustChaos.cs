@@ -19,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.10")]
+    [Info("RustChaos", "RustMaxx", "1.15.11")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -81,9 +81,9 @@ namespace Oxide.Plugins
 
         #endregion
 
-        /// <summary>After Revive Chaos: metabolism runs before our hook, so bleed can still tick same/next frames. We re-clear + full-heal for a short window.</summary>
-        private const float ReviveBleedSuppressSeconds = 4f;
-        private readonly Dictionary<ulong, float> _reviveBleedSuppressUntil = new Dictionary<ulong, float>();
+        /// <summary>After Revive Chaos: re-clear bleed + full-heal each metabolism tick; block Fall hits; resync position — all for this window so delayed bleed/fall from the original knockdown cannot kill the streamer.</summary>
+        private const float ReviveChaosProtectSeconds = 12f;
+        private readonly Dictionary<ulong, float> _reviveChaosProtectUntil = new Dictionary<ulong, float>();
 
         private void Init()
         {
@@ -91,6 +91,7 @@ namespace Oxide.Plugins
             Subscribe(nameof(OnEntityDeath));
             Subscribe(nameof(OnPlayerMetabolize));
             Subscribe(nameof(OnPlayerDisconnected));
+            Subscribe(nameof(OnEntityTakeDamage));
         }
 
         private void Unload()
@@ -99,13 +100,38 @@ namespace Oxide.Plugins
             _soloWildLeashTimer = null;
             _soloWildAnimalIds = null;
             _soloWildStreamerUserId = 0ul;
-            _reviveBleedSuppressUntil.Clear();
+            _reviveChaosProtectUntil.Clear();
         }
 
         private void OnPlayerDisconnected(BasePlayer player, string reason)
         {
             if (player == null) return;
-            _reviveBleedSuppressUntil.Remove(player.userID);
+            _reviveChaosProtectUntil.Remove(player.userID);
+        }
+
+        /// <summary>Cancel Fall damage during post-revive window (residual impact velocity / late ApplyFallDamageFromVelocity after RecoverFromWounded).</summary>
+        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
+        {
+            if (entity == null || info == null) return null;
+            var bp = entity as BasePlayer;
+            if (bp == null || bp.IsNpc || !bp.IsValid()) return null;
+            ulong uid = bp.userID;
+            if (!_reviveChaosProtectUntil.TryGetValue(uid, out float until)) return null;
+            if (Time.realtimeSinceStartup > until)
+            {
+                _reviveChaosProtectUntil.Remove(uid);
+                return null;
+            }
+            try
+            {
+                if (info.damageTypes != null && info.damageTypes.Get(DamageType.Fall) > 0f)
+                    return true;
+            }
+            catch
+            {
+                // ignore
+            }
+            return null;
         }
 
         /// <summary>Runs after PlayerMetabolism.ServerUpdate — bleed damage may already apply this tick; clear + heal so the streamer cannot die to residual bleed right after revive.</summary>
@@ -115,10 +141,10 @@ namespace Oxide.Plugins
             var bp = ownerEntity as BasePlayer;
             if (bp == null || !bp.IsValid()) return;
             ulong uid = bp.userID;
-            if (!_reviveBleedSuppressUntil.TryGetValue(uid, out float until)) return;
+            if (!_reviveChaosProtectUntil.TryGetValue(uid, out float until)) return;
             if (Time.realtimeSinceStartup > until)
             {
-                _reviveBleedSuppressUntil.Remove(uid);
+                _reviveChaosProtectUntil.Remove(uid);
                 return;
             }
             TryClearBleedMetabolismAttributes(instance);
@@ -129,6 +155,21 @@ namespace Oxide.Plugins
             catch
             {
                 // ignore
+            }
+        }
+
+        /// <summary>Uses Oxide Teleport path (SetServerFall + MovePosition + ForcePositionTo) to clear stale fall/movement state after RecoverFromWounded.</summary>
+        private void TryForceResyncRevivedPlayer(ulong userId, Vector3 position)
+        {
+            BasePlayer p = rust.FindPlayerById(userId);
+            if (p == null || !p.IsValid()) return;
+            try
+            {
+                rust.ForcePlayerPosition(p, position.x, position.y, position.z);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} Revive Chaos position resync: {ex.Message}");
             }
         }
 
@@ -504,9 +545,13 @@ namespace Oxide.Plugins
                                     target.RecoverFromWounded();
                                 TryClearBleedMetabolismAttributes(target.metabolism);
                                 target.Heal(99999f);
-                                _reviveBleedSuppressUntil[target.userID] = Time.realtimeSinceStartup + ReviveBleedSuppressSeconds;
+                                ulong reviveUid = target.userID;
+                                Vector3 revivePos = target.transform.position;
+                                _reviveChaosProtectUntil[reviveUid] = Time.realtimeSinceStartup + ReviveChaosProtectSeconds;
+                                NextTick(() => TryForceResyncRevivedPlayer(reviveUid, revivePos));
+                                timer.Once(0.15f, () => TryForceResyncRevivedPlayer(reviveUid, revivePos));
                                 BroadcastChat(ChatMsg($"{viewerName} triggered REVIVE CHAOS! {target.displayName} is back up — full health!"));
-                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName}, cleared bleed, full heal, {ReviveBleedSuppressSeconds}s bleed guard.");
+                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName}, cleared bleed, full heal, {ReviveChaosProtectSeconds}s protect (bleed + fall).");
                             }
                             else
                             {

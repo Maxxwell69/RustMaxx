@@ -266,7 +266,7 @@ export const ACTION_META: Record<
   revivechaos: {
     label: "Revive Chaos",
     description:
-      "If the streamer is wounded (downed/crawling) or bleeding, picks them up, clears all bleed-related metabolism, heals to full health, and keeps bleed cleared for a few seconds so they can't die to residual bleeding ticks. Does nothing if already healthy (not wounded/bleeding) or fully dead (respawn screen).",
+      "If the streamer is wounded (downed/crawling) or bleeding, picks them up, clears bleed metabolism, heals to full, resyncs movement (anti delayed fall damage), and for ~12s blocks residual fall hits and keeps bleed/heal topped up. Does nothing if already healthy (not wounded/bleeding) or fully dead (respawn screen).",
     exampleGifts: ["Revive Chaos", "ReviveChaos"],
   },
   chaosheli: {
