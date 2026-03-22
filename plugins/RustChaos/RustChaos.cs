@@ -18,7 +18,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.7")]
+    [Info("RustChaos", "RustMaxx", "1.15.8")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -183,8 +183,8 @@ namespace Oxide.Plugins
         };
 
         /// <summary>
-        /// Land chaos random wave: animals only (no scientists). Human NPCs rarely hunt players in open-world
-        /// spawn; bears/wolves/pigs/etc. use normal animal aggro and respond to provoke + NavMesh toward streamer.
+        /// Land chaos random wave: mix of animals + scientists (failed prefab paths skipped per build).
+        /// Scientists get 0.4s Brain.Navigator steer + provoke; animals get NavMesh + provoke like other waves.
         /// </summary>
         private static readonly string[] ChaosWaveRandomPrefabPool =
         {
@@ -197,6 +197,11 @@ namespace Oxide.Plugins
             PantherPrefabCandidates[0],
             PantherPrefabCandidates[1],
             PantherPrefabCandidates[2],
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
+            "assets/prefabs/npc/scientist/scientist.prefab",
+            "assets/content/npc/scientist/scientist.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
             WolfPrefab,
             BearPrefab,
             BoarPrefab,

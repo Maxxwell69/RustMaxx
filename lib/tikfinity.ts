@@ -249,7 +249,7 @@ export const ACTION_META: Record<
   chaoswaverandom: {
     label: "Chaos Random Wave",
     description:
-      "Like Chaos Wave (1→10 land waves) with random animal enemies (wolves, bears, pigs, tigers, panthers, zombies, etc.); round 1 includes 1500 wood + building hammer plus 3000 stone + metal door + reinforced window. Between waves, chat/UI preview the exact next-wave lineup.",
+      "Like Chaos Wave (1→10 land waves) with random enemies: animals (wolves, bears, pigs, tigers, panthers, zombies) plus scientists (LR300, roam, heavy, legacy paths per server build). Round 1 includes 1500 wood + building hammer plus 3000 stone + metal door + reinforced window. Between waves, chat/UI preview the next-wave lineup.",
     exampleGifts: ["Random Chaos Wave", "RandomChaosWave"],
   },
   healinghands: {
