@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using Rust;
 using Oxide.Game.Rust.Cui;
@@ -18,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.9")]
+    [Info("RustChaos", "RustMaxx", "1.15.10")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -80,10 +81,16 @@ namespace Oxide.Plugins
 
         #endregion
 
+        /// <summary>After Revive Chaos: metabolism runs before our hook, so bleed can still tick same/next frames. We re-clear + full-heal for a short window.</summary>
+        private const float ReviveBleedSuppressSeconds = 4f;
+        private readonly Dictionary<ulong, float> _reviveBleedSuppressUntil = new Dictionary<ulong, float>();
+
         private void Init()
         {
             // Always on: chaos-wave kills + heli-chaos bonus crates (see OnEntityDeath).
             Subscribe(nameof(OnEntityDeath));
+            Subscribe(nameof(OnPlayerMetabolize));
+            Subscribe(nameof(OnPlayerDisconnected));
         }
 
         private void Unload()
@@ -92,6 +99,37 @@ namespace Oxide.Plugins
             _soloWildLeashTimer = null;
             _soloWildAnimalIds = null;
             _soloWildStreamerUserId = 0ul;
+            _reviveBleedSuppressUntil.Clear();
+        }
+
+        private void OnPlayerDisconnected(BasePlayer player, string reason)
+        {
+            if (player == null) return;
+            _reviveBleedSuppressUntil.Remove(player.userID);
+        }
+
+        /// <summary>Runs after PlayerMetabolism.ServerUpdate — bleed damage may already apply this tick; clear + heal so the streamer cannot die to residual bleed right after revive.</summary>
+        private void OnPlayerMetabolize(PlayerMetabolism instance, BaseCombatEntity ownerEntity, float delta)
+        {
+            if (instance == null || ownerEntity == null) return;
+            var bp = ownerEntity as BasePlayer;
+            if (bp == null || !bp.IsValid()) return;
+            ulong uid = bp.userID;
+            if (!_reviveBleedSuppressUntil.TryGetValue(uid, out float until)) return;
+            if (Time.realtimeSinceStartup > until)
+            {
+                _reviveBleedSuppressUntil.Remove(uid);
+                return;
+            }
+            TryClearBleedMetabolismAttributes(instance);
+            try
+            {
+                bp.Heal(99999f);
+            }
+            catch
+            {
+                // ignore
+            }
         }
 
         #region Constants
@@ -464,10 +502,11 @@ namespace Oxide.Plugins
                             {
                                 if (down)
                                     target.RecoverFromWounded();
-                                TryClearBleeding(target);
+                                TryClearBleedMetabolismAttributes(target.metabolism);
                                 target.Heal(99999f);
+                                _reviveBleedSuppressUntil[target.userID] = Time.realtimeSinceStartup + ReviveBleedSuppressSeconds;
                                 BroadcastChat(ChatMsg($"{viewerName} triggered REVIVE CHAOS! {target.displayName} is back up — full health!"));
-                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName}, cleared bleed, full heal.");
+                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName}, cleared bleed, full heal, {ReviveBleedSuppressSeconds}s bleed guard.");
                             }
                             else
                             {
@@ -820,18 +859,36 @@ namespace Oxide.Plugins
             item.MoveToContainer(player.inventory.containerMain);
         }
 
-        /// <summary>RecoverFromWounded() can leave metabolism bleeding active; clear it so the streamer isn't ticking down HP.</summary>
-        private static void TryClearBleeding(BasePlayer player)
+        /// <summary>RecoverFromWounded() can leave bleeding (and related attrs) active; clear all *bleed* metabolism channels.</summary>
+        private static void TryClearBleedMetabolismAttributes(PlayerMetabolism metabolism)
         {
-            if (player == null || !player.IsValid()) return;
+            if (metabolism == null) return;
             try
             {
-                if (player.metabolism != null && player.metabolism.bleeding != null)
-                    player.metabolism.bleeding.value = 0f;
+                if (metabolism.bleeding != null)
+                    metabolism.bleeding.value = 0f;
             }
             catch
             {
-                // metabolism API differs on some builds
+                // bleeding API differs on some builds
+            }
+
+            // e.g. significant_bleeding or future attrs — same MetabolismAttribute pattern (.value)
+            try
+            {
+                foreach (PropertyInfo prop in metabolism.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (prop.Name.IndexOf("bleed", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    object obj = prop.GetValue(metabolism, null);
+                    if (obj == null) continue;
+                    PropertyInfo valueProp = obj.GetType().GetProperty("value", BindingFlags.Public | BindingFlags.Instance);
+                    if (valueProp != null && valueProp.PropertyType == typeof(float))
+                        valueProp.SetValue(obj, 0f, null);
+                }
+            }
+            catch
+            {
+                // reflection-safe: ignore on stripped builds
             }
         }
 
