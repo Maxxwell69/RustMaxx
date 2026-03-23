@@ -19,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.14")]
+    [Info("RustChaos", "RustMaxx", "1.15.15")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -1787,8 +1787,10 @@ namespace Oxide.Plugins
 
                     if (ent is HumanNPC || ent is NPCPlayer)
                     {
-                        TryChaosWaveSteerHumanNpcToward(ent, streamerPos);
-                        TryProvokeChaosWaveEnemy(ent, FindConnectedPlayerByUserId(_soloWildStreamerUserId));
+                        // Let scientist AI choose cover/evade naturally; only leash-correct when they stray too far.
+                        Vector3 dh = ent.transform.position - streamerPos;
+                        if (dh.sqrMagnitude > leashSqr)
+                            TryChaosWaveSteerHumanNpcToward(ent, streamerPos);
                         continue;
                     }
 
@@ -1887,7 +1889,6 @@ namespace Oxide.Plugins
             timer.Once(0.25f, () =>
             {
                 if (entity == null || entity.IsDestroyed || streamer == null || !streamer.IsValid()) return;
-                TryChaosWaveSteerHumanNpcToward(entity, streamer.transform.position);
                 TryProvokeChaosWaveEnemy(entity, streamer);
             });
             return true;
