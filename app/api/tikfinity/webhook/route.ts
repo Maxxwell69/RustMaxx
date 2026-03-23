@@ -19,6 +19,12 @@ import {
 import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
 import { insertRnpcSpawnEvent } from "@/lib/rnpc-spawn-events";
+import {
+  extractTikTokUniqueIdFromBody,
+  isCrewSubscriberFromBody,
+  isStreamJoinEvent,
+} from "@/lib/tikfinity-crew";
+import { registerCrewRnpcIfNew } from "@/lib/crew-rnpc-registrations";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 
@@ -36,6 +42,96 @@ function withCors(response: NextResponse): NextResponse {
     response.headers.set(key, value);
   });
   return response;
+}
+
+/**
+ * Crew (subscriber) + stream join → register viewer once per TikTok id (no duplicate rows).
+ * Uses dedicated webhook URL e.g. ?event=join or body event/type "join".
+ */
+async function handleCrewRnpcJoin(
+  request: NextRequest,
+  body: unknown
+): Promise<NextResponse | null> {
+  if (!isStreamJoinEvent(request, body)) return null;
+
+  if (!TIKFINITY_SERVER_ID) {
+    console.error("[tikfinity webhook] crew join: TIKFINITY_SERVER_ID not set");
+    return withCors(
+      NextResponse.json(
+        {
+          ok: false,
+          error: "TikFinity integration not configured",
+          debug: "Set TIKFINITY_SERVER_ID in .env.",
+          step: "TIKFINITY_SERVER_ID",
+        },
+        { status: 503 }
+      )
+    );
+  }
+
+  if (!isCrewSubscriberFromBody(body)) {
+    audit("tikfinity", "crew_rnpc.skipped", { reason: "not_crew_subscriber" }).catch(() => {});
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "not_crew_subscriber",
+        debug:
+          "Join received but payload had no crew/subscriber flags. Configure TikFinity to include team/subscriber fields, or use a join trigger that sends them.",
+      })
+    );
+  }
+
+  const uniqueId = extractTikTokUniqueIdFromBody(body);
+  const displayName = extractViewerNameFromWebhookBody(body) ?? "Viewer";
+  if (!uniqueId) {
+    audit("tikfinity", "crew_rnpc.skipped", { reason: "missing_tiktok_unique_id" }).catch(() => {});
+    return withCors(
+      NextResponse.json({
+        ok: false,
+        skipped: true,
+        reason: "missing_tiktok_unique_id",
+        debug:
+          "Need a stable TikTok viewer id (e.g. uniqueId) in the webhook body to avoid duplicates. Check TikFinity payload or Raw JSON.",
+      })
+    );
+  }
+
+  const outcome = await registerCrewRnpcIfNew({
+    serverId: TIKFINITY_SERVER_ID,
+    tiktokUniqueId: uniqueId,
+    displayName,
+  });
+
+  if (outcome === "duplicate") {
+    audit("tikfinity", "crew_rnpc.duplicate", {
+      tiktokUniqueId: uniqueId,
+      displayName,
+    }).catch(() => {});
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        alreadyRegistered: true,
+        tiktokUniqueId: uniqueId,
+        displayName,
+        debug: "Viewer was already registered; no second registration.",
+      })
+    );
+  }
+
+  audit("tikfinity", "crew_rnpc.registered", {
+    tiktokUniqueId: uniqueId,
+    displayName,
+    serverId: TIKFINITY_SERVER_ID,
+  }).catch(() => {});
+  return withCors(
+    NextResponse.json({
+      ok: true,
+      registered: true,
+      tiktokUniqueId: uniqueId,
+      displayName,
+    })
+  );
 }
 
 /** Preflight: browser sends this before POST when calling from another origin. */
@@ -71,6 +167,9 @@ export async function POST(request: NextRequest) {
 async function runWebhook(request: NextRequest, body: unknown) {
 
   const viewerFromBody = () => extractViewerNameFromWebhookBody(body) ?? "Viewer";
+
+  const crewJoinResponse = await handleCrewRnpcJoin(request, body);
+  if (crewJoinResponse) return crewJoinResponse;
 
   // Action from URL query (e.g. ?action=likes) – one webhook URL per TikFinity action
   const queryAction = request.nextUrl.searchParams.get("action")?.trim().toLowerCase();

@@ -31,6 +31,13 @@ type RnpcSpawnEventRow = {
   created_at: string;
 };
 
+type CrewRnpcRegistrationRow = {
+  id: string;
+  tiktok_unique_id: string;
+  display_name: string;
+  created_at: string;
+};
+
 type ActionMapsResponse = {
   webhookUrl: string | null;
   availableActions: ActionMeta[];
@@ -67,9 +74,11 @@ export default function AdminStreamerInteractionsPage() {
   const [newConnectionAction, setNewConnectionAction] = useState("likes");
   const [newConnectionNpcTemplate, setNewConnectionNpcTemplate] = useState("");
   const [rnpcSpawnEvents, setRnpcSpawnEvents] = useState<RnpcSpawnEventRow[]>([]);
+  const [crewRegistrations, setCrewRegistrations] = useState<CrewRnpcRegistrationRow[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingCrewId, setDeletingCrewId] = useState<string | null>(null);
 
   const ALLOWED_ROLES = ["admin", "super_admin"];
 
@@ -87,6 +96,12 @@ export default function AdminStreamerInteractionsPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { events?: RnpcSpawnEventRow[] } | null) => {
         if (d?.events) setRnpcSpawnEvents(d.events);
+      })
+      .catch(() => {});
+    fetch("/api/tikfinity/crew-rnpc?limit=500", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { registrations?: CrewRnpcRegistrationRow[] } | null) => {
+        if (d?.registrations) setCrewRegistrations(d.registrations);
       })
       .catch(() => {});
   }
@@ -124,6 +139,12 @@ export default function AdminStreamerInteractionsPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { events?: RnpcSpawnEventRow[] } | null) => {
         if (d?.events) setRnpcSpawnEvents(d.events);
+      })
+      .catch(() => {});
+    fetch("/api/tikfinity/crew-rnpc?limit=500", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { registrations?: CrewRnpcRegistrationRow[] } | null) => {
+        if (d?.registrations) setCrewRegistrations(d.registrations);
       })
       .catch(() => {});
   }, []);
@@ -245,6 +266,26 @@ export default function AdminStreamerInteractionsPage() {
             <p className="mt-1 text-xs text-zinc-500">
               Use a dedicated URL so the server runs the right trigger. Add <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=bear</code>, etc. For Roaming NPC bots, use <code className="rounded bg-zinc-800 px-1">?action=npcmaxx&amp;template=your_roaming_template_key</code> or a TikFinity connection (event name → Roaming NPC) with the template key saved below.
             </p>
+            <h3 className="mt-4 text-sm font-medium text-zinc-300">Crew (subscriber) — join the LIVE</h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              Create a separate TikFinity action for <strong className="text-zinc-400">viewer joined</strong> and point it at this URL with <code className="rounded bg-zinc-800 px-1">?event=join</code>. Only payloads that look like <strong className="text-zinc-400">crew / team / subscriber</strong> and include a stable TikTok viewer id are stored once per user; repeat joins return <code className="rounded bg-zinc-800 px-1">alreadyRegistered</code> without duplicating.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <code className="flex-1 break-all rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
+                {`${data.webhookUrl}?event=join`}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${data.webhookUrl}?event=join`);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+              >
+                Copy join URL
+              </button>
+            </div>
             <ul className="mt-2 flex flex-wrap gap-2">
               {webhookActions.map((a) => (
                 <li key={a.action}>
@@ -465,6 +506,62 @@ export default function AdminStreamerInteractionsPage() {
                         className="text-red-400 hover:text-red-300 disabled:opacity-50"
                       >
                         {deletingId === c.id ? "…" : "Remove"}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Crew subscribers registered on join (for RNPC eligibility) */}
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+        <h2 className="text-lg font-medium text-zinc-200">Crew subscribers (RNPC registry)</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Viewers who hit the <code className="rounded bg-zinc-800 px-1">?event=join</code> webhook as crew/subscriber, with a stable TikTok id in the payload. First visit adds a row; repeat visits do not duplicate. Remove someone here to clear them from the registry.
+        </p>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                <th className="px-3 py-2 font-medium text-zinc-400">Registered</th>
+                <th className="px-3 py-2 font-medium text-zinc-400">Display name</th>
+                <th className="px-3 py-2 font-medium text-zinc-400">TikTok unique id</th>
+                <th className="px-3 py-2 w-20 font-medium text-zinc-400"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {crewRegistrations.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">
+                    No crew registrations yet. Wire TikFinity “join LIVE” to the join webhook URL and ensure payloads include subscriber/crew flags + unique id.
+                  </td>
+                </tr>
+              ) : (
+                crewRegistrations.map((row) => (
+                  <tr key={row.id} className="border-b border-zinc-800/50">
+                    <td className="whitespace-nowrap px-3 py-2 text-zinc-500">
+                      {new Date(row.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-zinc-300">{row.display_name}</td>
+                    <td className="max-w-[200px] truncate font-mono px-3 py-2 text-xs text-zinc-400" title={row.tiktok_unique_id}>
+                      {row.tiktok_unique_id}
+                    </td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeletingCrewId(row.id);
+                          fetch(`/api/tikfinity/crew-rnpc?id=${encodeURIComponent(row.id)}`, { method: "DELETE" })
+                            .then(() => refetchData())
+                            .finally(() => setDeletingCrewId(null));
+                        }}
+                        disabled={deletingCrewId === row.id}
+                        className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                      >
+                        {deletingCrewId === row.id ? "…" : "Remove"}
                       </button>
                     </td>
                   </tr>
