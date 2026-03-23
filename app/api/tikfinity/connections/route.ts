@@ -27,14 +27,20 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST: Create a TikFinity connection (event name → server action, optional message + scrap). Admin only.
- * Body: { name: string, serverAction: TikTriggerAction, message?: string, scrapAmount?: number }
+ * Body: { name: string, serverAction: TikTriggerAction, message?: string, scrapAmount?: number, npcTemplateKey?: string }
  */
 export async function POST(request: NextRequest) {
   try {
     const authErr = await requireCanManageServersFromDb(request);
     if (authErr) return authErr;
 
-    let body: { name?: string; serverAction?: string; message?: string; scrapAmount?: number };
+    let body: {
+      name?: string;
+      serverAction?: string;
+      message?: string;
+      scrapAmount?: number;
+      npcTemplateKey?: string;
+    };
     try {
       body = await request.json();
     } catch {
@@ -48,6 +54,8 @@ export async function POST(request: NextRequest) {
     const serverAction = body.serverAction as TikTriggerAction | undefined;
     const message = body.message != null ? String(body.message) : undefined;
     const scrapAmount = body.scrapAmount != null ? Number(body.scrapAmount) : undefined;
+    const npcTemplateKey =
+      body.npcTemplateKey != null ? String(body.npcTemplateKey) : undefined;
     if (!name) {
       return NextResponse.json(
         { error: "Name is required" },
@@ -61,7 +69,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await createTikfinityConnection(name, serverAction, { message, scrapAmount });
+    const result = await createTikfinityConnection(name, serverAction, {
+      message,
+      scrapAmount,
+      npcTemplateKey,
+    });
     if ("error" in result) {
       return NextResponse.json(
         { error: result.error },

@@ -16,6 +16,18 @@ type ConnectionRow = {
   server_action: string;
   message?: string | null;
   scrap_amount?: number;
+  npc_template_key?: string | null;
+  created_at: string;
+};
+
+type RnpcSpawnEventRow = {
+  id: string;
+  viewer_name: string;
+  template_key: string;
+  command: string;
+  status: string;
+  error_message?: string | null;
+  tikfinity_event_name?: string | null;
   created_at: string;
 };
 
@@ -53,6 +65,8 @@ export default function AdminStreamerInteractionsPage() {
   const [newConnectionMessage, setNewConnectionMessage] = useState("");
   const [newConnectionScrap, setNewConnectionScrap] = useState<number>(0);
   const [newConnectionAction, setNewConnectionAction] = useState("likes");
+  const [newConnectionNpcTemplate, setNewConnectionNpcTemplate] = useState("");
+  const [rnpcSpawnEvents, setRnpcSpawnEvents] = useState<RnpcSpawnEventRow[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -67,6 +81,12 @@ export default function AdminStreamerInteractionsPage() {
           setData(d);
           setConnections(d.connections ?? []);
         }
+      })
+      .catch(() => {});
+    fetch("/api/tikfinity/rnpc-spawns?limit=100", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { events?: RnpcSpawnEventRow[] } | null) => {
+        if (d?.events) setRnpcSpawnEvents(d.events);
       })
       .catch(() => {});
   }
@@ -100,6 +120,12 @@ export default function AdminStreamerInteractionsPage() {
       })
       .catch(() => setAccessDenied(true))
       .finally(() => setLoading(false));
+    fetch("/api/tikfinity/rnpc-spawns?limit=100", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { events?: RnpcSpawnEventRow[] } | null) => {
+        if (d?.events) setRnpcSpawnEvents(d.events);
+      })
+      .catch(() => {});
   }, []);
 
   function copyWebhook() {
@@ -217,7 +243,7 @@ export default function AdminStreamerInteractionsPage() {
           <>
             <h3 className="mt-4 text-sm font-medium text-zinc-300">Per-action URLs (by event name)</h3>
             <p className="mt-1 text-xs text-zinc-500">
-              Use a dedicated URL so the server runs the right trigger. Add <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=bear</code>, etc.
+              Use a dedicated URL so the server runs the right trigger. Add <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=bear</code>, etc. For Roaming NPC bots, use <code className="rounded bg-zinc-800 px-1">?action=npcmaxx&amp;template=your_roaming_template_key</code> or a TikFinity connection (event name → Roaming NPC) with the template key saved below.
             </p>
             <ul className="mt-2 flex flex-wrap gap-2">
               {webhookActions.map((a) => (
@@ -274,7 +300,7 @@ export default function AdminStreamerInteractionsPage() {
 
         <h3 className="mt-4 text-sm font-medium text-zinc-300">Add connection</h3>
         <p className="mt-1 text-xs text-zinc-500">
-          Set the name (as in TikFinity), optional message and scrap, then choose the server action.
+          Set the name (as in TikFinity), optional message and scrap, then choose the server action. For <strong className="text-zinc-400">Roaming NPC (viewer bot)</strong>, set the Roaming template key (same key as in <code className="rounded bg-zinc-800 px-1">RoamingNPCs</code> config on the game server).
         </p>
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-end gap-3">
@@ -313,7 +339,10 @@ export default function AdminStreamerInteractionsPage() {
               <label className="block text-xs text-zinc-500">Server action</label>
               <select
                 value={newConnectionAction}
-                onChange={(e) => setNewConnectionAction(e.target.value)}
+                onChange={(e) => {
+                  setNewConnectionAction(e.target.value);
+                  setConnectionError(null);
+                }}
                 className="mt-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-200"
               >
                 {webhookActions.map((a) => (
@@ -321,12 +350,28 @@ export default function AdminStreamerInteractionsPage() {
                 ))}
               </select>
             </div>
+            {newConnectionAction === "npcmaxx" && (
+              <div>
+                <label className="block text-xs text-zinc-500">Roaming template key</label>
+                <input
+                  type="text"
+                  value={newConnectionNpcTemplate}
+                  onChange={(e) => { setNewConnectionNpcTemplate(e.target.value); setConnectionError(null); }}
+                  placeholder="e.g. bob_resources_farmer"
+                  className="mt-1 w-56 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-200 placeholder:text-zinc-500"
+                />
+              </div>
+            )}
           </div>
           <button
             type="button"
             onClick={() => {
               const name = newConnectionName.trim();
               if (!name) { setConnectionError("Enter a name"); return; }
+              if (newConnectionAction === "npcmaxx" && !newConnectionNpcTemplate.trim()) {
+                setConnectionError("Enter a Roaming template key for Roaming NPC");
+                return;
+              }
               setConnectionError(null);
               setConnectionLoading(true);
               const scrap = Math.min(10000, Math.max(0, Number(newConnectionScrap) || 0));
@@ -338,6 +383,10 @@ export default function AdminStreamerInteractionsPage() {
                   serverAction: newConnectionAction,
                   message: newConnectionMessage.trim() || undefined,
                   scrapAmount: scrap || undefined,
+                  npcTemplateKey:
+                    newConnectionAction === "npcmaxx"
+                      ? newConnectionNpcTemplate.trim()
+                      : undefined,
                 }),
               })
                 .then((r) => r.json().then((j) => ({ status: r.status, ...j })))
@@ -346,6 +395,7 @@ export default function AdminStreamerInteractionsPage() {
                     setNewConnectionName("");
                     setNewConnectionMessage("");
                     setNewConnectionScrap(0);
+                    setNewConnectionNpcTemplate("");
                     refetchData();
                   } else {
                     const msg = res.error ?? "Failed to add";
@@ -376,6 +426,7 @@ export default function AdminStreamerInteractionsPage() {
                 <th className="px-4 py-3 font-medium text-zinc-400">Event name</th>
                 <th className="px-4 py-3 font-medium text-zinc-400">Message</th>
                 <th className="px-4 py-3 font-medium text-zinc-400">Scrap</th>
+                <th className="px-4 py-3 font-medium text-zinc-400">Roaming template</th>
                 <th className="px-4 py-3 font-medium text-zinc-400">Server action</th>
                 <th className="px-4 py-3 font-medium text-zinc-400 w-20"></th>
               </tr>
@@ -383,7 +434,7 @@ export default function AdminStreamerInteractionsPage() {
             <tbody>
               {connections.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-zinc-500">
+                  <td colSpan={6} className="px-4 py-6 text-center text-zinc-500">
                     No connections yet. Add one above (set the name, optional message and scrap, choose an action).
                   </td>
                 </tr>
@@ -395,6 +446,11 @@ export default function AdminStreamerInteractionsPage() {
                       {c.message ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-zinc-400">{c.scrap_amount ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-400">
+                      {c.server_action === "npcmaxx" && c.npc_template_key
+                        ? c.npc_template_key
+                        : "—"}
+                    </td>
                     <td className="px-4 py-3 font-mono text-rust-cyan">{c.server_action}</td>
                     <td className="px-4 py-3">
                       <button
@@ -410,6 +466,60 @@ export default function AdminStreamerInteractionsPage() {
                       >
                         {deletingId === c.id ? "…" : "Remove"}
                       </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Roaming NPC spawn log */}
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+        <h2 className="text-lg font-medium text-zinc-200">Roaming NPC spawns (webhook log)</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Recent <code className="rounded bg-zinc-800 px-1">npcmaxx.spawn</code> attempts for this TikFinity server (<code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code>). Viewer name is taken from the TikFinity payload when available.
+        </p>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-800 bg-zinc-800/50">
+                <th className="px-3 py-2 font-medium text-zinc-400">Time</th>
+                <th className="px-3 py-2 font-medium text-zinc-400">Viewer</th>
+                <th className="px-3 py-2 font-medium text-zinc-400">Template</th>
+                <th className="px-3 py-2 font-medium text-zinc-400">TikFinity event</th>
+                <th className="px-3 py-2 font-medium text-zinc-400">Status</th>
+                <th className="px-3 py-2 font-medium text-zinc-400">Command</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rnpcSpawnEvents.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
+                    No Roaming NPC spawns logged yet. Trigger a webhook with a Roaming NPC connection or a URL with npcmaxx.
+                  </td>
+                </tr>
+              ) : (
+                rnpcSpawnEvents.map((ev) => (
+                  <tr key={ev.id} className="border-b border-zinc-800/50">
+                    <td className="whitespace-nowrap px-3 py-2 text-zinc-500">
+                      {new Date(ev.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-zinc-300">{ev.viewer_name}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-zinc-400">{ev.template_key}</td>
+                    <td className="max-w-[140px] truncate px-3 py-2 text-zinc-500" title={ev.tikfinity_event_name ?? undefined}>
+                      {ev.tikfinity_event_name ?? "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {ev.status === "success" ? (
+                        <span className="text-green-400">OK</span>
+                      ) : (
+                        <span className="text-red-400" title={ev.error_message ?? undefined}>Failed</span>
+                      )}
+                    </td>
+                    <td className="max-w-[280px] truncate font-mono text-xs text-zinc-500" title={ev.command}>
+                      {ev.command}
                     </td>
                   </tr>
                 ))

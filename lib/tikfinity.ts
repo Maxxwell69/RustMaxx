@@ -30,6 +30,7 @@ export const TIKTRIGGER_ACTIONS = [
   "fullheal",
   "revivechaos",
   "chaosheli",
+  "npcmaxx",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
@@ -274,6 +275,12 @@ export const ACTION_META: Record<
     description:
       "Land only: gives homing missile launcher + 20 seeker missiles, then spawns a Chinook-style hackable locked crate near the streamer, then a patrol/attack helicopter. While the session is active, shooting down a counter-helicopter drops another locked crate (cooldown; minis/scrap heli/Ch47 excluded). Delays configurable in RustChaos.json.",
     exampleGifts: ["Heli Chaos", "HeliChaos"],
+  },
+  npcmaxx: {
+    label: "Roaming NPC (viewer bot)",
+    description:
+      "Spawns a Roaming NPC from your configured template with the viewer’s name (NPCMaxx + RoamingNPCs on the server). Set the Roaming template key when you add this connection — not a default gift map; use TikFinity connections or ?action=npcmaxx with a matching admin connection.",
+    exampleGifts: ["Viewer NPC", "RoamingBot"],
   },
 };
 

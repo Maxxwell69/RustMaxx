@@ -12,9 +12,13 @@ import {
   extractViewerNameFromWebhookBody,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
-import { getConnectionByEventName } from "@/lib/tikfinity-connections";
+import {
+  getConnectionByEventName,
+  parseNpcTemplateKey,
+} from "@/lib/tikfinity-connections";
 import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
+import { insertRnpcSpawnEvent } from "@/lib/rnpc-spawn-events";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 
@@ -71,9 +75,11 @@ async function runWebhook(request: NextRequest, body: unknown) {
   // Action from URL query (e.g. ?action=likes) – one webhook URL per TikFinity action
   const queryAction = request.nextUrl.searchParams.get("action")?.trim().toLowerCase();
   const actionFromQuery = queryAction ? getActionFromPayload({ action: queryAction }) : null;
+  const templateFromQuery = request.nextUrl.searchParams.get("template")?.trim() ?? null;
 
   let payload = normalizeWebhookPayload(body);
   let action: TikTriggerAction | null = null;
+  let tikfinityEventNameForLog: string | null = null;
 
   if (payload) {
     action = getActionForGift(payload.giftName);
@@ -95,6 +101,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
     if (rawName) {
       connectionFromAdmin = await getConnectionByEventName(rawName);
       if (connectionFromAdmin) {
+        tikfinityEventNameForLog = rawName;
         action = connectionFromAdmin.server_action;
         payload = { viewerName: viewerFromBody(), giftName: connectionFromAdmin.server_action };
       }
@@ -186,12 +193,56 @@ async function runWebhook(request: NextRequest, body: unknown) {
     connectionFromAdmin?.message?.trim() != null && connectionFromAdmin.message.trim() !== ""
       ? sanitizeArg(connectionFromAdmin.message.trim(), 128)
       : null;
-  const command =
-    messageArg != null
-      ? `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
-      : `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue}`;
 
-  if (giftValue > 0) {
+  let command: string;
+  let npcTemplateKeyResolved: string | null = null;
+
+  if (action === "npcmaxx") {
+    npcTemplateKeyResolved =
+      parseNpcTemplateKey(connectionFromAdmin?.npc_template_key ?? undefined) ??
+      parseNpcTemplateKey(templateFromQuery);
+    if (!npcTemplateKeyResolved) {
+      const reason =
+        "Roaming NPC requires a template key: set it on the TikFinity connection, or use ?action=npcmaxx&template=your_template_key in the webhook URL.";
+      console.warn("[tikfinity webhook] npcmaxx missing template");
+      audit("tikfinity", "webhook.skipped", {
+        reason,
+        action,
+        serverId: server.id,
+      }).catch(() => {});
+      await insertRnpcSpawnEvent({
+        serverId: server.id,
+        connectionId: connectionFromAdmin?.id ?? null,
+        tikfinityEventName: tikfinityEventNameForLog,
+        viewerName: payload.viewerName,
+        templateKey: "(none)",
+        command: "npcmaxx.spawn",
+        status: "failed",
+        errorMessage: reason,
+      }).catch(() => {});
+      return withCors(
+        NextResponse.json(
+          {
+            ok: false,
+            skipped: true,
+            reason,
+            action: "npcmaxx" as TikTriggerAction,
+            debug:
+              "In admin → Streamer interactions, add a connection with server action “Roaming NPC (viewer bot)” and set the Roaming template key. Or append &template=your_key to the webhook URL.",
+          },
+          { status: 200 }
+        )
+      );
+    }
+    command = `npcmaxx.spawn ${npcTemplateKeyResolved} ${viewerArg}`;
+  } else {
+    command =
+      messageArg != null
+        ? `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
+        : `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue}`;
+  }
+
+  if (giftValue > 0 && action !== "npcmaxx") {
     console.log("[tikfinity webhook] scrap:", giftValue, "fromConnection:", scrapFromConnection, "fromPayload:", fromPayload, "giftName:", payload.giftName);
   }
 
@@ -212,6 +263,18 @@ async function runWebhook(request: NextRequest, body: unknown) {
       action,
       serverId: server.id,
     }).catch(() => {});
+    if (action === "npcmaxx" && npcTemplateKeyResolved) {
+      await insertRnpcSpawnEvent({
+        serverId: server.id,
+        connectionId: connectionFromAdmin?.id ?? null,
+        tikfinityEventName: tikfinityEventNameForLog,
+        viewerName: payload.viewerName,
+        templateKey: npcTemplateKeyResolved,
+        command,
+        status: "failed",
+        errorMessage: connected.error ?? "RCON connect failed",
+      }).catch(() => {});
+    }
     return withCors(
       NextResponse.json(
         {
@@ -238,12 +301,27 @@ async function runWebhook(request: NextRequest, body: unknown) {
       serverId: server.id,
       command,
     }).catch(() => {});
+    if (action === "npcmaxx" && npcTemplateKeyResolved) {
+      await insertRnpcSpawnEvent({
+        serverId: server.id,
+        connectionId: connectionFromAdmin?.id ?? null,
+        tikfinityEventName: tikfinityEventNameForLog,
+        viewerName: payload.viewerName,
+        templateKey: npcTemplateKeyResolved,
+        command,
+        status: "failed",
+        errorMessage: result.error ?? "RCON send failed",
+      }).catch(() => {});
+    }
     return withCors(
       NextResponse.json(
         {
           ok: false,
           error: result.error ?? "Command send failed",
-          debug: "RCON connected but run failed. Check server has RustChaos plugin loaded.",
+          debug:
+            action === "npcmaxx"
+              ? "RCON connected but run failed. Check NPCMaxx + RoamingNPCs plugins and template key."
+              : "RCON connected but run failed. Check server has RustChaos plugin loaded.",
           step: "rcon_send",
           command,
         },
@@ -259,8 +337,19 @@ async function runWebhook(request: NextRequest, body: unknown) {
     action,
     serverId: server.id,
     command,
-    scrapAmount: giftValue || undefined,
+    scrapAmount: action !== "npcmaxx" && giftValue ? giftValue : undefined,
   }).catch(() => {});
+  if (action === "npcmaxx" && npcTemplateKeyResolved) {
+    await insertRnpcSpawnEvent({
+      serverId: server.id,
+      connectionId: connectionFromAdmin?.id ?? null,
+      tikfinityEventName: tikfinityEventNameForLog,
+      viewerName: payload.viewerName,
+      templateKey: npcTemplateKeyResolved,
+      command,
+      status: "success",
+    }).catch(() => {});
+  }
 
   return withCors(
     NextResponse.json({
