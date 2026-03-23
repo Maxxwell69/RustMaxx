@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  RUSTMAXX_ORIGIN,
+  rustmaxxTikfinityWebhookUrl,
+} from "@/lib/rustmaxx-public-url";
 
 type ActionMeta = {
   action: string;
@@ -150,8 +154,10 @@ export default function AdminStreamerInteractionsPage() {
   }, []);
 
   function copyWebhook() {
-    if (!data?.webhookUrl) return;
-    navigator.clipboard.writeText(data.webhookUrl);
+    if (!data) return;
+    navigator.clipboard.writeText(
+      data.webhookUrl ?? rustmaxxTikfinityWebhookUrl()
+    );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -220,6 +226,10 @@ export default function AdminStreamerInteractionsPage() {
     (a) => !WEBHOOK_HIDDEN_ACTIONS.includes(a.action)
   );
 
+  /** Live URL from APP_URL, or rustmaxx.com example so copy/paste always works. */
+  const webhookUrl = data.webhookUrl ?? rustmaxxTikfinityWebhookUrl();
+  const webhookUrlIsFromEnv = Boolean(data.webhookUrl);
+
   return (
     <div className="mx-auto max-w-4xl space-y-8 p-6">
       <div className="flex flex-wrap items-center gap-4">
@@ -232,8 +242,10 @@ export default function AdminStreamerInteractionsPage() {
       </div>
 
       <p className="text-zinc-400">
-        Use this URL in TikFinity when creating an action: choose <strong>Trigger WebHook</strong> and
-        set the webhook URL below. Gifts are mapped to RustChaos actions as shown in the tables.
+        Production site: <strong className="text-zinc-300">{RUSTMAXX_ORIGIN}</strong>. Use this URL in
+        TikFinity when creating an action: choose <strong>Trigger WebHook</strong> and set the webhook
+        URL below (or the same path on your host if <code className="rounded bg-zinc-800 px-1">APP_URL</code>{" "}
+        points elsewhere). Gifts are mapped to RustChaos actions as shown in the tables.
       </p>
 
       {/* Webhook URL */}
@@ -242,26 +254,31 @@ export default function AdminStreamerInteractionsPage() {
         <p className="mt-1 text-sm text-zinc-500">
           Paste this in TikFinity → New Action → Trigger WebHook → URL
         </p>
+        {!webhookUrlIsFromEnv && (
+          <p className="mt-2 rounded-lg border border-amber-800/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-100/90">
+            <code className="rounded bg-zinc-800 px-1">APP_URL</code> is not set in this environment, so
+            the URL below uses the public example{" "}
+            <code className="rounded bg-zinc-800 px-1">{rustmaxxTikfinityWebhookUrl()}</code>. On Railway,
+            set <code className="rounded bg-zinc-800 px-1">APP_URL={RUSTMAXX_ORIGIN}</code> (no trailing
+            slash) so this matches your live site.
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <code className="flex-1 break-all rounded bg-zinc-800 px-3 py-2 text-sm text-zinc-300">
-            {data.webhookUrl ?? "Set APP_URL to see webhook URL"}
+            {webhookUrl}
           </code>
-          {data.webhookUrl && (
-            <button
-              type="button"
-              onClick={copyWebhook}
-              className="rounded bg-rust-cyan/20 px-3 py-2 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={copyWebhook}
+            className="rounded bg-rust-cyan/20 px-3 py-2 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
         </div>
         <p className="mt-2 text-xs text-zinc-500">
           Ensure <code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code> is set in your
           server environment so the webhook knows which Rust server to send commands to.
         </p>
-        {data.webhookUrl && (
-          <>
             <h3 className="mt-4 text-sm font-medium text-zinc-300">Per-action URLs (by event name)</h3>
             <p className="mt-1 text-xs text-zinc-500">
               Use a dedicated URL so the server runs the right trigger. Add <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=bear</code>, etc. For Roaming NPC bots, use <code className="rounded bg-zinc-800 px-1">?action=npcmaxx&amp;template=your_roaming_template_key</code> or a TikFinity connection (event name → Roaming NPC) with the template key saved below.
@@ -272,12 +289,12 @@ export default function AdminStreamerInteractionsPage() {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <code className="flex-1 break-all rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
-                {`${data.webhookUrl}?event=join`}
+                {`${webhookUrl}?event=join`}
               </code>
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(`${data.webhookUrl}?event=join`);
+                  navigator.clipboard.writeText(`${webhookUrl}?event=join`);
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2000);
                 }}
@@ -286,27 +303,35 @@ export default function AdminStreamerInteractionsPage() {
                 Copy join URL
               </button>
             </div>
+            <details className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-400">
+              <summary className="cursor-pointer text-zinc-300">Test crew registration (PowerShell)</summary>
+              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all text-zinc-500">
+{`$body = '{"teamMember":true,"userId":"7335694216609711150","viewerName":"melbc123"}'
+Invoke-RestMethod -Uri "${webhookUrl}?event=join" -Method POST -ContentType "application/json; charset=utf-8" -Body $body`}
+              </pre>
+              <p className="mt-1 text-zinc-500">
+                First run registers; second run returns <code className="rounded bg-zinc-800 px-1">alreadyRegistered</code>.
+              </p>
+            </details>
             <ul className="mt-2 flex flex-wrap gap-2">
               {webhookActions.map((a) => (
                 <li key={a.action}>
                   <button
                     type="button"
                     onClick={() => {
-                      const url = `${data!.webhookUrl!}?action=${a.action}`;
+                      const url = `${webhookUrl}?action=${a.action}`;
                       navigator.clipboard.writeText(url);
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     }}
                     className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
-                    title={`Copy ${data!.webhookUrl!}?action=${a.action}`}
+                    title={`Copy ${webhookUrl}?action=${a.action}`}
                   >
                     {a.label ?? a.action}
                   </button>
                 </li>
               ))}
             </ul>
-          </>
-        )}
       </section>
 
       {/* TikFinity connections: event name → server action */}
