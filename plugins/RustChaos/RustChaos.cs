@@ -19,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.13")]
+    [Info("RustChaos", "RustMaxx", "1.15.14")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -288,6 +288,20 @@ namespace Oxide.Plugins
             "assets/prefabs/npc/halloween/zombie/zombie.prefab"
         };
 
+        /// <summary>
+        /// Scientist prefabs for single-action and direct scientist spawns.
+        /// Prioritize tougher/more tactical variants first (DeepSea/oilrig style), then fall back.
+        /// </summary>
+        private static readonly string[] SingleScientistPrefabCandidates =
+        {
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_oilrig.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
+            "assets/prefabs/npc/scientist/scientist.prefab",
+            "assets/content/npc/scientist/scientist.prefab"
+        };
+
         #endregion
 
         #region Command
@@ -414,7 +428,7 @@ namespace Oxide.Plugins
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
                             Vector3 pos = GetSingleSpawnPosition(current);
-                            if (pos != Vector3.zero && SpawnScientist(pos))
+                            if (pos != Vector3.zero && TrySpawnSingleScientist(current, pos))
                                 Puts($"{LogPrefix} Spawned 1 scientist near {current.displayName}");
                         });
                     }
@@ -1771,8 +1785,12 @@ namespace Oxide.Plugins
                         continue;
                     }
 
-                    if (ent is HumanNPC)
+                    if (ent is HumanNPC || ent is NPCPlayer)
+                    {
+                        TryChaosWaveSteerHumanNpcToward(ent, streamerPos);
+                        TryProvokeChaosWaveEnemy(ent, FindConnectedPlayerByUserId(_soloWildStreamerUserId));
                         continue;
+                    }
 
                     TryChaosWaveSteerAnimalNavTowardStream(ent, streamerPos);
 
@@ -1847,6 +1865,31 @@ namespace Oxide.Plugins
             entity.Spawn();
             RegisterSoloWildEntity(entity, streamer);
             Puts($"{LogPrefix} Solo wild ({logContext}): spawned & leashed for {streamer.displayName}");
+            return true;
+        }
+
+        /// <summary>Single scientist gift: spawn, then register/provoke so it actively hunts and fights like other tracked enemies.</summary>
+        private bool TrySpawnSingleScientist(BasePlayer streamer, Vector3 position)
+        {
+            if (streamer == null || !streamer.IsValid()) return false;
+            position = SnapLandNpcSpawnToGround(position);
+            BaseEntity entity = null;
+            foreach (var path in SingleScientistPrefabCandidates)
+            {
+                if (string.IsNullOrWhiteSpace(path)) continue;
+                entity = GameManager.server.CreateEntity(path, position, Quaternion.identity, true);
+                if (entity != null) break;
+            }
+            if (entity == null) return false;
+            entity.Spawn();
+            RegisterSoloWildEntity(entity, streamer);
+            TryProvokeChaosWaveEnemy(entity, streamer);
+            timer.Once(0.25f, () =>
+            {
+                if (entity == null || entity.IsDestroyed || streamer == null || !streamer.IsValid()) return;
+                TryChaosWaveSteerHumanNpcToward(entity, streamer.transform.position);
+                TryProvokeChaosWaveEnemy(entity, streamer);
+            });
             return true;
         }
 
@@ -2472,17 +2515,12 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Spawn one scientist at position. Tries PrefabSniffer path first, then fallbacks. Returns true if spawned.
+        /// Spawn one scientist at position. Uses prioritized candidate list and returns true if spawned.
         /// </summary>
         private static bool SpawnScientist(Vector3 position)
         {
             position = SnapLandNpcSpawnToGround(position);
-            string[] prefabs = {
-                "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
-                "assets/prefabs/npc/scientist/scientist.prefab",
-                "assets/content/npc/scientist/scientist.prefab"
-            };
-            foreach (string path in prefabs)
+            foreach (string path in SingleScientistPrefabCandidates)
             {
                 BaseEntity entity = GameManager.server.CreateEntity(path, position, Quaternion.identity, true);
                 if (entity != null)
