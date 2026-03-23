@@ -82,7 +82,8 @@ railway run npm run cleanup
 
 ## TikFinity + crew + Roaming NPC (webhooks)
 
-Step-by-step setup, env vars, migrations, and tests: **[docs/TIKFINITY_CREW_RNPC_SETUP.md](docs/TIKFINITY_CREW_RNPC_SETUP.md)**.
+Step-by-step setup, env vars, migrations, and tests: **[docs/TIKFINITY_CREW_RNPC_SETUP.md](docs/TIKFINITY_CREW_RNPC_SETUP.md)**.  
+Webhook problems: **[docs/TIKFINITY_WEBHOOK_DEBUG.md](docs/TIKFINITY_WEBHOOK_DEBUG.md)**.
 
 ## Railway deploy
 

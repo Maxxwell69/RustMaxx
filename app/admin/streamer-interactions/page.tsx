@@ -98,6 +98,8 @@ export default function AdminStreamerInteractionsPage() {
   const [tikfinitySpawnTemplate, setTikfinitySpawnTemplate] = useState<string>(
     ROAMING_TEMPLATE_KEYS[0]
   );
+  const [diagnosticsText, setDiagnosticsText] = useState<string | null>(null);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
 
   const ALLOWED_ROLES = ["admin", "super_admin"];
 
@@ -343,6 +345,52 @@ export default function AdminStreamerInteractionsPage() {
             same template key — then TikFinity can call the <strong>base</strong> webhook URL and match the
             event name; no <code className="rounded bg-zinc-800 px-1">?action=</code> needed.
           </p>
+
+          <details className="mt-4 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2">
+            <summary className="cursor-pointer text-sm text-zinc-300">Webhook debug (diagnostics)</summary>
+            <p className="mt-2 text-xs text-zinc-500">
+              If TikFinity fires but nothing happens, run diagnostics below and check your host logs (e.g. Railway).
+              Full checklist: <code className="rounded bg-zinc-800 px-1">docs/TIKFINITY_WEBHOOK_DEBUG.md</code> in the
+              repo.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={diagnosticsLoading}
+                onClick={() => {
+                  setDiagnosticsLoading(true);
+                  fetch("/api/tikfinity/diagnostics", { credentials: "same-origin" })
+                    .then((r) => r.json())
+                    .then((j) => setDiagnosticsText(JSON.stringify(j, null, 2)))
+                    .catch((e) => setDiagnosticsText(String(e)))
+                    .finally(() => setDiagnosticsLoading(false));
+                }}
+                className="rounded bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {diagnosticsLoading ? "…" : "Run diagnostics"}
+              </button>
+              <button
+                type="button"
+                disabled={diagnosticsLoading}
+                onClick={() => {
+                  setDiagnosticsLoading(true);
+                  fetch("/api/tikfinity/diagnostics?probeRcon=1", { credentials: "same-origin" })
+                    .then((r) => r.json())
+                    .then((j) => setDiagnosticsText(JSON.stringify(j, null, 2)))
+                    .catch((e) => setDiagnosticsText(String(e)))
+                    .finally(() => setDiagnosticsLoading(false));
+                }}
+                className="rounded bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {diagnosticsLoading ? "…" : "Diagnostics + RCON probe"}
+              </button>
+            </div>
+            {diagnosticsText && (
+              <pre className="mt-2 max-h-64 overflow-auto rounded bg-zinc-950 p-2 text-left text-[11px] text-zinc-400">
+                {diagnosticsText}
+              </pre>
+            )}
+          </details>
         </div>
         {data.tikfinityFeatures && (
           <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-400">

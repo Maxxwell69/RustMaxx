@@ -199,4 +199,6 @@ Invoke-RestMethod -Uri "https://rustmaxx.com/api/tikfinity/webhook?event=join" `
 | Crew join returns `npcSpawn.ok: false` | RCON/template issue; verify `CREW_RNPC_TEMPLATE_KEY` matches a real `bots` key and NPCMaxx loads. |
 | RCON 502 from webhook | RCON connect failed; test **Connect** in dashboard first. |
 
+**Webhook not working?** See [TIKFINITY_WEBHOOK_DEBUG.md](./TIKFINITY_WEBHOOK_DEBUG.md).
+
 For deeper Railway notes, see [RAILWAY_DEPLOY.md](../RAILWAY_DEPLOY.md).
