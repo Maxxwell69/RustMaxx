@@ -19,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.15")]
+    [Info("RustChaos", "RustMaxx", "1.15.16")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -1886,10 +1886,27 @@ namespace Oxide.Plugins
             entity.Spawn();
             RegisterSoloWildEntity(entity, streamer);
             TryProvokeChaosWaveEnemy(entity, streamer);
+            NetworkableId nid = entity.net.ID;
+            ulong sid = streamer.userID;
             timer.Once(0.25f, () =>
             {
-                if (entity == null || entity.IsDestroyed || streamer == null || !streamer.IsValid()) return;
-                TryProvokeChaosWaveEnemy(entity, streamer);
+                BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                BasePlayer s = FindConnectedPlayerByUserId(sid);
+                if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
+                TryProvokeChaosWaveEnemy(e, s);
+            });
+
+            // Some scientist variants can idle on spawn until threat/nav updates settle.
+            // Short activation burst: repeat aggro + light steer pulses, then stop.
+            timer.Repeat(1f, 8, () =>
+            {
+                BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                BasePlayer s = FindConnectedPlayerByUserId(sid);
+                if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
+                TryProvokeChaosWaveEnemy(e, s);
+                Vector3 d = e.transform.position - s.transform.position;
+                if (d.sqrMagnitude > (7f * 7f))
+                    TryChaosWaveSteerHumanNpcToward(e, s.transform.position);
             });
             return true;
         }
