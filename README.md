@@ -80,6 +80,10 @@ To run the 7-day log cleanup later:
 railway run npm run cleanup
 ```
 
+## TikFinity + crew + Roaming NPC (webhooks)
+
+Step-by-step setup, env vars, migrations, and tests: **[docs/TIKFINITY_CREW_RNPC_SETUP.md](docs/TIKFINITY_CREW_RNPC_SETUP.md)**.
+
 ## Railway deploy
 
 1. **Create a project** on [Railway](https://railway.app) and add a **Postgres** service.
