@@ -33,8 +33,8 @@ const LOCALHOST_ERROR_HTML = `<!DOCTYPE html>
   <h1>Connect Twitch – configuration needed</h1>
   <p>Your server is using localhost for the redirect URL, so Twitch would send users back to localhost and the connection would fail.</p>
   <p><strong>Fix:</strong> In your server environment (hosting dashboard or .env), set:</p>
-  <pre style="background:#eee;padding:0.75rem;border-radius:6px;">APP_URL=https://rustmaxx.com</pre>
-  <p>Use your real domain (e.g. <code>https://www.rustmaxx.com</code> if you use www). Then redeploy and try <strong>Connect Twitch</strong> again from your Profile.</p>
+  <pre style="background:#eee;padding:0.75rem;border-radius:6px;">APP_URL=https://www.rustmaxx.com</pre>
+  <p>Use your real domain — same host as in the browser (apex vs <code>www</code> must match). Then redeploy and try <strong>Connect Twitch</strong> again from your Profile.</p>
   <p><a href="/profile">← Back to Profile</a></p>
 </body></html>`;
 

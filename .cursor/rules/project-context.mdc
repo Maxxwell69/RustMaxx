@@ -6,4 +6,4 @@ alwaysApply: true
 # RustMaxx project context
 
 - **Hosting**: This project is **not** on Vercel. Do not add Vercel-specific env vars (e.g. VERCEL_URL) or logic. Use **APP_URL** or **SITE_URL** for the public base URL when building redirect URIs or absolute URLs.
-- **Public URL**: In production, set **APP_URL** (e.g. `https://rustmaxx.com` or `https://www.rustmaxx.com`) so OAuth and webhooks use the correct domain.
+- **Public URL**: In production, set **APP_URL** to your **exact** live origin including **www** if you use it (e.g. `https://www.rustmaxx.com`). TikFinity webhooks and OAuth redirects must match; apex vs `www` are different URLs.

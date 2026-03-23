@@ -263,9 +263,11 @@ export default function AdminStreamerInteractionsPage() {
       </div>
 
       <p className="text-zinc-400">
-        Public site: <strong className="text-zinc-300">{RUSTMAXX_ORIGIN}</strong>. In TikFinity, use{" "}
-        <strong>Trigger WebHook</strong> and paste the URLs below. Gifts map to RustChaos; roaming bots
-        use the spawn URL or a connection (event name → Roaming NPC).
+        Public site: <strong className="text-zinc-300">{RUSTMAXX_ORIGIN}</strong> — set{" "}
+        <code className="rounded bg-zinc-800 px-1 text-zinc-300">APP_URL</code> to this exact origin in
+        production (apex vs <code className="rounded bg-zinc-800 px-1">www</code> must match what TikFinity
+        calls). In TikFinity, use <strong>Trigger WebHook</strong> and paste the URLs below. Gifts map to
+        RustChaos; roaming bots use the spawn URL or a connection (event name → Roaming NPC).
       </p>
 
       {/* Webhook URL */}

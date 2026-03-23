@@ -63,7 +63,7 @@ The “Not secure” warning appears when the site is loaded over **HTTP** inste
    - Wait for DNS to propagate (can take a few minutes to 48 hours).
 
 3. **Use HTTPS when opening the site**
-   - Open **https://rustmaxx.com** (with `https://`). Railway will issue and renew the certificate automatically.
+   - Open your site with **`https://`** (e.g. **https://www.rustmaxx.com** if that is your canonical host). Railway will issue and renew the certificate automatically.
 
 4. **Optional: redirect HTTP → HTTPS**
    - In Railway, enable “Enforce HTTPS” or “Redirect HTTP to HTTPS” if the option is available in the service settings.

@@ -2,14 +2,16 @@
 
 Work through these in order. Most issues are **wrong URL**, **TIKFINITY_SERVER_ID**, **RCON**, or **payload** (crew gate / template).
 
+**Host must match `APP_URL`:** If production uses **`www`** (e.g. `https://www.rustmaxx.com`), TikFinity and curl must use that exact origin — apex (`https://rustmaxx.com`) and `www` are different URLs.
+
 ---
 
 ## 1. Confirm RustMaxx is reachable
 
-From your PC (replace with your real host):
+From your PC (replace with your real host — same as **Admin → Streamer interactions**):
 
 ```bash
-curl -sS "https://rustmaxx.com/api/tikfinity/webhook?action=likes" -X POST -H "Content-Type: application/json" -d "{\"viewerName\":\"Test\"}"
+curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=likes" -X POST -H "Content-Type: application/json" -d "{\"viewerName\":\"Test\"}"
 ```
 
 You should get JSON (e.g. `ok` or `skipped`). If you get **HTML**, **502**, or **timeout**, fix hosting/DNS/SSL first.
@@ -21,13 +23,13 @@ You should get JSON (e.g. `ok` or `skipped`). If you get **HTML**, **502**, or *
 While logged in as **admin**, open (same browser session):
 
 ```text
-https://rustmaxx.com/api/tikfinity/diagnostics
+https://www.rustmaxx.com/api/tikfinity/diagnostics
 ```
 
 Optional RCON connectivity test (slow, a few seconds):
 
 ```text
-https://rustmaxx.com/api/tikfinity/diagnostics?probeRcon=1
+https://www.rustmaxx.com/api/tikfinity/diagnostics?probeRcon=1
 ```
 
 Check:
@@ -55,7 +57,7 @@ If Connect fails here, webhooks will fail too — fix **host / port / password /
 Use the **Copy spawn URL** URL from **Admin → Streamer interactions** (includes `?action=npcmaxx&template=...`).
 
 ```bash
-curl -sS "https://rustmaxx.com/api/tikfinity/webhook?action=npcmaxx&template=bob_resources_farmer" ^
+curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=npcmaxx&template=bob_resources_farmer" ^
   -X POST -H "Content-Type: application/json" ^
   -d "{\"viewerName\":\"CurlTest\"}"
 ```

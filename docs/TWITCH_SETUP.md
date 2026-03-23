@@ -18,7 +18,7 @@ Set these in your deployment (e.g. Railway) and in local `.env`:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `APP_URL` | **Yes in production** | Public base URL (e.g. `https://rustmaxx.com`). Stops Connect Twitch from redirecting to localhost. No trailing slash. |
+| `APP_URL` | **Yes in production** | Public base URL (e.g. `https://www.rustmaxx.com`). Stops Connect Twitch from redirecting to localhost. No trailing slash. Must match your live site (apex vs `www`). |
 | `TWITCH_CLIENT_ID` | Yes | Application Client ID from Twitch console. |
 | `TWITCH_CLIENT_SECRET` | Yes | Application Client Secret. Do not commit. |
 | `TWITCH_REDIRECT_URI` | Yes | Exact redirect URL (e.g. `https://yourdomain.com/api/twitch/callback`). Must be listed in the Twitch app’s OAuth Redirect URLs. |
@@ -26,7 +26,7 @@ Set these in your deployment (e.g. Railway) and in local `.env`:
 | `TWITCH_EVENTSUB_SECRET` | Yes for EventSub | A random string you choose (e.g. 32+ chars). Used to verify webhook payloads; use the same value when creating subscriptions. |
 | `ENCRYPTION_KEY` | Yes for token storage | At least 32 characters (or 32-byte hex). Used to encrypt access/refresh tokens in the database. |
 
-**If Connect Twitch sends you to localhost:** Set `APP_URL` in production to your real domain (e.g. `https://rustmaxx.com`), redeploy, add that URL + `/api/twitch/callback` to Twitch OAuth Redirect URLs, then use Connect Twitch from your **live** profile page (e.g. `https://rustmaxx.com/profile`), not from localhost.
+**If Connect Twitch sends you to localhost:** Set `APP_URL` in production to your real domain (e.g. `https://www.rustmaxx.com`), redeploy, add that URL + `/api/twitch/callback` to Twitch OAuth Redirect URLs, then use Connect Twitch from your **live** profile page (e.g. `https://www.rustmaxx.com/profile`), not from localhost.
 
 ## 3. Run database migrations
 

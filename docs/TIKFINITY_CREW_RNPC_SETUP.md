@@ -2,7 +2,7 @@
 
 Step-by-step to get webhooks, crew (subscriber) registration, and `npcmaxx.spawn` working end-to-end.
 
-**Production site:** `https://rustmaxx.com` — set `APP_URL` to this (no trailing slash) unless you use another host.
+**Production site:** `https://www.rustmaxx.com` — set `APP_URL` to your **exact** live origin (no trailing slash), including **`www`** if that is what you use in TikFinity and the browser.
 
 ---
 
@@ -25,7 +25,7 @@ Set on the **RustMaxx web** service:
 | `DATABASE_URL` | Usually auto-set when Postgres is linked. |
 | `ADMIN_PASSWORD` | Admin login. |
 | `SESSION_SECRET` | Long random string for cookies. |
-| `APP_URL` | `https://rustmaxx.com` — public base URL so admin shows correct webhook URLs. |
+| `APP_URL` | `https://www.rustmaxx.com` — public base URL so admin shows correct webhook URLs (must match the host TikFinity calls). |
 | `TIKFINITY_SERVER_ID` | **UUID of the server row** in RustMaxx (see step 4). |
 | `CREW_RNPC_TEMPLATE_KEY` | *(Optional)* RoamingNPCs **`bots`** key (e.g. `bob_resources_farmer`). If set, a viewer’s **first** successful crew join also runs `npcmaxx.spawn` for that viewer. |
 | `NPCMAXX_REQUIRE_CREW_REGISTRY` | *(Optional)* Set to `true` so **gift/connection** `npcmaxx` webhooks only run if that TikTok user id is already in the **crew registry** (joined via `?event=join` first). Requires `userId` / `uniqueId` in the payload. |
@@ -77,7 +77,7 @@ npm run migrate
 1. Log into RustMaxx → **Servers**.
 2. Open the Rust server that should receive **TikFinity / RCON** commands.
 3. Copy the **UUID from the browser URL**:  
-   `https://rustmaxx.com/servers/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+   `https://www.rustmaxx.com/servers/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
 4. In Railway → Variables →  
    `TIKFINITY_SERVER_ID` = that UUID (no quotes).
 
@@ -114,12 +114,12 @@ Same command through RustMaxx’s server console/RCON for that server. If it fai
 
 ## 8. Test TikFinity webhook (Roaming NPC)
 
-Use the URL shown in **Admin → Streamer interactions** (base: `https://rustmaxx.com/api/tikfinity/webhook` when `APP_URL` is set).
+Use the URL shown in **Admin → Streamer interactions** (base: `https://www.rustmaxx.com/api/tikfinity/webhook` when `APP_URL` is set).
 
 **POST** (replace template key):
 
 ```http
-POST https://rustmaxx.com/api/tikfinity/webhook?action=npcmaxx&template=YOUR_TEMPLATE_KEY
+POST https://www.rustmaxx.com/api/tikfinity/webhook?action=npcmaxx&template=YOUR_TEMPLATE_KEY
 Content-Type: application/json
 
 {"viewerName": "TestViewer"}
@@ -134,12 +134,12 @@ Expect JSON with `"ok": true` and a `command` like `npcmaxx.spawn ...`.
 ## 9. Test crew subscriber registry (join)
 
 1. In **Admin → Streamer interactions**, use **Copy join URL** or:  
-   `https://rustmaxx.com/api/tikfinity/webhook?event=join`
+   `https://www.rustmaxx.com/api/tikfinity/webhook?event=join`
 2. Expand **Test crew registration (PowerShell)** and run the sample against your live URL, or:
 
 ```powershell
 $body = '{"teamMember":true,"userId":"YOUR_TIKTOK_UNIQUE_ID","viewerName":"YourName"}'
-Invoke-RestMethod -Uri "https://rustmaxx.com/api/tikfinity/webhook?event=join" `
+Invoke-RestMethod -Uri "https://www.rustmaxx.com/api/tikfinity/webhook?event=join" `
   -Method POST -ContentType "application/json; charset=utf-8" -Body $body
 ```
 
@@ -174,7 +174,7 @@ Invoke-RestMethod -Uri "https://rustmaxx.com/api/tikfinity/webhook?event=join" `
 ## 12. Quick checklist
 
 - [ ] Migrations applied (`npm run migrate`)
-- [ ] `APP_URL=https://rustmaxx.com` (or your real public URL)
+- [ ] `APP_URL=https://www.rustmaxx.com` (or your real public URL, **exact** host including `www` if used)
 - [ ] `TIKFINITY_SERVER_ID` = server UUID from `/servers/[id]`
 - [ ] (Optional) `CREW_RNPC_TEMPLATE_KEY` = valid Roaming `bots` key
 - [ ] (Optional) `NPCMAXX_REQUIRE_CREW_REGISTRY=true` if gifts should require prior crew join
