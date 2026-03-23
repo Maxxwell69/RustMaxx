@@ -27,6 +27,12 @@ Set on the **RustMaxx web** service:
 | `SESSION_SECRET` | Long random string for cookies. |
 | `APP_URL` | `https://rustmaxx.com` — public base URL so admin shows correct webhook URLs. |
 | `TIKFINITY_SERVER_ID` | **UUID of the server row** in RustMaxx (see step 4). |
+| `CREW_RNPC_TEMPLATE_KEY` | *(Optional)* RoamingNPCs **`bots`** key (e.g. `bob_resources_farmer`). If set, a viewer’s **first** successful crew join also runs `npcmaxx.spawn` for that viewer. |
+| `NPCMAXX_REQUIRE_CREW_REGISTRY` | *(Optional)* Set to `true` so **gift/connection** `npcmaxx` webhooks only run if that TikTok user id is already in the **crew registry** (joined via `?event=join` first). Requires `userId` / `uniqueId` in the payload. |
+
+### Template key (what to put in `CREW_RNPC_TEMPLATE_KEY`)
+
+It must match a **key** under **Bots settings** / `bots` in your RoamingNPCs JSON on the **game server** (not RustMaxx). The plugin default example is `bob_resources_farmer`. Wrong key → spawn fails in NPCMaxx.
 
 Redeploy after changing env vars.
 
@@ -140,20 +146,33 @@ Invoke-RestMethod -Uri "https://rustmaxx.com/api/tikfinity/webhook?event=join" `
 
 ---
 
-## 11. Quick checklist
+## 11. Full pipeline (how it fits together)
+
+1. **Crew join** (`?event=join`) + subscriber payload + TikTok id → row in **Crew subscribers** table (once per id).
+2. If **`CREW_RNPC_TEMPLATE_KEY`** is set → same request also sends `npcmaxx.spawn <key> <viewer>` (first registration only; duplicates get `alreadyRegistered` with no second spawn from join).
+3. **Gifts / other webhooks** mapped to **Roaming NPC** use the template from the TikFinity connection or `?template=`.
+4. If **`NPCMAXX_REQUIRE_CREW_REGISTRY=true`**, those `npcmaxx` triggers only run if the viewer is already in the crew table (join first, gifts after).
+
+**Admin → Streamer interactions** shows whether the two optional env flags are active.
+
+---
+
+## 12. Quick checklist
 
 - [ ] Migrations applied (`npm run migrate`)
 - [ ] `APP_URL=https://rustmaxx.com` (or your real public URL)
 - [ ] `TIKFINITY_SERVER_ID` = server UUID from `/servers/[id]`
+- [ ] (Optional) `CREW_RNPC_TEMPLATE_KEY` = valid Roaming `bots` key
+- [ ] (Optional) `NPCMAXX_REQUIRE_CREW_REGISTRY=true` if gifts should require prior crew join
 - [ ] RCON works from RustMaxx to the game server
 - [ ] `npcmaxx.spawn` works in RCON
 - [ ] Webhook test returns `ok` and spawn log updates
-- [ ] Crew PowerShell test registers once, then `alreadyRegistered`
+- [ ] Crew PowerShell test registers once, then `alreadyRegistered`; if crew template env is set, check `npcSpawn` in JSON and in-game bot
 - [ ] TikFinity actions point at the URLs you copied from admin
 
 ---
 
-## Troubleshooting
+## 13. Troubleshooting
 
 | Symptom | What to check |
 |--------|----------------|
@@ -162,6 +181,8 @@ Invoke-RestMethod -Uri "https://rustmaxx.com/api/tikfinity/webhook?event=join" `
 | `postgres.railway.internal` when migrating locally | Use **public** `DATABASE_URL` or Railway **Shell**. |
 | Crew test always `not_crew_subscriber` | Payload missing flags; add `teamMember` / `isSubscriber` or adjust TikFinity. |
 | `missing_tiktok_unique_id` | Include `userId` or `uniqueId` in JSON. |
+| `not_in_crew_registry` on `npcmaxx` | Turn off `NPCMAXX_REQUIRE_CREW_REGISTRY` or register the viewer with the `?event=join` crew webhook first. |
+| Crew join returns `npcSpawn.ok: false` | RCON/template issue; verify `CREW_RNPC_TEMPLATE_KEY` matches a real `bots` key and NPCMaxx loads. |
 | RCON 502 from webhook | RCON connect failed; test **Connect** in dashboard first. |
 
 For deeper Railway notes, see [RAILWAY_DEPLOY.md](../RAILWAY_DEPLOY.md).

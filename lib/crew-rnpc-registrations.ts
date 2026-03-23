@@ -52,3 +52,17 @@ export async function deleteCrewRnpcRegistration(
   );
   return rowCount > 0;
 }
+
+/** True if this TikTok id is in the crew registry for the server (for npcmaxx gating). */
+export async function isCrewRegistered(
+  serverId: string,
+  tiktokUniqueId: string
+): Promise<boolean> {
+  const tid = tiktokUniqueId.trim();
+  if (!tid) return false;
+  const { rows } = await query<{ exists: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM crew_rnpc_registrations WHERE server_id = $1 AND tiktok_unique_id = $2) AS exists",
+    [serverId, tid]
+  );
+  return Boolean(rows[0]?.exists);
+}

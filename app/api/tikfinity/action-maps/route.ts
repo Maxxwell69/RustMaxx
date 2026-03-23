@@ -26,11 +26,22 @@ export async function GET(request: NextRequest) {
       // Table may not exist yet (migration not run); return rest of data with empty connections
     }
 
+    const crewSpawnOnRegisterConfigured = Boolean(
+      process.env.CREW_RNPC_TEMPLATE_KEY?.trim()
+    );
+    const npcmaxxRequireCrewRegistry =
+      process.env.NPCMAXX_REQUIRE_CREW_REGISTRY === "true" ||
+      process.env.NPCMAXX_REQUIRE_CREW_REGISTRY === "1";
+
     return NextResponse.json({
       webhookUrl,
       availableActions: getAvailableActionsForAdmin(),
       giftToActionMap: getGiftToActionMapForAdmin(),
       connections,
+      tikfinityFeatures: {
+        crewSpawnOnRegisterConfigured,
+        npcmaxxRequireCrewRegistry,
+      },
     });
   } catch (e) {
     console.error("[tikfinity action-maps] GET failed:", e);

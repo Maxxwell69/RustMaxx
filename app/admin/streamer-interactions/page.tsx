@@ -47,6 +47,10 @@ type ActionMapsResponse = {
   availableActions: ActionMeta[];
   giftToActionMap: Record<string, string>;
   connections?: ConnectionRow[];
+  tikfinityFeatures?: {
+    crewSpawnOnRegisterConfigured: boolean;
+    npcmaxxRequireCrewRegistry: boolean;
+  };
 };
 
 type TestResult = {
@@ -279,6 +283,33 @@ export default function AdminStreamerInteractionsPage() {
           Ensure <code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code> is set in your
           server environment so the webhook knows which Rust server to send commands to.
         </p>
+        {data.tikfinityFeatures && (
+          <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-400">
+            <p className="font-medium text-zinc-300">RNPC automation (env)</p>
+            <ul className="mt-1 list-inside list-disc space-y-0.5">
+              <li>
+                <code className="rounded bg-zinc-800 px-1">CREW_RNPC_TEMPLATE_KEY</code>{" "}
+                {data.tikfinityFeatures.crewSpawnOnRegisterConfigured ? (
+                  <span className="text-green-400/90">set</span>
+                ) : (
+                  <span className="text-zinc-500">not set</span>
+                )}
+                {" — first crew join also runs "}
+                <code className="rounded bg-zinc-800 px-1">npcmaxx.spawn</code> for that viewer.
+              </li>
+              <li>
+                <code className="rounded bg-zinc-800 px-1">NPCMAXX_REQUIRE_CREW_REGISTRY</code>{" "}
+                {data.tikfinityFeatures.npcmaxxRequireCrewRegistry ? (
+                  <span className="text-amber-200/90">on</span>
+                ) : (
+                  <span className="text-zinc-500">off</span>
+                )}
+                {" — gift/connection "}
+                <code className="rounded bg-zinc-800 px-1">npcmaxx</code> only if the viewer is in the crew registry.
+              </li>
+            </ul>
+          </div>
+        )}
             <h3 className="mt-4 text-sm font-medium text-zinc-300">Per-action URLs (by event name)</h3>
             <p className="mt-1 text-xs text-zinc-500">
               Use a dedicated URL so the server runs the right trigger. Add <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=bear</code>, etc. For Roaming NPC bots, use <code className="rounded bg-zinc-800 px-1">?action=npcmaxx&amp;template=your_roaming_template_key</code> or a TikFinity connection (event name → Roaming NPC) with the template key saved below.

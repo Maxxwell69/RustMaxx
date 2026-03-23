@@ -24,9 +24,18 @@ import {
   isCrewSubscriberFromBody,
   isStreamJoinEvent,
 } from "@/lib/tikfinity-crew";
-import { registerCrewRnpcIfNew } from "@/lib/crew-rnpc-registrations";
+import {
+  registerCrewRnpcIfNew,
+  isCrewRegistered,
+} from "@/lib/crew-rnpc-registrations";
+import { npcmaxxRconSpawn } from "@/lib/npcmaxx-rcon";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
+
+const CREW_RNPC_TEMPLATE_KEY = process.env.CREW_RNPC_TEMPLATE_KEY?.trim() ?? null;
+const NPCMAXX_REQUIRE_CREW_REGISTRY =
+  process.env.NPCMAXX_REQUIRE_CREW_REGISTRY === "true" ||
+  process.env.NPCMAXX_REQUIRE_CREW_REGISTRY === "1";
 
 /** CORS: allow TikFinity's site to call this webhook from the browser. */
 const TIKFINITY_ORIGIN = "https://tikfinity.zerody.one";
@@ -124,12 +133,59 @@ async function handleCrewRnpcJoin(
     displayName,
     serverId: TIKFINITY_SERVER_ID,
   }).catch(() => {});
+
+  let npcSpawn:
+    | { ok: true; command: string }
+    | { ok: false; command: string; error: string; step: string }
+    | undefined;
+  const parsedCrewTemplate = CREW_RNPC_TEMPLATE_KEY
+    ? parseNpcTemplateKey(CREW_RNPC_TEMPLATE_KEY)
+    : null;
+  if (parsedCrewTemplate) {
+    const { rows: srvRows } = await query<ServerRow>(
+      "SELECT id, name, rcon_host, rcon_port, rcon_password FROM servers WHERE id = $1",
+      [TIKFINITY_SERVER_ID]
+    );
+    const srv = srvRows[0];
+    if (srv) {
+      const spawn = await npcmaxxRconSpawn({
+        server: srv,
+        templateKey: parsedCrewTemplate,
+        viewerDisplayName: displayName,
+        connectionId: null,
+        tikfinityEventName: "join",
+      });
+      if (spawn.ok) {
+        npcSpawn = { ok: true, command: spawn.command };
+        audit("tikfinity", "crew_rnpc.npc_spawn", {
+          tiktokUniqueId: uniqueId,
+          displayName,
+          command: spawn.command,
+          serverId: TIKFINITY_SERVER_ID,
+        }).catch(() => {});
+      } else {
+        npcSpawn = {
+          ok: false,
+          command: spawn.command,
+          error: spawn.error,
+          step: spawn.step,
+        };
+        audit("tikfinity", "crew_rnpc.npc_spawn_failed", {
+          tiktokUniqueId: uniqueId,
+          error: spawn.error,
+          step: spawn.step,
+        }).catch(() => {});
+      }
+    }
+  }
+
   return withCors(
     NextResponse.json({
       ok: true,
       registered: true,
       tiktokUniqueId: uniqueId,
       displayName,
+      ...(npcSpawn ? { npcSpawn } : {}),
     })
   );
 }
@@ -293,11 +349,8 @@ async function runWebhook(request: NextRequest, body: unknown) {
       ? sanitizeArg(connectionFromAdmin.message.trim(), 128)
       : null;
 
-  let command: string;
-  let npcTemplateKeyResolved: string | null = null;
-
   if (action === "npcmaxx") {
-    npcTemplateKeyResolved =
+    const npcTemplateKeyResolved =
       parseNpcTemplateKey(connectionFromAdmin?.npc_template_key ?? undefined) ??
       parseNpcTemplateKey(templateFromQuery);
     if (!npcTemplateKeyResolved) {
@@ -333,15 +386,111 @@ async function runWebhook(request: NextRequest, body: unknown) {
         )
       );
     }
-    command = `npcmaxx.spawn ${npcTemplateKeyResolved} ${viewerArg}`;
-  } else {
-    command =
-      messageArg != null
-        ? `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
-        : `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue}`;
+
+    if (NPCMAXX_REQUIRE_CREW_REGISTRY) {
+      const uid = extractTikTokUniqueIdFromBody(body);
+      if (!uid) {
+        audit("tikfinity", "webhook.skipped", {
+          reason: "npcmaxx_requires_tiktok_id_for_crew_gate",
+          action,
+          serverId: server.id,
+        }).catch(() => {});
+        return withCors(
+          NextResponse.json({
+            ok: false,
+            skipped: true,
+            reason: "missing_tiktok_unique_id",
+            action: "npcmaxx" as TikTriggerAction,
+            debug:
+              "NPCMAXX_REQUIRE_CREW_REGISTRY is on: include userId/uniqueId in the webhook body so we can verify the viewer is in the crew registry.",
+          })
+        );
+      }
+      const allowed = await isCrewRegistered(server.id, uid);
+      if (!allowed) {
+        audit("tikfinity", "webhook.skipped", {
+          reason: "not_in_crew_registry",
+          action,
+          serverId: server.id,
+          tiktokUniqueId: uid,
+        }).catch(() => {});
+        return withCors(
+          NextResponse.json({
+            ok: false,
+            skipped: true,
+            reason: "not_in_crew_registry",
+            action: "npcmaxx" as TikTriggerAction,
+            debug:
+              "Viewer is not in the crew RNPC registry. They must hit the ?event=join webhook as a subscriber first, or you can turn off NPCMAXX_REQUIRE_CREW_REGISTRY.",
+          })
+        );
+      }
+    }
+
+    const spawn = await npcmaxxRconSpawn({
+      server,
+      templateKey: npcTemplateKeyResolved,
+      viewerDisplayName: payload.viewerName,
+      connectionId: connectionFromAdmin?.id ?? null,
+      tikfinityEventName: tikfinityEventNameForLog,
+    });
+
+    if (!spawn.ok) {
+      console.error("[tikfinity webhook] npcmaxx RCON failed:", spawn.error);
+      audit("tikfinity", "webhook.failed", {
+        reason: spawn.step === "rcon_connect" ? "RCON connect failed" : "RCON send failed",
+        error: spawn.error,
+        viewerName: payload.viewerName,
+        giftName: payload.giftName,
+        action,
+        serverId: server.id,
+        command: spawn.command,
+      }).catch(() => {});
+      return withCors(
+        NextResponse.json(
+          {
+            ok: false,
+            error: spawn.error ?? "Command send failed",
+            debug:
+              spawn.step === "rcon_connect"
+                ? connectedErrorDebug()
+                : "RCON connected but npcmaxx.spawn failed. Check NPCMaxx + RoamingNPCs and template key.",
+            step: spawn.step,
+            command: spawn.command,
+          },
+          { status: 502 }
+        )
+      );
+    }
+
+    console.log("[tikfinity webhook] OK", { action, command: spawn.command, serverId: server.id });
+    audit("tikfinity", "webhook.trigger", {
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      action,
+      serverId: server.id,
+      command: spawn.command,
+    }).catch(() => {});
+
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        action: "npcmaxx" as TikTriggerAction,
+        viewerName: payload.viewerName,
+        giftName: payload.giftName,
+        command: spawn.command,
+        debug:
+          "npcmaxx.spawn sent. If the bot did not appear: check RoamingNPCs template exists and Enable, and server console for [NPCMaxx].",
+      })
+    );
   }
 
-  if (giftValue > 0 && action !== "npcmaxx") {
+  const command =
+    messageArg != null
+      ? `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
+      : `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue}`;
+
+  if (giftValue > 0) {
     console.log("[tikfinity webhook] scrap:", giftValue, "fromConnection:", scrapFromConnection, "fromPayload:", fromPayload, "giftName:", payload.giftName);
   }
 
@@ -362,24 +511,12 @@ async function runWebhook(request: NextRequest, body: unknown) {
       action,
       serverId: server.id,
     }).catch(() => {});
-    if (action === "npcmaxx" && npcTemplateKeyResolved) {
-      await insertRnpcSpawnEvent({
-        serverId: server.id,
-        connectionId: connectionFromAdmin?.id ?? null,
-        tikfinityEventName: tikfinityEventNameForLog,
-        viewerName: payload.viewerName,
-        templateKey: npcTemplateKeyResolved,
-        command,
-        status: "failed",
-        errorMessage: connected.error ?? "RCON connect failed",
-      }).catch(() => {});
-    }
     return withCors(
       NextResponse.json(
         {
           ok: false,
           error: "Could not connect to game server",
-          debug: connected.error ?? "Check RCON: in dashboard set the server's RCON host (IP), port (often 28082 for WebRcon), and password.",
+          debug: connectedErrorDebug(),
           step: "rcon_connect",
           command: command,
         },
@@ -400,27 +537,12 @@ async function runWebhook(request: NextRequest, body: unknown) {
       serverId: server.id,
       command,
     }).catch(() => {});
-    if (action === "npcmaxx" && npcTemplateKeyResolved) {
-      await insertRnpcSpawnEvent({
-        serverId: server.id,
-        connectionId: connectionFromAdmin?.id ?? null,
-        tikfinityEventName: tikfinityEventNameForLog,
-        viewerName: payload.viewerName,
-        templateKey: npcTemplateKeyResolved,
-        command,
-        status: "failed",
-        errorMessage: result.error ?? "RCON send failed",
-      }).catch(() => {});
-    }
     return withCors(
       NextResponse.json(
         {
           ok: false,
           error: result.error ?? "Command send failed",
-          debug:
-            action === "npcmaxx"
-              ? "RCON connected but run failed. Check NPCMaxx + RoamingNPCs plugins and template key."
-              : "RCON connected but run failed. Check server has RustChaos plugin loaded.",
+          debug: "RCON connected but run failed. Check server has RustChaos plugin loaded.",
           step: "rcon_send",
           command,
         },
@@ -436,19 +558,8 @@ async function runWebhook(request: NextRequest, body: unknown) {
     action,
     serverId: server.id,
     command,
-    scrapAmount: action !== "npcmaxx" && giftValue ? giftValue : undefined,
+    scrapAmount: giftValue ? giftValue : undefined,
   }).catch(() => {});
-  if (action === "npcmaxx" && npcTemplateKeyResolved) {
-    await insertRnpcSpawnEvent({
-      serverId: server.id,
-      connectionId: connectionFromAdmin?.id ?? null,
-      tikfinityEventName: tikfinityEventNameForLog,
-      viewerName: payload.viewerName,
-      templateKey: npcTemplateKeyResolved,
-      command,
-      status: "success",
-    }).catch(() => {});
-  }
 
   return withCors(
     NextResponse.json({
@@ -461,4 +572,8 @@ async function runWebhook(request: NextRequest, body: unknown) {
       debug: "Command sent. If scientist did not spawn: streamer must be online, plugin config StreamerName must match in-game name, and check server console for [RustChaos].",
     })
   );
+}
+
+function connectedErrorDebug(): string {
+  return "Check RCON: in dashboard set the server's RCON host (IP), port (often 28082 for WebRcon), and password.";
 }
