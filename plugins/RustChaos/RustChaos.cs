@@ -19,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.17")]
+    [Info("RustChaos", "RustMaxx", "1.15.18")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -99,6 +99,8 @@ namespace Oxide.Plugins
         {
             _soloWildLeashTimer?.Destroy();
             _soloWildLeashTimer = null;
+            _soloWildHumanNpcSteerTimer?.Destroy();
+            _soloWildHumanNpcSteerTimer = null;
             _soloWildAnimalIds = null;
             _soloWildStreamerUserId = 0ul;
             _reviveChaosProtectUntil.Clear();
@@ -200,6 +202,8 @@ namespace Oxide.Plugins
         private HashSet<NetworkableId> _soloWildAnimalIds;
         private ulong _soloWildStreamerUserId;
         private Timer _soloWildLeashTimer;
+        /// <summary>Scientists use Brain.Navigator like chaos wave — 1s leash tick is too slow; mirror 0.4s steer.</summary>
+        private Timer _soloWildHumanNpcSteerTimer;
         private int _chaosWaveTargetBearCount;
         private int _chaosWaveSpawnedBearCount;
         private int _chaosWaveKilledBearCount;
@@ -1703,6 +1707,41 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>
+        /// Solo scientist (and any solo HumanNPC/NPCPlayer): chaos wave steers these every 0.4s; solo path only had 1s leash and skipped steer when inside leash — they stood still.
+        /// </summary>
+        private void CheckSoloWildHumanNpcSteer()
+        {
+            if (_soloWildAnimalIds == null || _soloWildAnimalIds.Count == 0)
+            {
+                _soloWildHumanNpcSteerTimer?.Destroy();
+                _soloWildHumanNpcSteerTimer = null;
+                return;
+            }
+
+            if (!TryGetSoloWildStreamerPosition(out Vector3 streamerPos))
+            {
+                CleanupSoloWildAnimalsAndStop();
+                return;
+            }
+
+            var ids = new List<NetworkableId>(_soloWildAnimalIds);
+            foreach (var nid in ids)
+            {
+                try
+                {
+                    var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    if (ent == null || ent.IsDestroyed) continue;
+                    if (!TryChaosWaveSteerHumanNpcToward(ent, streamerPos))
+                        TryChaosWaveSteerAnimalNavTowardStream(ent, streamerPos);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+        }
+
         private bool TryGetSoloWildStreamerPosition(out Vector3 pos)
         {
             pos = default;
@@ -1724,12 +1763,16 @@ namespace Oxide.Plugins
             if (_soloWildLeashTimer != null) return;
             float leash = Mathf.Clamp(_config?.ChaosWaveBearLeashDistance ?? 18f, 5f, 80f);
             _soloWildLeashTimer = timer.Repeat(1f, 0, () => CheckSoloWildLeash(leash));
+            if (_soloWildHumanNpcSteerTimer == null)
+                _soloWildHumanNpcSteerTimer = timer.Repeat(0.4f, 0, CheckSoloWildHumanNpcSteer);
         }
 
         private void StopSoloWildLeashTimer()
         {
             _soloWildLeashTimer?.Destroy();
             _soloWildLeashTimer = null;
+            _soloWildHumanNpcSteerTimer?.Destroy();
+            _soloWildHumanNpcSteerTimer = null;
             _soloWildAnimalIds = null;
             _soloWildStreamerUserId = 0ul;
         }
@@ -1785,14 +1828,9 @@ namespace Oxide.Plugins
                         continue;
                     }
 
+                    // Human NPCs (scientists): steered every 0.4s in CheckSoloWildHumanNpcSteer (same as chaos wave).
                     if (ent is HumanNPC || ent is NPCPlayer)
-                    {
-                        // Let scientist AI choose cover/evade naturally; only leash-correct when they stray too far.
-                        Vector3 dh = ent.transform.position - streamerPos;
-                        if (dh.sqrMagnitude > leashSqr)
-                            TryChaosWaveSteerHumanNpcToward(ent, streamerPos);
                         continue;
-                    }
 
                     TryChaosWaveSteerAnimalNavTowardStream(ent, streamerPos);
 
@@ -1894,19 +1932,6 @@ namespace Oxide.Plugins
                 BasePlayer s = FindConnectedPlayerByUserId(sid);
                 if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
                 TryProvokeChaosWaveEnemy(e, s);
-            });
-
-            // Some scientist variants can idle on spawn until threat/nav updates settle.
-            // Short activation burst: repeat aggro + light steer pulses, then stop.
-            timer.Repeat(1f, 8, () =>
-            {
-                BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
-                BasePlayer s = FindConnectedPlayerByUserId(sid);
-                if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
-                TryProvokeChaosWaveEnemy(e, s);
-                Vector3 d = e.transform.position - s.transform.position;
-                if (d.sqrMagnitude > (7f * 7f))
-                    TryChaosWaveSteerHumanNpcToward(e, s.transform.position);
             });
             return true;
         }
