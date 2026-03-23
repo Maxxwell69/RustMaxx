@@ -32,7 +32,20 @@ Set on the **RustMaxx web** service:
 
 ### Template key (what to put in `CREW_RNPC_TEMPLATE_KEY`)
 
-It must match a **key** under **Bots settings** / `bots` in your RoamingNPCs JSON on the **game server** (not RustMaxx). The plugin default example is `bob_resources_farmer`. Wrong key → spawn fails in NPCMaxx.
+It must match a **key** under **`"Bots settings"`** in your RoamingNPCs JSON on the **game server** (same structure as the reference file in this repo).
+
+**Reference config in this repo:** [`plugins/RoamingNpc/config/RoamingNPCs.json`](../plugins/RoamingNpc/config/RoamingNPCs.json) — see also [`plugins/RoamingNpc/config/README.md`](../plugins/RoamingNpc/config/README.md).
+
+**Template keys in that file** (copy the string exactly):
+
+| Key | Notes |
+|-----|--------|
+| `bob_resources_farmer` | Default gather/resource bot |
+| `john_looter` | Looter preset |
+| `alfred_hunter` | Hunter preset |
+| `austin_fighter` | Fighter preset |
+
+Wrong key or disabled bot → `npcmaxx.spawn` fails on the server.
 
 Redeploy after changing env vars.
 
