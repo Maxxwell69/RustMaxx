@@ -19,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.16")]
+    [Info("RustChaos", "RustMaxx", "1.15.17")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -297,9 +297,7 @@ namespace Oxide.Plugins
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_oilrig.prefab",
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
-            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
-            "assets/prefabs/npc/scientist/scientist.prefab",
-            "assets/content/npc/scientist/scientist.prefab"
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab"
         };
 
         #endregion
@@ -430,6 +428,8 @@ namespace Oxide.Plugins
                             Vector3 pos = GetSingleSpawnPosition(current);
                             if (pos != Vector3.zero && TrySpawnSingleScientist(current, pos))
                                 Puts($"{LogPrefix} Spawned 1 scientist near {current.displayName}");
+                            else
+                                PrintWarning($"{LogPrefix} Single scientist spawn failed (combat scientist prefabs).");
                         });
                     }
                     break;
