@@ -153,9 +153,10 @@ Invoke-RestMethod -Uri "https://rustmaxx.com/api/tikfinity/webhook?event=join" `
 
 ## 10. Configure TikFinity
 
-1. **Gifts / RustChaos:** create actions with **Trigger WebHook** → use per-action URLs from the admin page (e.g. `?action=wolf`) or **TikFinity connections** (event name → server action).
-2. **Viewer joined LIVE:** separate action → URL with `?event=join` (same base webhook path).
-3. Ensure TikFinity sends JSON that includes subscriber/team fields if you rely on the crew gate.
+1. **Spawn roaming NPC on a trigger (gift, goal, etc.):** In RustMaxx **Admin → Streamer interactions**, use **Spawn roaming NPC — TikFinity trigger → bot on server**: pick the template key, click **Copy spawn URL**, and paste that **full URL** (includes `?action=npcmaxx&template=...`) into TikFinity → New Action → **Trigger WebHook**. When the action fires, the webhook runs and your server receives `npcmaxx.spawn`.
+2. **Gifts / RustChaos:** use the per-action URL chips (e.g. `?action=wolf`) or **TikFinity connections** (event name → server action).
+3. **Viewer joined LIVE:** separate action → URL with `?event=join` (crew registry).
+4. If **NPCMAXX_REQUIRE_CREW_REGISTRY** is on, roaming spawns only work for viewers already in the crew registry; include `userId` / `uniqueId` in TikFinity payloads.
 
 ---
 

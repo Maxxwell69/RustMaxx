@@ -7,6 +7,14 @@ import {
   rustmaxxTikfinityWebhookUrl,
 } from "@/lib/rustmaxx-public-url";
 
+/** Keys under RoamingNPCs.json → Bots settings — must match server config. */
+const ROAMING_TEMPLATE_KEYS = [
+  "bob_resources_farmer",
+  "john_looter",
+  "alfred_hunter",
+  "austin_fighter",
+] as const;
+
 type ActionMeta = {
   action: string;
   label: string;
@@ -87,6 +95,9 @@ export default function AdminStreamerInteractionsPage() {
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingCrewId, setDeletingCrewId] = useState<string | null>(null);
+  const [tikfinitySpawnTemplate, setTikfinitySpawnTemplate] = useState<string>(
+    ROAMING_TEMPLATE_KEYS[0]
+  );
 
   const ALLOWED_ROLES = ["admin", "super_admin"];
 
@@ -229,10 +240,14 @@ export default function AdminStreamerInteractionsPage() {
   const webhookActions = data.availableActions.filter(
     (a) => !WEBHOOK_HIDDEN_ACTIONS.includes(a.action)
   );
+  /** Chips: hide npcmaxx — use the dedicated spawn URL block (needs template). */
+  const webhookActionChips = webhookActions.filter((a) => a.action !== "npcmaxx");
 
-  /** Live URL from APP_URL, or rustmaxx.com example so copy/paste always works. */
+  /** Live webhook base URL. */
   const webhookUrl = data.webhookUrl ?? rustmaxxTikfinityWebhookUrl();
-  const webhookUrlIsFromEnv = Boolean(data.webhookUrl);
+  const spawnNpcWebhookUrl = `${webhookUrl}?action=npcmaxx&template=${encodeURIComponent(
+    tikfinitySpawnTemplate
+  )}`;
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 p-6">
@@ -246,27 +261,18 @@ export default function AdminStreamerInteractionsPage() {
       </div>
 
       <p className="text-zinc-400">
-        Production site: <strong className="text-zinc-300">{RUSTMAXX_ORIGIN}</strong>. Use this URL in
-        TikFinity when creating an action: choose <strong>Trigger WebHook</strong> and set the webhook
-        URL below (or the same path on your host if <code className="rounded bg-zinc-800 px-1">APP_URL</code>{" "}
-        points elsewhere). Gifts are mapped to RustChaos actions as shown in the tables.
+        Public site: <strong className="text-zinc-300">{RUSTMAXX_ORIGIN}</strong>. In TikFinity, use{" "}
+        <strong>Trigger WebHook</strong> and paste the URLs below. Gifts map to RustChaos; roaming bots
+        use the spawn URL or a connection (event name → Roaming NPC).
       </p>
 
       {/* Webhook URL */}
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="text-lg font-medium text-zinc-200">Webhook URL (for TikFinity)</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Paste this in TikFinity → New Action → Trigger WebHook → URL
+          Base URL — use the <strong className="text-zinc-400">spawn roaming NPC</strong> block for bots, or
+          TikFinity connections when the event name is sent in the body.
         </p>
-        {!webhookUrlIsFromEnv && (
-          <p className="mt-2 rounded-lg border border-amber-800/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-100/90">
-            <code className="rounded bg-zinc-800 px-1">APP_URL</code> is not set in this environment, so
-            the URL below uses the public example{" "}
-            <code className="rounded bg-zinc-800 px-1">{rustmaxxTikfinityWebhookUrl()}</code>. On Railway,
-            set <code className="rounded bg-zinc-800 px-1">APP_URL={RUSTMAXX_ORIGIN}</code> (no trailing
-            slash) so this matches your live site.
-          </p>
-        )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <code className="flex-1 break-all rounded bg-zinc-800 px-3 py-2 text-sm text-zinc-300">
             {webhookUrl}
@@ -279,10 +285,65 @@ export default function AdminStreamerInteractionsPage() {
             {copied ? "Copied" : "Copy"}
           </button>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">
-          Ensure <code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code> is set in your
-          server environment so the webhook knows which Rust server to send commands to.
-        </p>
+
+        <div className="mt-5 rounded-xl border border-rust-cyan/35 bg-rust-cyan/5 p-4">
+          <h3 className="text-base font-semibold text-zinc-100">
+            Spawn roaming NPC — TikFinity trigger → bot on server
+          </h3>
+          <p className="mt-2 text-sm text-zinc-400">
+            Paste this <strong className="text-zinc-300">full URL</strong> into TikFinity → New Action →
+            Trigger WebHook. When the action runs, RustMaxx sends{" "}
+            <code className="rounded bg-zinc-800 px-1">npcmaxx.spawn</code> to your Rust server (from{" "}
+            <code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code>) and the roaming NPC is
+            created with the viewer name from the TikFinity payload.
+          </p>
+          {data.tikfinityFeatures?.npcmaxxRequireCrewRegistry && (
+            <p className="mt-2 rounded border border-amber-800/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-100/95">
+              <strong>Crew gate is on</strong> (<code className="rounded bg-zinc-900 px-1">NPCMAXX_REQUIRE_CREW_REGISTRY</code>
+              ): this spawn only works if that viewer is already in the crew registry (use the join URL
+              first), and the payload must include <code className="rounded bg-zinc-900 px-1">userId</code> /{" "}
+              <code className="rounded bg-zinc-900 px-1">uniqueId</code>.
+            </p>
+          )}
+          <div className="mt-4 max-w-xl">
+            <label className="block text-xs text-zinc-500">Roaming template key (must match <code className="rounded bg-zinc-800 px-1">Bots settings</code> on your server)</label>
+            <input
+              type="text"
+              list="roaming-template-keys"
+              value={tikfinitySpawnTemplate}
+              onChange={(e) => setTikfinitySpawnTemplate(e.target.value)}
+              className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-200"
+              placeholder="bob_resources_farmer"
+            />
+            <datalist id="roaming-template-keys">
+              {ROAMING_TEMPLATE_KEYS.map((k) => (
+                <option key={k} value={k} />
+              ))}
+            </datalist>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-rust-cyan">
+              {spawnNpcWebhookUrl}
+            </code>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(spawnNpcWebhookUrl);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="shrink-0 rounded bg-rust-cyan/25 px-4 py-2 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/35"
+            >
+              {copied ? "Copied" : "Copy spawn URL"}
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-zinc-500">
+            If you use <strong className="text-zinc-400">TikFinity connections</strong> instead, add a row
+            with server action <strong className="text-zinc-400">Roaming NPC (viewer bot)</strong> and the
+            same template key — then TikFinity can call the <strong>base</strong> webhook URL and match the
+            event name; no <code className="rounded bg-zinc-800 px-1">?action=</code> needed.
+          </p>
+        </div>
         {data.tikfinityFeatures && (
           <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-400">
             <p className="font-medium text-zinc-300">RNPC automation (env)</p>
@@ -310,9 +371,9 @@ export default function AdminStreamerInteractionsPage() {
             </ul>
           </div>
         )}
-            <h3 className="mt-4 text-sm font-medium text-zinc-300">Per-action URLs (by event name)</h3>
+            <h3 className="mt-4 text-sm font-medium text-zinc-300">Per-action URLs (RustChaos)</h3>
             <p className="mt-1 text-xs text-zinc-500">
-              Use a dedicated URL so the server runs the right trigger. Add <code className="rounded bg-zinc-800 px-1">?action=scientist</code>, <code className="rounded bg-zinc-800 px-1">?action=wolf</code>, <code className="rounded bg-zinc-800 px-1">?action=bear</code>, etc. For Roaming NPC bots, use <code className="rounded bg-zinc-800 px-1">?action=npcmaxx&amp;template=your_roaming_template_key</code> or a TikFinity connection (event name → Roaming NPC) with the template key saved below.
+              Quick-copy <code className="rounded bg-zinc-800 px-1">?action=...</code> for scientists, wolves, etc. Roaming NPCs use the <strong className="text-zinc-400">spawn roaming NPC</strong> section above (not these chips).
             </p>
             <h3 className="mt-4 text-sm font-medium text-zinc-300">Crew (subscriber) — join the LIVE</h3>
             <p className="mt-1 text-xs text-zinc-500">
@@ -345,7 +406,7 @@ Invoke-RestMethod -Uri "${webhookUrl}?event=join" -Method POST -ContentType "app
               </p>
             </details>
             <ul className="mt-2 flex flex-wrap gap-2">
-              {webhookActions.map((a) => (
+              {webhookActionChips.map((a) => (
                 <li key={a.action}>
                   <button
                     type="button"
