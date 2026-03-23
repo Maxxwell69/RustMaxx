@@ -19,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.12")]
+    [Info("RustChaos", "RustMaxx", "1.15.13")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -408,6 +408,7 @@ namespace Oxide.Plugins
                     else
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        GiveScrapToPlayer(target, 10);
                         ScheduleDelayedSingleSpawn("scientist", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -427,7 +428,7 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GivePistolAndAmmoToStreamerBelt(current, "Wolf gift");
+                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnSoloWildAnimal(current, WolfPrefab, "wolf"))
                                 Puts($"{LogPrefix} Spawned 1 wolf near {current.displayName}");
                             else
@@ -444,7 +445,7 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GivePistolAndAmmoToStreamerBelt(current, "Bear gift");
+                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnSoloWildAnimal(current, BearPrefab, "bear"))
                                 Puts($"{LogPrefix} Spawned 1 bear near {current.displayName}");
                             else
@@ -461,7 +462,7 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GivePistolAndAmmoToStreamerBelt(current, "Tiger spawn");
+                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnTigerOneNearStreamer(current))
                                 Puts($"{LogPrefix} Spawned 1 tiger near {current.displayName}");
                             else
@@ -481,7 +482,7 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GivePistolAndAmmoToStreamerBelt(current, "Panther spawn");
+                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnPantherOneNearStreamer(current))
                                 Puts($"{LogPrefix} Spawned 1 panther near {current.displayName}");
                             else
@@ -497,44 +498,16 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         float amount = Mathf.Max(0f, _config?.HealingHandsAmount ?? 10f);
-                        float maxHealth = target.MaxHealth();
+                        GiveScrapToPlayer(target, 10);
                         // Always show who gave healing in chat (custom TikFinity message must not hide the giver).
                         string HealingHandsChat(string defaultLine)
                         {
                             if (string.IsNullOrEmpty(customMessage)) return defaultLine;
                             return $"{viewerName} → {target.displayName}: {customMessage}";
                         }
-                        // If already topped off, Heal() would do nothing useful — random small loot.
-                        if (target.health >= maxHealth - 0.01f)
-                        {
-                            int roll = UnityEngine.Random.Range(0, 3);
-                            string itemShort;
-                            string giftLabel;
-                            switch (roll)
-                            {
-                                case 0:
-                                    itemShort = "bandage";
-                                    giftLabel = "1 bandage";
-                                    break;
-                                case 1:
-                                    itemShort = "ammo.pistol";
-                                    giftLabel = "1 pistol bullet";
-                                    break;
-                                default:
-                                    itemShort = "wolfmeat.raw";
-                                    giftLabel = "1 meat";
-                                    break;
-                            }
-                            GiveItemToPlayer(target, itemShort, 1);
-                            BroadcastChat(HealingHandsChat($"{viewerName} gave HEALING HANDS to {target.displayName}! {giftLabel} (already full health)"));
-                            Puts($"{LogPrefix} Healing Hands: {target.displayName} at full health, gave {giftLabel} ({itemShort}) from {viewerName}");
-                        }
-                        else
-                        {
-                            target.Heal(amount);
-                            BroadcastChat(HealingHandsChat($"{viewerName} gave HEALING HANDS to {target.displayName}! +{amount:0} health"));
-                            Puts($"{LogPrefix} Healed streamer {target.displayName} by {amount} (from {viewerName})");
-                        }
+                        target.Heal(amount);
+                        BroadcastChat(HealingHandsChat($"{viewerName} gave HEALING HANDS to {target.displayName}! +{amount:0} health +10 scrap"));
+                        Puts($"{LogPrefix} Healing Hands: healed {target.displayName} by {amount} and gave 10 scrap (from {viewerName})");
                     }
                     break;
 
@@ -611,7 +584,7 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GivePistolAndAmmoToStreamerBelt(current, "Shark gift");
+                            GiveScrapToPlayer(current, 10);
                             Vector3 sharkPos = GetSingleSpawnPosition(current);
                             if (TrySpawnSharkGiftWithLeash(current, sharkPos, _config?.SharkPrefabPath))
                                 Puts($"{LogPrefix} Spawned 1 shark near {current.displayName}");
@@ -629,7 +602,7 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GivePistolAndAmmoToStreamerBelt(current, "Pig gift");
+                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnSoloWildAnimal(current, BoarPrefab, "pig"))
                                 Puts($"{LogPrefix} Spawned 1 pig (boar) near {current.displayName}");
                             else
