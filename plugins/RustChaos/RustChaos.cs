@@ -19,7 +19,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.11")]
+    [Info("RustChaos", "RustMaxx", "1.15.12")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -83,6 +83,7 @@ namespace Oxide.Plugins
 
         /// <summary>After Revive Chaos: re-clear bleed + full-heal each metabolism tick; block Fall hits; resync position — all for this window so delayed bleed/fall from the original knockdown cannot kill the streamer.</summary>
         private const float ReviveChaosProtectSeconds = 12f;
+        private const float SingleSpawnDelaySeconds = 10f;
         private readonly Dictionary<ulong, float> _reviveChaosProtectUntil = new Dictionary<ulong, float>();
 
         private void Init()
@@ -407,10 +408,14 @@ namespace Oxide.Plugins
                     else
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        Vector3 pos = GetPositionBehind(target);
-                        if (pos == Vector3.zero) pos = GetPositionNear(target);
-                        if (pos != Vector3.zero && SpawnScientist(pos))
-                            Puts($"{LogPrefix} Spawned 1 scientist near {target.displayName}");
+                        ScheduleDelayedSingleSpawn("scientist", target.userID, () =>
+                        {
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            Vector3 pos = GetSingleSpawnPosition(current);
+                            if (pos != Vector3.zero && SpawnScientist(pos))
+                                Puts($"{LogPrefix} Spawned 1 scientist near {current.displayName}");
+                        });
                     }
                     break;
 
@@ -418,11 +423,16 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        GivePistolAndAmmoToStreamerBelt(target, "Wolf gift");
-                        if (TrySpawnSoloWildAnimal(target, WolfPrefab, "wolf"))
-                            Puts($"{LogPrefix} Spawned 1 wolf near {target.displayName}");
-                        else
-                            PrintWarning($"{LogPrefix} Wolf spawn failed (CreateEntity).");
+                        ScheduleDelayedSingleSpawn("wolf", target.userID, () =>
+                        {
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            GivePistolAndAmmoToStreamerBelt(current, "Wolf gift");
+                            if (TrySpawnSoloWildAnimal(current, WolfPrefab, "wolf"))
+                                Puts($"{LogPrefix} Spawned 1 wolf near {current.displayName}");
+                            else
+                                PrintWarning($"{LogPrefix} Wolf spawn failed (CreateEntity).");
+                        });
                     }
                     break;
 
@@ -430,11 +440,16 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        GivePistolAndAmmoToStreamerBelt(target, "Bear gift");
-                        if (TrySpawnSoloWildAnimal(target, BearPrefab, "bear"))
-                            Puts($"{LogPrefix} Spawned 1 bear near {target.displayName}");
-                        else
-                            PrintWarning($"{LogPrefix} Bear spawn failed (CreateEntity).");
+                        ScheduleDelayedSingleSpawn("bear", target.userID, () =>
+                        {
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            GivePistolAndAmmoToStreamerBelt(current, "Bear gift");
+                            if (TrySpawnSoloWildAnimal(current, BearPrefab, "bear"))
+                                Puts($"{LogPrefix} Spawned 1 bear near {current.displayName}");
+                            else
+                                PrintWarning($"{LogPrefix} Bear spawn failed (CreateEntity).");
+                        });
                     }
                     break;
 
@@ -442,14 +457,19 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        GivePistolAndAmmoToStreamerBelt(target, "Tiger spawn");
-                        if (TrySpawnTigerOneNearStreamer(target))
-                            Puts($"{LogPrefix} Spawned 1 tiger near {target.displayName}");
-                        else
+                        ScheduleDelayedSingleSpawn("tiger", target.userID, () =>
                         {
-                            BroadcastChat(ChatMsg($"{viewerName} sent a tiger but spawn failed — set TigerPrefabPath in RustChaos.json."));
-                            PrintWarning($"{LogPrefix} Tiger spawn failed (all prefab candidates).");
-                        }
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            GivePistolAndAmmoToStreamerBelt(current, "Tiger spawn");
+                            if (TrySpawnTigerOneNearStreamer(current))
+                                Puts($"{LogPrefix} Spawned 1 tiger near {current.displayName}");
+                            else
+                            {
+                                BroadcastChat(ChatMsg($"{viewerName} sent a tiger but spawn failed — set TigerPrefabPath in RustChaos.json."));
+                                PrintWarning($"{LogPrefix} Tiger spawn failed (all prefab candidates).");
+                            }
+                        });
                     }
                     break;
 
@@ -457,14 +477,19 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        GivePistolAndAmmoToStreamerBelt(target, "Panther spawn");
-                        if (TrySpawnPantherOneNearStreamer(target))
-                            Puts($"{LogPrefix} Spawned 1 panther near {target.displayName}");
-                        else
+                        ScheduleDelayedSingleSpawn("panther", target.userID, () =>
                         {
-                            BroadcastChat(ChatMsg($"{viewerName} sent a panther but spawn failed — set PantherPrefabPath in RustChaos.json."));
-                            PrintWarning($"{LogPrefix} Panther spawn failed (all prefab candidates).");
-                        }
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            GivePistolAndAmmoToStreamerBelt(current, "Panther spawn");
+                            if (TrySpawnPantherOneNearStreamer(current))
+                                Puts($"{LogPrefix} Spawned 1 panther near {current.displayName}");
+                            else
+                            {
+                                BroadcastChat(ChatMsg($"{viewerName} sent a panther but spawn failed — set PantherPrefabPath in RustChaos.json."));
+                                PrintWarning($"{LogPrefix} Panther spawn failed (all prefab candidates).");
+                            }
+                        });
                     }
                     break;
 
@@ -582,12 +607,17 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        GivePistolAndAmmoToStreamerBelt(target, "Shark gift");
-                        Vector3 sharkPos = GetPositionNear(target);
-                        if (TrySpawnSharkGiftWithLeash(target, sharkPos, _config?.SharkPrefabPath))
-                            Puts($"{LogPrefix} Spawned 1 shark near {target.displayName}");
-                        else
-                            PrintWarning($"{LogPrefix} Shark spawn failed. Set SharkPrefabPath in RustChaos.json if needed.");
+                        ScheduleDelayedSingleSpawn("shark", target.userID, () =>
+                        {
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            GivePistolAndAmmoToStreamerBelt(current, "Shark gift");
+                            Vector3 sharkPos = GetSingleSpawnPosition(current);
+                            if (TrySpawnSharkGiftWithLeash(current, sharkPos, _config?.SharkPrefabPath))
+                                Puts($"{LogPrefix} Spawned 1 shark near {current.displayName}");
+                            else
+                                PrintWarning($"{LogPrefix} Shark spawn failed. Set SharkPrefabPath in RustChaos.json if needed.");
+                        });
                     }
                     break;
 
@@ -595,11 +625,16 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        GivePistolAndAmmoToStreamerBelt(target, "Pig gift");
-                        if (TrySpawnSoloWildAnimal(target, BoarPrefab, "pig"))
-                            Puts($"{LogPrefix} Spawned 1 pig (boar) near {target.displayName}");
-                        else
-                            PrintWarning($"{LogPrefix} Pig spawn failed (CreateEntity).");
+                        ScheduleDelayedSingleSpawn("pig", target.userID, () =>
+                        {
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            GivePistolAndAmmoToStreamerBelt(current, "Pig gift");
+                            if (TrySpawnSoloWildAnimal(current, BoarPrefab, "pig"))
+                                Puts($"{LogPrefix} Spawned 1 pig (boar) near {current.displayName}");
+                            else
+                                PrintWarning($"{LogPrefix} Pig spawn failed (CreateEntity).");
+                        });
                     }
                     break;
 
@@ -886,7 +921,7 @@ namespace Oxide.Plugins
             if (def == null) return;
             Item item = ItemManager.Create(def, amount, 0ul);
             if (item == null) return;
-            item.MoveToContainer(player.inventory.containerMain);
+            GiveOrDropItem(player, item, player.inventory.containerMain);
         }
 
         /// <summary>
@@ -901,7 +936,37 @@ namespace Oxide.Plugins
             if (scrapDef == null) return;
             Item item = ItemManager.Create(scrapDef, give, 0ul);
             if (item == null) return;
-            item.MoveToContainer(player.inventory.containerMain);
+            GiveOrDropItem(player, item, player.inventory.containerMain);
+        }
+
+        /// <summary>If preferred container is full, try other inventory containers; if all full, drop at the player's feet.</summary>
+        private static void GiveOrDropItem(BasePlayer player, Item item, ItemContainer preferredContainer)
+        {
+            if (player == null || !player.IsValid() || item == null) return;
+
+            bool moved = false;
+            try
+            {
+                if (preferredContainer != null)
+                    moved = item.MoveToContainer(preferredContainer);
+                if (!moved && player.inventory?.containerMain != null)
+                    moved = item.MoveToContainer(player.inventory.containerMain);
+                if (!moved && player.inventory?.containerBelt != null)
+                    moved = item.MoveToContainer(player.inventory.containerBelt);
+                if (!moved && player.inventory?.containerWear != null)
+                    moved = item.MoveToContainer(player.inventory.containerWear);
+            }
+            catch
+            {
+                moved = false;
+            }
+
+            if (!moved)
+            {
+                Vector3 dropPos = player.transform.position + new Vector3(0f, 0.8f, 0f);
+                Vector3 dropVel = player.transform.forward * 1.5f;
+                item.Drop(dropPos, dropVel);
+            }
         }
 
         /// <summary>RecoverFromWounded() can leave bleeding (and related attrs) active; clear all *bleed* metabolism channels.</summary>
@@ -975,6 +1040,33 @@ namespace Oxide.Plugins
             offset.Normalize();
             float distance = 8f + UnityEngine.Random.Range(0f, 4f);
             return pos + offset * distance;
+        }
+
+        /// <summary>Spawn single gifts close enough to stay inside leash behavior and quickly engage the streamer.</summary>
+        private Vector3 GetSingleSpawnPosition(BasePlayer player)
+        {
+            if (player == null || !player.IsValid()) return Vector3.zero;
+            float leash = Mathf.Max(8f, _config?.ChaosWaveBearLeashDistance ?? 18f);
+            float maxRadius = Mathf.Max(7f, Mathf.Min(leash - 1f, leash));
+            Vector3 pos = GetPositionWithinRadius(player, 6f, maxRadius);
+            if (pos == Vector3.zero) pos = GetPositionNear(player);
+            return pos;
+        }
+
+        private void ScheduleDelayedSingleSpawn(string actionName, ulong userId, Action spawnAction)
+        {
+            if (spawnAction == null || userId == 0ul) return;
+            Puts($"{LogPrefix} Delaying '{actionName}' spawn by {SingleSpawnDelaySeconds:0}s.");
+            timer.Once(SingleSpawnDelaySeconds, () =>
+            {
+                BasePlayer target = FindConnectedPlayerByUserId(userId);
+                if (target == null || !target.IsValid())
+                {
+                    PrintWarning($"{LogPrefix} Delayed '{actionName}' spawn skipped: streamer offline.");
+                    return;
+                }
+                spawnAction();
+            });
         }
 
         /// <summary>
@@ -1327,7 +1419,7 @@ namespace Oxide.Plugins
         private bool TrySpawnTigerOneNearStreamer(BasePlayer streamer)
         {
             if (streamer == null || !streamer.IsValid()) return false;
-            Vector3 pos = GetPositionNear(streamer);
+            Vector3 pos = GetSingleSpawnPosition(streamer);
             if (pos == Vector3.zero) pos = streamer.transform.position;
             pos = SnapLandNpcSpawnToGround(pos);
             BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumerateTigerPrefabPaths(), pos);
@@ -1340,7 +1432,7 @@ namespace Oxide.Plugins
         private bool TrySpawnPantherOneNearStreamer(BasePlayer streamer)
         {
             if (streamer == null || !streamer.IsValid()) return false;
-            Vector3 pos = GetPositionNear(streamer);
+            Vector3 pos = GetSingleSpawnPosition(streamer);
             if (pos == Vector3.zero) pos = streamer.transform.position;
             pos = SnapLandNpcSpawnToGround(pos);
             BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumeratePantherPrefabPaths(), pos);
@@ -1774,7 +1866,7 @@ namespace Oxide.Plugins
         private bool TrySpawnSoloWildAnimal(BasePlayer streamer, string prefabPath, string logContext)
         {
             if (streamer == null || !streamer.IsValid() || string.IsNullOrEmpty(prefabPath)) return false;
-            Vector3 pos = GetPositionNear(streamer);
+            Vector3 pos = GetSingleSpawnPosition(streamer);
             if (pos == Vector3.zero) pos = streamer.transform.position;
             pos = SnapLandNpcSpawnToGround(pos);
             BaseEntity entity = GameManager.server.CreateEntity(prefabPath, pos, Quaternion.identity, true);
@@ -2157,7 +2249,7 @@ namespace Oxide.Plugins
             }
             Item item = ItemManager.Create(def, amount, 0ul);
             if (item == null) return;
-            item.MoveToContainer(player.inventory.containerMain);
+            GiveOrDropItem(player, item, player.inventory.containerMain);
         }
 
         private void GiveItemToBeltWithLog(BasePlayer player, int amount, string shortName, string context)
@@ -2172,7 +2264,7 @@ namespace Oxide.Plugins
             Item item = ItemManager.Create(def, amount, 0ul);
             if (item == null) return;
             // Belt is the typical "quick/arm" slot players expect for holding weapons.
-            item.MoveToContainer(player.inventory.containerBelt);
+            GiveOrDropItem(player, item, player.inventory.containerBelt);
         }
 
         private void GiveFirstItemWithLog(BasePlayer player, int amount, string[] candidates, string context)
@@ -2185,7 +2277,7 @@ namespace Oxide.Plugins
                 if (def == null) continue;
                 Item item = ItemManager.Create(def, amount, 0ul);
                 if (item == null) return;
-                item.MoveToContainer(player.inventory.containerMain);
+                GiveOrDropItem(player, item, player.inventory.containerMain);
                 return;
             }
             PrintWarning($"{LogPrefix} ChaosWave: none of the wall/med candidates were found ({context}).");
@@ -2201,7 +2293,7 @@ namespace Oxide.Plugins
                 if (def == null) continue;
                 Item item = ItemManager.Create(def, amount, 0ul);
                 if (item == null) return;
-                item.MoveToContainer(player.inventory.containerBelt);
+                GiveOrDropItem(player, item, player.inventory.containerBelt);
                 return;
             }
             PrintWarning($"{LogPrefix} ChaosWave: none of the belt item candidates were found ({context}).");
