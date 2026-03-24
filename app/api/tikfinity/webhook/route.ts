@@ -29,6 +29,7 @@ import {
   isCrewRegistered,
 } from "@/lib/crew-rnpc-registrations";
 import { npcmaxxRconSpawn } from "@/lib/npcmaxx-rcon";
+import { maxxinvadersRconSpawn } from "@/lib/maxxinvaders-rcon";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 
@@ -198,6 +199,37 @@ export async function OPTIONS() {
 /** Sanitize for RCON: no spaces (plugin expects three space-separated args). */
 function sanitizeArg(s: string, maxLen = 48): string {
   return s.replace(/\s+/g, "_").slice(0, maxLen) || "Viewer";
+}
+
+/** Tier / mode / kit for MaxxInvaders RCON spawn (query string overrides body). */
+function parseMaxxInvadersParams(
+  request: NextRequest,
+  body: unknown
+): { tier: number; mode: string; kit: string } {
+  let tier = 1;
+  let mode = "roaming";
+  let kit = "-";
+
+  if (body && typeof body === "object") {
+    const o = body as Record<string, unknown>;
+    if (typeof o.tier === "number" && Number.isFinite(o.tier)) tier = Math.trunc(o.tier);
+    else if (typeof o.tier === "string" && /^\d+$/.test(o.tier.trim()))
+      tier = parseInt(o.tier.trim(), 10);
+    if (typeof o.mode === "string" && o.mode.trim()) mode = o.mode.trim();
+    if (typeof o.kit === "string") kit = o.kit.trim() === "" ? "-" : o.kit.trim();
+  }
+
+  const tq = request.nextUrl.searchParams.get("tier")?.trim();
+  if (tq && /^\d+$/.test(tq)) tier = parseInt(tq, 10);
+
+  const mq = request.nextUrl.searchParams.get("mode")?.trim();
+  if (mq) mode = mq;
+
+  const kq = request.nextUrl.searchParams.get("kit");
+  if (kq !== null) kit = kq.trim() === "" ? "-" : kq.trim();
+
+  tier = Math.min(99, Math.max(1, Number.isFinite(tier) ? tier : 1));
+  return { tier, mode: mode.toLowerCase(), kit };
 }
 
 /** GET: same as POST but with empty body (action from ?action= e.g. ?action=scientist). Lets you test from browser or TikFinity GET. */
@@ -481,6 +513,117 @@ async function runWebhook(request: NextRequest, body: unknown) {
         command: spawn.command,
         debug:
           "npcmaxx.spawn sent. If the bot did not appear: check RoamingNPCs template exists and Enable, and server console for [NPCMaxx].",
+      })
+    );
+  }
+
+  if (action === "maxxinvaders") {
+    const { tier, mode, kit } = parseMaxxInvadersParams(request, body);
+    const viewerId =
+      extractTikTokUniqueIdFromBody(body) ??
+      `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+    if (NPCMAXX_REQUIRE_CREW_REGISTRY) {
+      const uid = extractTikTokUniqueIdFromBody(body);
+      if (!uid) {
+        audit("tikfinity", "webhook.skipped", {
+          reason: "maxxinvaders_requires_tiktok_id_for_crew_gate",
+          action,
+          serverId: server.id,
+        }).catch(() => {});
+        return withCors(
+          NextResponse.json({
+            ok: false,
+            skipped: true,
+            reason: "missing_tiktok_unique_id",
+            action: "maxxinvaders" as TikTriggerAction,
+            debug:
+              "NPCMAXX_REQUIRE_CREW_REGISTRY is on: include userId/uniqueId in the webhook body for a stable viewer id and crew check.",
+          })
+        );
+      }
+      const allowed = await isCrewRegistered(server.id, uid);
+      if (!allowed) {
+        audit("tikfinity", "webhook.skipped", {
+          reason: "not_in_crew_registry",
+          action,
+          serverId: server.id,
+          tiktokUniqueId: uid,
+        }).catch(() => {});
+        return withCors(
+          NextResponse.json({
+            ok: false,
+            skipped: true,
+            reason: "not_in_crew_registry",
+            action: "maxxinvaders" as TikTriggerAction,
+            debug:
+              "Viewer is not in the crew RNPC registry. They must hit the ?event=join webhook as a subscriber first, or turn off NPCMAXX_REQUIRE_CREW_REGISTRY.",
+          })
+        );
+      }
+    }
+
+    const spawnMi = await maxxinvadersRconSpawn({
+      server,
+      viewerDisplayName: payload.viewerName,
+      viewerId,
+      tier,
+      kit,
+      mode,
+      connectionId: connectionFromAdmin?.id ?? null,
+      tikfinityEventName: tikfinityEventNameForLog,
+    });
+
+    if (!spawnMi.ok) {
+      console.error("[tikfinity webhook] maxxinvaders RCON failed:", spawnMi.error);
+      audit("tikfinity", "webhook.failed", {
+        reason: spawnMi.step === "rcon_connect" ? "RCON connect failed" : "RCON send failed",
+        error: spawnMi.error,
+        viewerName: payload.viewerName,
+        giftName: payload.giftName,
+        action,
+        serverId: server.id,
+        command: spawnMi.command,
+      }).catch(() => {});
+      return withCors(
+        NextResponse.json(
+          {
+            ok: false,
+            error: spawnMi.error ?? "Command send failed",
+            debug:
+              spawnMi.step === "rcon_connect"
+                ? connectedErrorDebug()
+                : "RCON connected but maxxinvaders.spawn failed. Load MaxxInvaders + RoamingNPCs; check tier/mode and oxide/config/MaxxInvaders.json (ViewerRoamingTemplateKey).",
+            step: spawnMi.step,
+            command: spawnMi.command,
+          },
+          { status: 502 }
+        )
+      );
+    }
+
+    console.log("[tikfinity webhook] OK", { action, command: spawnMi.command, serverId: server.id });
+    audit("tikfinity", "webhook.trigger", {
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      action,
+      serverId: server.id,
+      command: spawnMi.command,
+    }).catch(() => {});
+
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        action: "maxxinvaders" as TikTriggerAction,
+        viewerName: payload.viewerName,
+        giftName: payload.giftName,
+        viewerId,
+        tier,
+        mode,
+        kit,
+        command: spawnMi.command,
+        debug:
+          "maxxinvaders.spawn sent. Webhook has no in-game anchor: ViewerRoamingTemplateKey spawns apply; streamer patrol/bodyguard need a player anchor (use in-game GUI spawn for that).",
       })
     );
   }

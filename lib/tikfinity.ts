@@ -31,6 +31,7 @@ export const TIKTRIGGER_ACTIONS = [
   "revivechaos",
   "chaosheli",
   "npcmaxx",
+  "maxxinvaders",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
@@ -282,6 +283,12 @@ export const ACTION_META: Record<
       "Spawns a Roaming NPC from your configured template with the viewer’s name (NPCMaxx + RoamingNPCs on the server). Set the Roaming template key when you add this connection — not a default gift map; use TikFinity connections or ?action=npcmaxx with a matching admin connection.",
     exampleGifts: ["Viewer NPC", "RoamingBot"],
   },
+  maxxinvaders: {
+    label: "MaxxInvaders viewer spawn",
+    description:
+      "Runs maxxinvaders.spawn over RCON (tier, kit, mode from MaxxInvaders.json). Uses ViewerRoamingTemplateKey for RoamingNPCs when set. Optional: ?tier=1&mode=roaming&kit=- or JSON body tier/mode/kit. Send TikTok uniqueId in the body for stable viewerId (dedupe/cooldown).",
+    exampleGifts: ["InvaderSpawn", "ViewerRaid"],
+  },
 };
 
 export function getActionForGift(giftName: string): TikTriggerAction | null {
@@ -471,6 +478,10 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   fullheal: "fullheal",
   revivechaos: "revivechaos",
   chaosheli: "chaosheli",
+  npcmaxx: "npcmaxx",
+  maxxinvaders: "maxxinvaders",
+  invaders: "maxxinvaders",
+  invader: "maxxinvaders",
 };
 
 /** Get raw action/event name from body (action, actionName, or event) for admin-connection lookup. */

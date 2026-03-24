@@ -66,6 +66,20 @@ curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=npcmaxx&template
 - **`502`** + `rcon_connect` → RCON from RustMaxx to the game server failed.
 - **`skipped` / `not_in_crew_registry`** → Turn off `NPCMAXX_REQUIRE_CREW_REGISTRY` or register the viewer with `?event=join` first and send `userId` in TikFinity payloads.
 
+### MaxxInvaders viewer spawn (`action=maxxinvaders`)
+
+Sends RCON `maxxinvaders.spawn` using **MaxxInvaders** + RoamingNPCs (set **`ViewerRoamingTemplateKey`** in `oxide/config/MaxxInvaders.json`). Defaults: **`tier=1`**, **`mode=roaming`**, **`kit=-`**. Query string (`tier`, `mode`, `kit`) overrides JSON body.
+
+```bash
+curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=maxxinvaders&tier=2&mode=roaming&kit=-" \
+  -X POST -H "Content-Type: application/json" \
+  -d "{\"viewerName\":\"CurlTest\",\"uniqueId\":\"tiktok_test_uid_123\"}"
+```
+
+With **`NPCMAXX_REQUIRE_CREW_REGISTRY`** on, include TikTok **`uniqueId`** or **`userId`** and register the viewer like npcmaxx. Connection event names **`maxxinvaders`**, **`invaders`**, and **`invader`** map to this action.
+
+Webhook spawns have **no in-game streamer anchor**; patrol/bodyguard tied to the streamer’s Steam ID need an in-game spawn path.
+
 ---
 
 ## 5. TikFinity-specific issues
