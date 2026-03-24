@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.6")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.7")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1701,6 +1701,8 @@ namespace Oxide.Plugins
             public string TierStr = "1";
             public string Kit = "-";
             public string Mode = "roaming";
+            public string RenameTarget = "";
+            public string RenameName = "";
 
             public SpawnDraft()
             {
@@ -2490,13 +2492,65 @@ namespace Oxide.Plugins
                 {
                     Text =
                     {
-                        Text =
-                            "Anchor: near you. Roaming spawns: kit ignored (template gear). Scientist fallback: kit needs Kits. Modes affect scientists / damage rules.",
-                        FontSize = 9,
-                        Align = TextAnchor.MiddleLeft,
+                        Text = "Rename active NPC (viewerId or INV id)",
+                        FontSize = 10,
+                        Align = TextAnchor.LowerLeft,
                         Color = "0.7 0.7 0.75 1",
                     },
-                    RectTransform = { AnchorMin = "0.38 0.06", AnchorMax = "0.97 0.19" },
+                    RectTransform = { AnchorMin = "0.38 0.14", AnchorMax = "0.97 0.2" },
+                },
+                spawnPanel);
+
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = spawnPanel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 64,
+                            Command = "maxxinvaders.gui draft renametarget",
+                            FontSize = 12,
+                            IsPassword = false,
+                            Text = draft.RenameTarget ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0.38 0.06", AnchorMax = "0.64 0.13" },
+                    },
+                });
+
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = spawnPanel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 64,
+                            Command = "maxxinvaders.gui draft renamename",
+                            FontSize = 12,
+                            IsPassword = false,
+                            Text = draft.RenameName ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0.65 0.06", AnchorMax = "0.86 0.13" },
+                    },
+                });
+
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui renameapply", Color = "0.25 0.4 0.55 0.95" },
+                    RectTransform = { AnchorMin = "0.87 0.06", AnchorMax = "0.97 0.13" },
+                    Text = { Text = "Rename", FontSize = 10 },
                 },
                 spawnPanel);
 
@@ -2670,6 +2724,19 @@ namespace Oxide.Plugins
                 return;
             }
 
+            if (args[0] == "renameapply")
+            {
+                var d = GetSpawnDraft(player.userID);
+                var key = d.RenameTarget?.Trim() ?? "";
+                var newName = d.RenameName?.Trim() ?? "";
+                if (RenameInvaderInternal(key, newName, out var renameErr))
+                    player.ChatMessage("[MaxxInvaders] Renamed.");
+                else
+                    player.ChatMessage($"[MaxxInvaders] Rename failed: {renameErr}");
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
             if (args[0] == "draft" && args.Length >= 2)
             {
                 var field = args[1].ToLowerInvariant();
@@ -2693,6 +2760,12 @@ namespace Oxide.Plugins
                         break;
                     case "mode":
                         d.Mode = string.IsNullOrWhiteSpace(value) ? "roaming" : value.Trim().ToLowerInvariant();
+                        break;
+                    case "renametarget":
+                        d.RenameTarget = string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+                        break;
+                    case "renamename":
+                        d.RenameName = string.IsNullOrWhiteSpace(value) ? "" : value;
                         break;
                 }
                 OpenGui(player, GetGuiPage(player.userID));
