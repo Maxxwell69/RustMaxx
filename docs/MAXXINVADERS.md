@@ -93,4 +93,5 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.1.1:** Admin **GUI** shows live RoamingNPCs bridge status (plugin loaded, default template key OK / missing / disabled) and lists each invader as **RoamingNPCs** vs **Scientist**. RoamingNPCs exposes **`IsBridgeTemplateReady`** for the check.
 - **1.1.0:** Optional **RoamingNPCs** bridge (`UseRoamingNPCsWhenAvailable`, `DefaultRoamingTemplateKey`, per-tier `RoamingTemplateKey`). Viewer bots use full roaming AI when the bridge succeeds.

@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.1.0")]
+    [Info("MaxxInvaders", "RustMaxx", "1.1.1")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -477,6 +477,63 @@ namespace Oxide.Plugins
             if (!string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey))
                 return _cfg.DefaultRoamingTemplateKey.Trim();
             return "bob_resources_farmer";
+        }
+
+        /// <summary>Multi-line status for admin GUI: RoamingNPCs load + default template key readiness.</summary>
+        private string BuildRoamingGuiStatusText()
+        {
+            var key = string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey)
+                ? "bob_resources_farmer"
+                : _cfg.DefaultRoamingTemplateKey.Trim();
+
+            if (!_cfg.UseRoamingNPCsWhenAvailable)
+            {
+                return "Roaming bridge: OFF (config) — spawns use vanilla scientists.\n" +
+                       "Set UseRoamingNPCsWhenAvailable true + install RoamingNPCs for bot AI.";
+            }
+
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+            {
+                return "Roaming bridge: ON but RoamingNPCs is not loaded.\n" +
+                       "Copy RoamingNPCs.cs to oxide/plugins and reload.";
+            }
+
+            object st = null;
+            try
+            {
+                st = RoamingNPCs.Call("IsBridgeTemplateReady", key);
+            }
+            catch
+            {
+                /* older RoamingNPCs without API */
+            }
+
+            var code = st as string ?? "";
+            string detail;
+            switch (code)
+            {
+                case "ok":
+                    detail = $"Template OK: \"{key}\" — viewer spawns use RoamingNPCs AI (gather/roam/etc.).";
+                    break;
+                case "missing":
+                    detail =
+                        $"No bot key \"{key}\" in oxide/config/RoamingNPCs.json under Bots settings. Add it or fix DefaultRoamingTemplateKey.";
+                    break;
+                case "disabled":
+                    detail =
+                        $"Bot \"{key}\" exists but is disabled. Set \"Enable bot?\" true for that bot in RoamingNPCs config.";
+                    break;
+                case "no_config":
+                    detail = "RoamingNPCs has no Bots config loaded. Reload RoamingNPCs or restore RoamingNPCs.json.";
+                    break;
+                default:
+                    detail =
+                        "Could not verify template (update RoamingNPCs to a build with IsBridgeTemplateReady). Spawns may still work.";
+                    break;
+            }
+
+            return $"Roaming bridge: ON  |  Default template: {key}\n{detail}\n" +
+                   "Per-tier RoamingTemplateKey in MaxxInvaders.json overrides the default for that tier.";
         }
 
         private SpawnResult TrySpawn(
@@ -1426,12 +1483,26 @@ namespace Oxide.Plugins
                     },
                     panel);
 
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = BuildRoamingGuiStatusText(),
+                        FontSize = 9,
+                        Align = TextAnchor.UpperLeft,
+                        Color = "0.85 0.88 0.92 1",
+                    },
+                    RectTransform = { AnchorMin = "0.02 0.855", AnchorMax = "0.98 0.902" },
+                },
+                panel);
+
             var draft = GetSpawnDraft(player.userID);
             var spawnPanel = container.Add(
                 new CuiPanel
                 {
                     Image = { Color = "0.12 0.14 0.18 0.92" },
-                    RectTransform = { AnchorMin = "0.02 0.54", AnchorMax = "0.98 0.905" },
+                    RectTransform = { AnchorMin = "0.02 0.54", AnchorMax = "0.98 0.848" },
                     CursorEnabled = true,
                 },
                 panel);
@@ -1631,7 +1702,8 @@ namespace Oxide.Plugins
                 {
                     Text =
                     {
-                        Text = "Anchor: near you. Kit needs Kits plugin. Mode: roaming, hostile, attackplayer, …",
+                        Text =
+                            "Anchor: near you. Roaming spawns: kit ignored (template gear). Scientist fallback: kit needs Kits. Modes affect scientists / damage rules.",
                         FontSize = 9,
                         Align = TextAnchor.MiddleLeft,
                         Color = "0.7 0.7 0.75 1",
@@ -1661,7 +1733,7 @@ namespace Oxide.Plugins
                         Text =
                         {
                             Text =
-                                $"{r.NpcId}  {r.ViewerName}  ({r.ViewerId})  T{r.Tier}  {r.Mode}  HP:{hp:F0}  {age:F1}m",
+                                $"{r.NpcId}  {r.ViewerName}  ({r.ViewerId})  T{r.Tier}  {(r.IsRoamingNpc ? "RoamingNPCs" : "Scientist")}  {r.Mode}  HP:{hp:F0}  {age:F1}m",
                             FontSize = 11,
                             Align = TextAnchor.MiddleLeft,
                         },

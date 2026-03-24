@@ -51,6 +51,22 @@ namespace Oxide.Plugins
             return Respawn(data);
         }
 
+        /// <summary>
+        /// Lightweight check for MaxxInvaders GUI / diagnostics: does this key exist in Bots settings and is it enabled?
+        /// Returns: <c>ok</c>, <c>missing</c>, <c>disabled</c>, or <c>no_config</c>.
+        /// </summary>
+        public object IsBridgeTemplateReady(string templateKey)
+        {
+            if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
+                return "no_config";
+            var key = templateKey.Trim();
+            if (!config.bots.TryGetValue(key, out BotSetup baseSetup) || baseSetup == null)
+                return "missing";
+            if (!baseSetup.Enable)
+                return "disabled";
+            return "ok";
+        }
+
         private static string SanitizeBridgeDisplayName(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw))
