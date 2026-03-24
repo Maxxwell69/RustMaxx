@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.6")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.7")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2934,7 +2934,7 @@ namespace Oxide.Plugins
                     continue;
 
                 pet.Data.BridgeRetaliationTargetUserId = attacker.userID;
-                pet.Data.BridgeRetaliationExpireTime = Time.realtimeSinceStartup + 120f;
+                pet.Data.BridgeRetaliationExpireTime = UnityEngine.Time.realtimeSinceStartup + 120f;
             }
         }
         private void OnCollectiblePickedup(CollectibleEntity collectible, CustomPet customPet, Item item)
@@ -6809,7 +6809,8 @@ namespace Oxide.Plugins
 
             private bool IsBridgeRetaliationActive()
             {
-                return owner?.Data != null && Time.realtimeSinceStartup < owner.Data.BridgeRetaliationExpireTime;
+                return owner?.Data != null &&
+                       UnityEngine.Time.realtimeSinceStartup < owner.Data.BridgeRetaliationExpireTime;
             }
 
             private bool CheckTarget(BasePlayer player)
