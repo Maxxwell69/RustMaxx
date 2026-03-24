@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.4.7")]
+    [Info("MaxxInvaders", "RustMaxx", "1.4.8")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2550,7 +2550,7 @@ namespace Oxide.Plugins
             _guiPage[player.userID] = page;
             if (!_guiMainTab.TryGetValue(player.userID, out var mainTab)) mainTab = 0;
 
-            var rows = mainTab == GuiTabInvaders ? Mathf.Min(_cfg.Gui.RowsPerPage, 3) : _cfg.Gui.RowsPerPage;
+            var rows = mainTab == GuiTabInvaders ? Mathf.Min(_cfg.Gui.RowsPerPage, 5) : _cfg.Gui.RowsPerPage;
             var list = _registry.All().ToList();
             var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (float)rows));
             page = Mathf.Clamp(page, 0, totalPages - 1);
@@ -2707,17 +2707,44 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                "ACTIVE BOTS — click buttons on each card",
-                "0.02 0.908",
-                "0.98 0.928",
-                13,
+                "ACTIVE BOTS — TP / RETURN / KILL / DESPAWN (template: F1 console or Roaming tab)",
+                "0.02 0.888",
+                "0.98 0.908",
+                12,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
+
+            if (mainTab == GuiTabInvaders && totalPages > 1)
+            {
+                if (page > 0)
+                    AddCuiButtonWithText(
+                        container,
+                        contentPanel,
+                        $"maxxinvaders.gui page {page - 1}",
+                        uiMuted,
+                        "◀ Previous page",
+                        "0.02 0.912",
+                        "0.48 0.932",
+                        12,
+                        TextAnchor.MiddleCenter,
+                        "0.95 0.97 1 1");
+                if (page < totalPages - 1)
+                    AddCuiButtonWithText(
+                        container,
+                        contentPanel,
+                        $"maxxinvaders.gui page {page + 1}",
+                        uiMuted,
+                        "Next page ▶",
+                        "0.52 0.912",
+                        "0.98 0.932",
+                        12,
+                        TextAnchor.MiddleCenter,
+                        "0.95 0.97 1 1");
+            }
 
             var draft = GetSpawnDraft(player.userID);
             var profiles = GetRecentProfiles(4);
             var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
-            const string uiRustRed2 = "0.72 0.14 0.10 0.95";
             const string uiCard = "0.12 0.12 0.15 0.94";
             const string uiGreen = "0.18 0.48 0.28 0.95";
 
@@ -2726,8 +2753,8 @@ namespace Oxide.Plugins
                     container,
                     contentPanel,
                     "No active bots on the map.\nUse SPAWN & RENAME below, or TikFinity.",
-                    "0.04 0.76",
-                    "0.96 0.902",
+                    "0.04 0.72",
+                    "0.96 0.878",
                     16,
                     TextAnchor.MiddleLeft,
                     "0.85 0.88 0.95 1");
@@ -2736,8 +2763,8 @@ namespace Oxide.Plugins
                 container,
                 contentPanel,
                 "SPAWN & RENAME (form)",
-                "0.02 0.728",
-                "0.98 0.755",
+                "0.02 0.698",
+                "0.98 0.722",
                 14,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
@@ -2746,8 +2773,8 @@ namespace Oxide.Plugins
                 container,
                 contentPanel,
                 "SAVED CLASSES (profiles) — Use loads spawn form, Respawn spawns from saved data",
-                "0.02 0.305",
-                "0.98 0.335",
+                "0.02 0.348",
+                "0.98 0.375",
                 14,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
@@ -2756,19 +2783,21 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.07 0.09 0.12 0.96" },
-                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.298" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.338" },
                     CursorEnabled = true,
                 },
                 contentPanel);
 
             const float profileTopPad = 0.02f;
-            const float profileRowH = 0.07f;
-            for (var idx = 0; idx < 4; idx++)
+            const float profileGap = 0.01f;
+            const int profileSlots = 4;
+            var profileRowH = (1f - profileTopPad - 0.02f - profileGap * (profileSlots - 1)) / profileSlots;
+            for (var idx = 0; idx < profileSlots; idx++)
             {
                 var pr = idx < profiles.Count ? profiles[idx] : null;
                 var rowActive = activeSlot == idx;
-                var pyBot = profileTopPad + idx * profileRowH;
-                var pyTop = pyBot + profileRowH - 0.006f;
+                var pyBot = profileTopPad + idx * (profileRowH + profileGap);
+                var pyTop = pyBot + profileRowH;
                 var aMin = $"0.02 {pyBot.ToString("F4", CultureInfo.InvariantCulture)}";
                 var aMax = $"0.98 {pyTop.ToString("F4", CultureInfo.InvariantCulture)}";
 
@@ -2842,7 +2871,7 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.10 0.11 0.14 0.95" },
-                    RectTransform = { AnchorMin = "0.02 0.342", AnchorMax = "0.98 0.726" },
+                    RectTransform = { AnchorMin = "0.02 0.382", AnchorMax = "0.98 0.692" },
                     CursorEnabled = true,
                 },
                 contentPanel);
@@ -2998,9 +3027,9 @@ namespace Oxide.Plugins
                 "0.98 0.18",
                 15);
 
-            const float cardZoneTop = 0.906f;
-            const float cardZoneBot = 0.756f;
-            const float cardGap = 0.004f;
+            const float cardZoneTop = 0.882f;
+            const float cardZoneBot = 0.728f;
+            const float cardGap = 0.003f;
             var invSliceCount = slice.Count;
             var slotH = invSliceCount > 0
                 ? Mathf.Max(0.042f, (cardZoneTop - cardZoneBot - cardGap * (invSliceCount - 1)) / invSliceCount)
@@ -3028,16 +3057,18 @@ namespace Oxide.Plugins
                 var tmpl = r.IsRoamingNpc
                     ? StripCuiMarkup(r.RoamingTemplateKey ?? _cfg.DefaultRoamingTemplateKey ?? "")
                     : "(scientist)";
-                var line1 = $"{nm}   {StripCuiMarkup(r.NpcId)}";
+                var line1 = $"{nm}  {StripCuiMarkup(r.NpcId)}";
                 var line2 =
-                    $"T{r.Tier}  {r.Mode}  HP {hp:F0}  {(r.IsRoamingNpc ? "Roaming" : "Scientist")}  tpl:{tmpl}";
+                    $"T{r.Tier}  {r.Mode}  HP {hp:F0}  {(r.IsRoamingNpc ? "Roam" : "Sci")}  {tmpl}";
+                var infoText = slotH < 0.038f ? $"{line1}  |  {line2}" : line1 + "\n" + line2;
+                var fs = slotH < 0.034f ? 9 : slotH < 0.042f ? 10 : 11;
                 AddCuiText(
                     container,
                     card,
-                    line1 + "\n" + line2,
-                    "0.03 0.38",
-                    "0.60 0.95",
-                    12,
+                    infoText,
+                    "0.03 0.22",
+                    "0.58 0.95",
+                    fs,
                     TextAnchor.UpperLeft,
                     "1 1 1 1");
 
@@ -3047,17 +3078,17 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui tp {r.NpcId}",
                     _cfg.Gui.AccentColor,
                     "TP",
-                    "0.61 0.52",
-                    "0.69 0.92",
-                    11);
+                    "0.59 0.18",
+                    "0.68 0.92",
+                    10);
                 AddCuiButtonWithText(
                     container,
                     card,
                     $"maxxinvaders.gui returnrun {r.NpcId}",
                     uiGreen,
-                    "RETURN",
-                    "0.70 0.52",
-                    "0.82 0.92",
+                    "RET",
+                    "0.685 0.18",
+                    "0.785 0.92",
                     9);
                 AddCuiButtonWithText(
                     container,
@@ -3065,47 +3096,18 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui kill {r.NpcId}",
                     "0.45 0.12 0.12 0.95",
                     "KILL",
-                    "0.83 0.52",
-                    "0.89 0.92",
-                    10);
+                    "0.79 0.18",
+                    "0.875 0.92",
+                    9);
                 AddCuiButtonWithText(
                     container,
                     card,
                     $"maxxinvaders.gui despawn {r.NpcId}",
                     "0.35 0.32 0.15 0.95",
                     "DESPAWN",
-                    "0.90 0.52",
+                    "0.88 0.18",
                     "0.99 0.92",
-                    8);
-
-                AddCuiText(
-                    container,
-                    card,
-                    "Roaming template (Apply = respawn):",
-                    "0.03 0.06",
-                    "0.36 0.34",
-                    9,
-                    TextAnchor.MiddleLeft,
-                    "0.85 0.88 0.95 1");
-                var tmplVal = GetGuiNpcTemplateField(player.userID, r.NpcId, r.RoamingTemplateKey ?? "");
-                AddCuiInputFieldPlain(
-                    container,
-                    card,
-                    $"maxxinvaders.gui ntmpl {r.NpcId} ",
-                    tmplVal,
-                    "0.37 0.08",
-                    "0.76 0.36",
-                    12,
-                    64);
-                AddCuiButtonWithText(
-                    container,
-                    card,
-                    $"maxxinvaders.gui applytmpl {r.NpcId}",
-                    uiRustRed2,
-                    "APPLY",
-                    "0.77 0.08",
-                    "0.98 0.36",
-                    9);
+                    7);
 
                 cardIdx++;
             }
