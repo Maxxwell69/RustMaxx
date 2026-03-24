@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.4.3")]
+    [Info("MaxxInvaders", "RustMaxx", "1.4.4")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -31,6 +31,9 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[MaxxInvaders]";
         private const string DataFile = "MaxxInvaders/MaxxInvadersData";
         private const string UiName = "MaxxInvaders.AdminUI";
+
+        /// <summary>Explicit font avoids missing default text on some Rust CUI builds.</summary>
+        private const string UiFont = "RobotoCondensed-Bold.ttf";
 
         private static readonly string[] BuiltinScientistPrefabFallbacks =
         {
@@ -595,70 +598,6 @@ namespace Oxide.Plugins
             _lastRoamingSpawnFailWarnUtc = now;
             _lastRoamingSpawnFailTemplate = roamingTemplate;
             PrintWarning($"{LogPrefix} No spawn: ScientistFallbackEnabled=false. {detail}");
-        }
-
-        /// <summary>Multi-line status for admin GUI: RoamingNPCs load + default template key readiness.</summary>
-        private string BuildRoamingGuiStatusText()
-        {
-            var key = string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey)
-                ? "bob_resources_farmer"
-                : _cfg.DefaultRoamingTemplateKey.Trim();
-
-            if (!_cfg.UseRoamingNPCsWhenAvailable)
-            {
-                return "Roaming bridge: OFF (config) — spawns use vanilla scientists.\n" +
-                       "Set UseRoamingNPCsWhenAvailable true + install RoamingNPCs for bot AI.";
-            }
-
-            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
-            {
-                return "Roaming bridge: ON but RoamingNPCs is not loaded.\n" +
-                       "Copy RoamingNPCs.cs to oxide/plugins and reload.";
-            }
-
-            object st = null;
-            try
-            {
-                st = RoamingNPCs.Call("IsBridgeTemplateReady", key);
-            }
-            catch
-            {
-                /* older RoamingNPCs without API */
-            }
-
-            var code = NormalizeBridgeCallResult(st) ?? "";
-            string detail;
-            switch (code)
-            {
-                case "ok":
-                    detail = $"Template OK: \"{key}\" — viewer spawns use RoamingNPCs AI (gather/roam/etc.).";
-                    break;
-                case "missing":
-                    detail =
-                        $"No bot key \"{key}\" in oxide/config/RoamingNPCs.json under Bots settings. Add it or fix DefaultRoamingTemplateKey.";
-                    break;
-                case "disabled":
-                    detail =
-                        $"Bot \"{key}\" exists but is disabled. Set \"Enable bot?\" true for that bot in RoamingNPCs config.";
-                    break;
-                case "no_config":
-                    detail = "RoamingNPCs has no Bots config loaded. Reload RoamingNPCs or restore RoamingNPCs.json.";
-                    break;
-                default:
-                    if (code.StartsWith("error:", StringComparison.Ordinal))
-                        detail = $"IsBridgeTemplateReady: {code.Substring("error:".Length).Trim()}";
-                    else if (string.IsNullOrEmpty(code))
-                        detail =
-                            "Could not verify template (Call returned null — redeploy RustMaxx RoamingNPCs.cs, oxide.reload RoamingNPCs). Spawns may still work.";
-                    else
-                        detail =
-                            $"Unexpected bridge code: {code}. Spawns may still work.";
-                    break;
-            }
-
-            var fb = _cfg.ScientistFallbackEnabled ? "scientist fallback ON" : "scientist fallback OFF (roaming only)";
-            return $"Roaming bridge: ON  |  Template: {key}  |  {fb}\n{detail}\n" +
-                   "Tip: per-tier RoamingTemplateKey in MaxxInvaders.json overrides the default.";
         }
 
         private SpawnResult TrySpawn(
@@ -1986,6 +1925,7 @@ namespace Oxide.Plugins
                         new CuiTextComponent
                         {
                             Text = text,
+                            Font = UiFont,
                             FontSize = fontSize,
                             Align = align,
                             Color = color,
@@ -2024,7 +1964,6 @@ namespace Oxide.Plugins
                         {
                             Color = bgColor,
                             Command = command,
-                            Material = "Assets/Content/UI/UI.Background.Tile.psd",
                         },
                         new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax },
                     },
@@ -2039,6 +1978,7 @@ namespace Oxide.Plugins
                         new CuiTextComponent
                         {
                             Text = text,
+                            Font = UiFont,
                             FontSize = fontSize,
                             Align = align,
                             Color = textColor,
@@ -2048,10 +1988,7 @@ namespace Oxide.Plugins
                 });
         }
 
-        /// <summary>
-        /// Input fields alone often render as a flat color block; a dark framed panel behind an inset field reads better.
-        /// </summary>
-        private static void AddCuiInputFieldFramed(
+        private static void AddCuiInputFieldPlain(
             CuiElementContainer container,
             string parent,
             string command,
@@ -2061,28 +1998,12 @@ namespace Oxide.Plugins
             int fontSize = 14,
             int charsLimit = 64)
         {
-            var wrap = Guid.NewGuid().ToString("N");
             AddRawCuiElement(
                 container,
                 new CuiElement
                 {
-                    Name = wrap,
+                    Name = Guid.NewGuid().ToString("N"),
                     Parent = parent,
-                    Components =
-                    {
-                        new CuiImageComponent
-                        {
-                            Color = "0.10 0.11 0.14 0.98",
-                            Material = "Assets/Content/UI/UI.Background.Tile.psd",
-                        },
-                        new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax },
-                    },
-                });
-            AddRawCuiElement(
-                container,
-                new CuiElement
-                {
-                    Parent = wrap,
                     Components =
                     {
                         new CuiInputFieldComponent
@@ -2095,7 +2016,7 @@ namespace Oxide.Plugins
                             Text = initialText ?? "",
                             NeedsKeyboard = true,
                         },
-                        new CuiRectTransformComponent { AnchorMin = "0.03 0.10", AnchorMax = "0.97 0.90" },
+                        new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax },
                     },
                 });
         }
@@ -2787,35 +2708,19 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var statusStrip = container.Add(
-                new CuiPanel
-                {
-                    Image = { Color = "0.06 0.07 0.10 0.94" },
-                    RectTransform = { AnchorMin = "0.02 0.852", AnchorMax = "0.98 0.918" },
-                    CursorEnabled = false,
-                },
-                contentPanel);
-            AddCuiText(
-                container,
-                statusStrip,
-                BuildRoamingGuiStatusText(),
-                "0.02 0.06",
-                "0.98 0.94",
-                10,
-                TextAnchor.UpperLeft,
-                "0.82 0.88 0.94 1");
-
             AddCuiText(
                 container,
                 contentPanel,
                 "ACTIVE BOTS — click buttons on each card",
-                "0.02 0.798",
-                "0.98 0.832",
+                "0.02 0.868",
+                "0.98 0.905",
                 12,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
 
             var draft = GetSpawnDraft(player.userID);
+            var profiles = GetRecentProfiles(4);
+            var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
             const string uiRustRed2 = "0.72 0.14 0.10 0.95";
             const string uiCard = "0.12 0.12 0.15 0.94";
             const string uiGreen = "0.18 0.48 0.28 0.95";
@@ -2900,7 +2805,7 @@ namespace Oxide.Plugins
                     TextAnchor.MiddleLeft,
                     "0.85 0.88 0.95 1");
                 var tmplVal = GetGuiNpcTemplateField(player.userID, r.NpcId, r.RoamingTemplateKey ?? "");
-                AddCuiInputFieldFramed(
+                AddCuiInputFieldPlain(
                     container,
                     card,
                     $"maxxinvaders.gui ntmpl {r.NpcId} ",
@@ -2942,167 +2847,6 @@ namespace Oxide.Plugins
                 12,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
-
-            var formPanel = container.Add(
-                new CuiPanel
-                {
-                    Image = { Color = "0.10 0.11 0.14 0.95" },
-                    RectTransform = { AnchorMin = "0.02 0.378", AnchorMax = "0.98 0.545" },
-                    CursorEnabled = true,
-                },
-                contentPanel);
-
-            AddCuiText(container, formPanel, "SPAWN", "0.02 0.84", "0.18 0.96", 18, TextAnchor.MiddleLeft, "1 1 1 1");
-            AddCuiText(container, formPanel, "RENAME", "0.66 0.84", "0.86 0.96", 18, TextAnchor.MiddleLeft, "1 1 1 1");
-
-            AddCuiButtonWithText(
-                container,
-                formPanel,
-                "maxxinvaders.gui quickdemo",
-                "0.20 0.62 0.44 0.98",
-                "Quick Spawn",
-                "0.02 0.72",
-                "0.31 0.82",
-                13);
-            AddCuiButtonWithText(
-                container,
-                formPanel,
-                "maxxinvaders.gui spawnfields",
-                "0.22 0.48 0.72 0.98",
-                "Spawn From Form",
-                "0.33 0.72",
-                "0.62 0.82",
-                13);
-            AddCuiButtonWithText(
-                container,
-                formPanel,
-                "maxxinvaders.gui applyattrs",
-                "0.55 0.45 0.2 0.98",
-                "Apply Attributes To Active",
-                "0.33 0.62",
-                "0.62 0.70",
-                11);
-
-            AddCuiText(
-                container,
-                formPanel,
-                "Viewer Name",
-                "0.02 0.62",
-                "0.2 0.7",
-                12,
-                TextAnchor.MiddleLeft,
-                "0.92 0.95 1 1");
-            AddCuiInputFieldFramed(
-                container,
-                formPanel,
-                "maxxinvaders.gui draft viewername",
-                draft.ViewerName ?? "DemoViewer",
-                "0.02 0.52",
-                "0.62 0.61");
-
-            AddCuiText(
-                container,
-                formPanel,
-                "Viewer ID",
-                "0.02 0.43",
-                "0.2 0.51",
-                12,
-                TextAnchor.MiddleLeft,
-                "0.92 0.95 1 1");
-            AddCuiInputFieldFramed(
-                container,
-                formPanel,
-                "maxxinvaders.gui draft viewerid",
-                draft.ViewerId ?? "",
-                "0.02 0.33",
-                "0.30 0.42",
-                14,
-                48);
-            AddCuiInputFieldFramed(
-                container,
-                formPanel,
-                "maxxinvaders.gui draft tier",
-                draft.TierStr ?? "1",
-                "0.32 0.33",
-                "0.38 0.42",
-                14,
-                4);
-            AddCuiInputFieldFramed(
-                container,
-                formPanel,
-                "maxxinvaders.gui draft mode",
-                draft.Mode ?? "roaming",
-                "0.40 0.33",
-                "0.50 0.42",
-                14,
-                24);
-            AddCuiInputFieldFramed(
-                container,
-                formPanel,
-                "maxxinvaders.gui draft kit",
-                draft.Kit ?? "-",
-                "0.52 0.33",
-                "0.62 0.42",
-                14,
-                48);
-            AddCuiButtonWithText(
-                container,
-                formPanel,
-                "maxxinvaders.gui draftreset",
-                "0.30 0.30 0.36 0.98",
-                "Reset Form",
-                "0.02 0.20",
-                "0.30 0.29",
-                12);
-
-            AddCuiText(
-                container,
-                formPanel,
-                "Target (viewerId / viewerName / INV-xxxxx)",
-                "0.66 0.62",
-                "0.98 0.7",
-                11,
-                TextAnchor.MiddleLeft,
-                "0.92 0.95 1 1");
-            AddCuiInputFieldFramed(
-                container,
-                formPanel,
-                "maxxinvaders.gui draft renametarget",
-                draft.RenameTarget ?? "",
-                "0.66 0.52",
-                "0.98 0.61",
-                14,
-                64);
-            AddCuiText(
-                container,
-                formPanel,
-                "New Name",
-                "0.66 0.43",
-                "0.9 0.51",
-                12,
-                TextAnchor.MiddleLeft,
-                "0.92 0.95 1 1");
-            AddCuiInputFieldFramed(
-                container,
-                formPanel,
-                "maxxinvaders.gui draft renamename",
-                draft.RenameName ?? "",
-                "0.66 0.33",
-                "0.98 0.42",
-                14,
-                64);
-            AddCuiButtonWithText(
-                container,
-                formPanel,
-                "maxxinvaders.gui renameapply",
-                "0.24 0.52 0.72 0.98",
-                "Apply Rename",
-                "0.66 0.20",
-                "0.98 0.29",
-                13);
-
-            var profiles = GetRecentProfiles(4);
-            var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
 
             AddCuiText(
                 container,
@@ -3199,6 +2943,164 @@ namespace Oxide.Plugins
                     "0.98 0.88",
                     9);
             }
+
+            var formPanel = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.10 0.11 0.14 0.95" },
+                    RectTransform = { AnchorMin = "0.02 0.378", AnchorMax = "0.98 0.545" },
+                    CursorEnabled = true,
+                },
+                contentPanel);
+
+            AddCuiText(container, formPanel, "SPAWN", "0.02 0.84", "0.18 0.96", 18, TextAnchor.MiddleLeft, "1 1 1 1");
+            AddCuiText(container, formPanel, "RENAME", "0.66 0.84", "0.86 0.96", 18, TextAnchor.MiddleLeft, "1 1 1 1");
+
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui quickdemo",
+                "0.20 0.62 0.44 0.98",
+                "Quick Spawn",
+                "0.02 0.72",
+                "0.31 0.82",
+                13);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui spawnfields",
+                "0.22 0.48 0.72 0.98",
+                "Spawn From Form",
+                "0.33 0.72",
+                "0.62 0.82",
+                13);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui applyattrs",
+                "0.55 0.45 0.2 0.98",
+                "Apply Attributes To Active",
+                "0.33 0.62",
+                "0.62 0.70",
+                11);
+
+            AddCuiText(
+                container,
+                formPanel,
+                "Viewer Name",
+                "0.02 0.62",
+                "0.2 0.7",
+                12,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
+            AddCuiInputFieldPlain(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft viewername",
+                draft.ViewerName ?? "DemoViewer",
+                "0.02 0.52",
+                "0.62 0.61");
+
+            AddCuiText(
+                container,
+                formPanel,
+                "Viewer ID",
+                "0.02 0.43",
+                "0.2 0.51",
+                12,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
+            AddCuiInputFieldPlain(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft viewerid",
+                draft.ViewerId ?? "",
+                "0.02 0.33",
+                "0.30 0.42",
+                14,
+                48);
+            AddCuiInputFieldPlain(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft tier",
+                draft.TierStr ?? "1",
+                "0.32 0.33",
+                "0.38 0.42",
+                14,
+                4);
+            AddCuiInputFieldPlain(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft mode",
+                draft.Mode ?? "roaming",
+                "0.40 0.33",
+                "0.50 0.42",
+                14,
+                24);
+            AddCuiInputFieldPlain(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft kit",
+                draft.Kit ?? "-",
+                "0.52 0.33",
+                "0.62 0.42",
+                14,
+                48);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui draftreset",
+                "0.30 0.30 0.36 0.98",
+                "Reset Form",
+                "0.02 0.20",
+                "0.30 0.29",
+                12);
+
+            AddCuiText(
+                container,
+                formPanel,
+                "Target (viewerId / viewerName / INV-xxxxx)",
+                "0.66 0.62",
+                "0.98 0.7",
+                11,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
+            AddCuiInputFieldPlain(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft renametarget",
+                draft.RenameTarget ?? "",
+                "0.66 0.52",
+                "0.98 0.61",
+                14,
+                64);
+            AddCuiText(
+                container,
+                formPanel,
+                "New Name",
+                "0.66 0.43",
+                "0.9 0.51",
+                12,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
+            AddCuiInputFieldPlain(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft renamename",
+                draft.RenameName ?? "",
+                "0.66 0.33",
+                "0.98 0.42",
+                14,
+                64);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui renameapply",
+                "0.24 0.52 0.72 0.98",
+                "Apply Rename",
+                "0.66 0.20",
+                "0.98 0.29",
+                13);
 
             CuiHelper.AddUi(player, container);
         }
