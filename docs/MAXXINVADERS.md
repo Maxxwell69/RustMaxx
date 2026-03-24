@@ -19,7 +19,7 @@ Viewer-linked Scientist NPCs for TikFinity / RustMaxx relay events. **Standalone
 ## Install
 
 1. Copy `plugins/MaxxInvaders/MaxxInvaders.cs` to `oxide/plugins/`.
-2. Optional: merge `plugins/MaxxInvaders/MaxxInvaders.example.json` into `oxide/config/MaxxInvaders.json` (or let the plugin generate defaults on first load).
+2. **Config:** Copy the **full** file [MaxxInvaders.json](./MaxxInvaders.json) to `oxide/config/MaxxInvaders.json` on the server (or let the plugin generate defaults on first load). You do not need to merge partial keys if you use that file as-is.
 3. Grant permissions: `maxxinvaders.admin`, `maxxinvaders.use`, `maxxinvaders.debug`.
 4. Install **Kits** if you use kit names; otherwise leave kits empty and rely on tier defaults.
 

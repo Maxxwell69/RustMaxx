@@ -3,4 +3,5 @@
 Rust Oxide plugin: viewer-linked Scientist NPCs for stream / relay events.
 
 - **Full documentation:** [docs/MAXXINVADERS.md](../../docs/MAXXINVADERS.md)
-- **Example config:** `MaxxInvaders.example.json` → copy to `oxide/config/MaxxInvaders.json` as needed
+- **Full Oxide config (drop-in, every key):** [docs/MaxxInvaders.json](../../docs/MaxxInvaders.json) — copy the **entire** file to your Rust server as `oxide/config/MaxxInvaders.json`, then `oxide.reload MaxxInvaders`.
+- Same content as reference: `MaxxInvaders.example.json` in this folder.
