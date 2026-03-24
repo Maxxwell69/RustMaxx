@@ -59,7 +59,7 @@ Interface.Call("RemoveInvader", viewerId);
 | `/maxxinvaders clear` | admin | Despawn all tracked |
 | `/maxxinvaders debug on\|off` | debug | Verbose logging |
 
-In the **GUI**, use **Quick: spawn 1 demo NPC** for an instant test, or fill **viewer name**, **viewer id** (unique), **tier**, **mode**, **kit**, then **Spawn using fields below**. After editing a field, press **Enter** or click outside so Rust sends the value. **Reset form** gives a new random demo id.
+In the **GUI**, use tabs **Invaders** (spawn + list + short bridge status) and **Setup** (full **MaxxInvaders** + **RoamingNPCs** config reference — read-only; edit `oxide/config/*.json` and reload). Use **Quick: spawn 1 demo NPC** for an instant test, or fill **viewer name**, **viewer id** (unique), **tier**, **mode**, **kit**, then **Spawn using fields below**. After editing a field, press **Enter** or click outside so Rust sends the value. **Reset form** gives a new random demo id.
 
 ## “Couldn’t find prefab … scientistnpc_roam”
 
@@ -93,5 +93,6 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.1.2:** Admin **GUI** has **Invaders** vs **Setup** tabs. **Setup** shows a read-only summary of **MaxxInvaders** config (caps, spawn rules, bridge, tiers, prefabs, logging) and **RoamingNPCs** config (bot keys + enabled flags, live count). RoamingNPCs adds **`GetMaxxInvadersGuiSummary`** for the right column.
 - **1.1.1:** Admin **GUI** shows live RoamingNPCs bridge status (plugin loaded, default template key OK / missing / disabled) and lists each invader as **RoamingNPCs** vs **Scientist**. RoamingNPCs exposes **`IsBridgeTemplateReady`** for the check.
 - **1.1.0:** Optional **RoamingNPCs** bridge (`UseRoamingNPCsWhenAvailable`, `DefaultRoamingTemplateKey`, per-tier `RoamingTemplateKey`). Viewer bots use full roaming AI when the bridge succeeds.

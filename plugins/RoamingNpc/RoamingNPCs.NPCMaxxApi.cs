@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -65,6 +67,60 @@ namespace Oxide.Plugins
             if (!baseSetup.Enable)
                 return "disabled";
             return "ok";
+        }
+
+        /// <summary>Human-readable RoamingNPCs config summary for MaxxInvaders admin GUI (Setup tab).</summary>
+        public object GetMaxxInvadersGuiSummary()
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                sb.AppendLine("<b>RoamingNPCs</b>  oxide/config/RoamingNPCs.json");
+                sb.AppendLine();
+                sb.AppendLine($"Version: {Version}");
+                sb.AppendLine("Bridge API: SpawnFromTemplateForBridge, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
+                sb.AppendLine();
+                if (config?.bots == null)
+                {
+                    sb.AppendLine("Bots settings: (none — config not loaded)");
+                    return sb.ToString();
+                }
+
+                var total = 0;
+                var enabled = 0;
+                foreach (var kv in config.bots)
+                {
+                    total++;
+                    if (kv.Value != null && kv.Value.Enable) enabled++;
+                }
+
+                sb.AppendLine($"Bots in config: {total} total, {enabled} with Enable bot? on");
+                sb.AppendLine($"Tracked roaming NPCs (active): {listNpcPlayers?.Count ?? 0}");
+                sb.AppendLine();
+                sb.AppendLine("Template keys (must match MaxxInvaders DefaultRoamingTemplateKey / tier RoamingTemplateKey):");
+                var i = 0;
+                foreach (var kv in config.bots.OrderBy(x => x.Key))
+                {
+                    if (i++ >= 36)
+                    {
+                        sb.AppendLine($"  … +{config.bots.Count - 36} more keys");
+                        break;
+                    }
+
+                    var st = kv.Value == null ? "?" : kv.Value.Enable ? "on" : "off";
+                    sb.AppendLine($"  • {kv.Key}  [{st}]");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("Notes: disabled bots cannot be used by the bridge.");
+                sb.AppendLine("Display names from MaxxInvaders are sanitized (max 24 chars, no angle brackets).");
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"Summary error: {ex.Message}");
+            }
+
+            return sb.ToString();
         }
 
         private static string SanitizeBridgeDisplayName(string raw)
