@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.8")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.9")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1611,6 +1611,11 @@ namespace Oxide.Plugins
             foreach (var r in _registry.All())
             {
                 if (r == null) continue;
+                if (string.Equals(r.ViewerId, token, StringComparison.OrdinalIgnoreCase))
+                {
+                    runtime = r;
+                    return true;
+                }
                 if (string.Equals(r.NpcId, token, StringComparison.OrdinalIgnoreCase))
                 {
                     runtime = r;
@@ -1632,7 +1637,7 @@ namespace Oxide.Plugins
 
             if (!TryFindInvader(viewerOrNpcId, out var r))
             {
-                error = "not_found";
+                error = "not_found (use viewerId or INV-xxxxx)";
                 return false;
             }
 
@@ -2532,7 +2537,7 @@ namespace Oxide.Plugins
                 {
                     Text =
                     {
-                        Text = "Target = viewerId or INV-xxxxx",
+                        Text = "Target = viewerId or INV-xxxxx (or click Use/Name on a row below)",
                         FontSize = 9,
                         Align = TextAnchor.MiddleLeft,
                         Color = "0.8 0.85 0.9 1",
@@ -2643,7 +2648,7 @@ namespace Oxide.Plugins
                     new CuiButton
                     {
                         Button = { Command = $"maxxinvaders.gui tp {r.NpcId}", Color = _cfg.Gui.AccentColor },
-                        RectTransform = { AnchorMin = "0.73 0.15", AnchorMax = "0.82 0.85" },
+                        RectTransform = { AnchorMin = "0.69 0.15", AnchorMax = "0.75 0.85" },
                         Text = { Text = "TP", FontSize = 10 },
                     },
                     row);
@@ -2651,9 +2656,27 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiButton
                     {
+                        Button = { Command = $"maxxinvaders.gui renametarget {r.NpcId}", Color = "0.25 0.45 0.55 0.95" },
+                        RectTransform = { AnchorMin = "0.76 0.15", AnchorMax = "0.84 0.85" },
+                        Text = { Text = "Use", FontSize = 9 },
+                    },
+                    row);
+
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui renamename {r.NpcId}", Color = "0.22 0.35 0.5 0.95" },
+                        RectTransform = { AnchorMin = "0.85 0.15", AnchorMax = "0.92 0.85" },
+                        Text = { Text = "Name", FontSize = 8 },
+                    },
+                    row);
+
+                container.Add(
+                    new CuiButton
+                    {
                         Button = { Command = $"maxxinvaders.gui kill {r.NpcId}", Color = "0.5 0.2 0.2 0.9" },
-                        RectTransform = { AnchorMin = "0.83 0.15", AnchorMax = "0.91 0.85" },
-                        Text = { Text = "Kill", FontSize = 10 },
+                        RectTransform = { AnchorMin = "0.93 0.15", AnchorMax = "0.96 0.85" },
+                        Text = { Text = "K", FontSize = 10 },
                     },
                     row);
 
@@ -2661,8 +2684,8 @@ namespace Oxide.Plugins
                     new CuiButton
                     {
                         Button = { Command = $"maxxinvaders.gui despawn {r.NpcId}", Color = "0.35 0.35 0.2 0.9" },
-                        RectTransform = { AnchorMin = "0.92 0.15", AnchorMax = "0.99 0.85" },
-                        Text = { Text = "Despawn", FontSize = 9 },
+                        RectTransform = { AnchorMin = "0.965 0.15", AnchorMax = "0.995 0.85" },
+                        Text = { Text = "D", FontSize = 9 },
                     },
                     row);
 
@@ -2861,6 +2884,31 @@ namespace Oxide.Plugins
                     break;
                 }
                 LogIf(_cfg.Logging.LogGui, $"gui tp {player.displayName} {id}", false);
+                return;
+            }
+
+            if (args[0] == "renametarget" && args.Length > 1)
+            {
+                var id = args[1];
+                var d = GetSpawnDraft(player.userID);
+                d.RenameTarget = id;
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "renamename" && args.Length > 1)
+            {
+                var id = args[1];
+                var d = GetSpawnDraft(player.userID);
+                foreach (var r in _registry.All())
+                {
+                    if (!string.Equals(r.NpcId, id, StringComparison.OrdinalIgnoreCase)) continue;
+                    d.RenameName = r.ViewerName ?? "";
+                    if (string.IsNullOrWhiteSpace(d.RenameTarget))
+                        d.RenameTarget = r.NpcId;
+                    break;
+                }
+                OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
 
