@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.4.4")]
+    [Info("MaxxInvaders", "RustMaxx", "1.4.5")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -31,9 +31,6 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[MaxxInvaders]";
         private const string DataFile = "MaxxInvaders/MaxxInvadersData";
         private const string UiName = "MaxxInvaders.AdminUI";
-
-        /// <summary>Explicit font avoids missing default text on some Rust CUI builds.</summary>
-        private const string UiFont = "robotocondensed-bold.ttf";
 
         private static readonly string[] BuiltinScientistPrefabFallbacks =
         {
@@ -1925,7 +1922,6 @@ namespace Oxide.Plugins
                         new CuiTextComponent
                         {
                             Text = text,
-                            Font = UiFont,
                             FontSize = fontSize,
                             Align = align,
                             Color = color,
@@ -1964,6 +1960,7 @@ namespace Oxide.Plugins
                         {
                             Color = bgColor,
                             Command = command,
+                            Material = "Assets/Content/UI/UI.Background.Tile.psd",
                         },
                         new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax },
                     },
@@ -1978,7 +1975,6 @@ namespace Oxide.Plugins
                         new CuiTextComponent
                         {
                             Text = text,
-                            Font = UiFont,
                             FontSize = fontSize,
                             Align = align,
                             Color = textColor,
@@ -2713,8 +2709,8 @@ namespace Oxide.Plugins
                 contentPanel,
                 "ACTIVE BOTS — click buttons on each card",
                 "0.02 0.868",
-                "0.98 0.905",
-                12,
+                "0.98 0.898",
+                13,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
 
@@ -2729,8 +2725,8 @@ namespace Oxide.Plugins
             foreach (var r in slice)
             {
                 var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
-                var top = 0.772f - cardIdx * 0.093f;
-                var bot = top - 0.086f;
+                var top = 0.848f - cardIdx * 0.088f;
+                var bot = top - 0.082f;
                 var aMin = $"0.02 {bot.ToString("F4", CultureInfo.InvariantCulture)}";
                 var aMax = $"0.98 {top.ToString("F4", CultureInfo.InvariantCulture)}";
                 var card = container.Add(
@@ -2832,9 +2828,9 @@ namespace Oxide.Plugins
                     container,
                     contentPanel,
                     "No active bots on the map.\nUse SPAWN & RENAME below, or TikFinity.",
-                    "0.04 0.56",
-                    "0.96 0.76",
-                    13,
+                    "0.04 0.755",
+                    "0.96 0.848",
+                    16,
                     TextAnchor.MiddleLeft,
                     "0.85 0.88 0.95 1");
 
@@ -2842,9 +2838,9 @@ namespace Oxide.Plugins
                 container,
                 contentPanel,
                 "SPAWN & RENAME (form)",
-                "0.02 0.552",
-                "0.98 0.575",
-                12,
+                "0.02 0.728",
+                "0.98 0.755",
+                14,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
 
@@ -2852,9 +2848,9 @@ namespace Oxide.Plugins
                 container,
                 contentPanel,
                 "SAVED CLASSES (profiles) — Use loads spawn form, Respawn spawns from saved data",
-                "0.02 0.322",
-                "0.98 0.348",
-                11,
+                "0.02 0.305",
+                "0.98 0.335",
+                14,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
 
@@ -2862,19 +2858,19 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.07 0.09 0.12 0.96" },
-                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.312" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.298" },
                     CursorEnabled = true,
                 },
                 contentPanel);
 
-            const float profileTopPad = 0.038f;
-            const float profileRowH = 0.056f;
+            const float profileTopPad = 0.02f;
+            const float profileRowH = 0.065f;
             for (var idx = 0; idx < 4; idx++)
             {
                 var pr = idx < profiles.Count ? profiles[idx] : null;
                 var rowActive = activeSlot == idx;
                 var pyBot = profileTopPad + idx * profileRowH;
-                var pyTop = pyBot + profileRowH - 0.005f;
+                var pyTop = pyBot + profileRowH - 0.008f;
                 var aMin = $"0.02 {pyBot.ToString("F4", CultureInfo.InvariantCulture)}";
                 var aMax = $"0.98 {pyTop.ToString("F4", CultureInfo.InvariantCulture)}";
 
@@ -2899,9 +2895,9 @@ namespace Oxide.Plugins
                     container,
                     prow,
                     titlePlain,
-                    "0.02 0.42",
+                    "0.02 0.38",
                     "0.62 0.98",
-                    12,
+                    14,
                     TextAnchor.MiddleLeft,
                     "1 1 1 1");
                 AddCuiText(
@@ -2909,8 +2905,8 @@ namespace Oxide.Plugins
                     prow,
                     subPlain,
                     "0.02 0.06",
-                    "0.62 0.40",
-                    10,
+                    "0.62 0.36",
+                    12,
                     TextAnchor.MiddleLeft,
                     "0.8 0.85 0.92 1");
 
@@ -2921,40 +2917,40 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui profslot {idx}",
                     useCol,
                     "Use",
-                    "0.64 0.12",
-                    "0.76 0.88",
-                    11);
+                    "0.64 0.10",
+                    "0.76 0.90",
+                    12);
                 AddCuiButtonWithText(
                     container,
                     prow,
                     pr != null ? $"maxxinvaders.gui profileload {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
                     "0.22 0.36 0.52 0.95",
                     "Load",
-                    "0.77 0.12",
-                    "0.87 0.88",
-                    10);
+                    "0.77 0.10",
+                    "0.87 0.90",
+                    12);
                 AddCuiButtonWithText(
                     container,
                     prow,
                     pr != null ? $"maxxinvaders.gui profilerespawn {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
                     "0.18 0.52 0.38 0.95",
                     "Respawn",
-                    "0.88 0.12",
-                    "0.98 0.88",
-                    9);
+                    "0.88 0.10",
+                    "0.98 0.90",
+                    11);
             }
 
             var formPanel = container.Add(
                 new CuiPanel
                 {
                     Image = { Color = "0.10 0.11 0.14 0.95" },
-                    RectTransform = { AnchorMin = "0.02 0.378", AnchorMax = "0.98 0.545" },
+                    RectTransform = { AnchorMin = "0.02 0.342", AnchorMax = "0.98 0.726" },
                     CursorEnabled = true,
                 },
                 contentPanel);
 
-            AddCuiText(container, formPanel, "SPAWN", "0.02 0.84", "0.18 0.96", 18, TextAnchor.MiddleLeft, "1 1 1 1");
-            AddCuiText(container, formPanel, "RENAME", "0.66 0.84", "0.86 0.96", 18, TextAnchor.MiddleLeft, "1 1 1 1");
+            AddCuiText(container, formPanel, "SPAWN", "0.02 0.88", "0.22 0.98", 20, TextAnchor.MiddleLeft, "1 1 1 1");
+            AddCuiText(container, formPanel, "RENAME", "0.64 0.88", "0.88 0.98", 20, TextAnchor.MiddleLeft, "1 1 1 1");
 
             AddCuiButtonWithText(
                 container,
@@ -2963,34 +2959,34 @@ namespace Oxide.Plugins
                 "0.20 0.62 0.44 0.98",
                 "Quick Spawn",
                 "0.02 0.72",
-                "0.31 0.82",
-                13);
+                "0.32 0.90",
+                15);
             AddCuiButtonWithText(
                 container,
                 formPanel,
                 "maxxinvaders.gui spawnfields",
                 "0.22 0.48 0.72 0.98",
                 "Spawn From Form",
-                "0.33 0.72",
-                "0.62 0.82",
-                13);
+                "0.34 0.72",
+                "0.64 0.90",
+                15);
             AddCuiButtonWithText(
                 container,
                 formPanel,
                 "maxxinvaders.gui applyattrs",
                 "0.55 0.45 0.2 0.98",
                 "Apply Attributes To Active",
-                "0.33 0.62",
-                "0.62 0.70",
-                11);
+                "0.66 0.72",
+                "0.98 0.90",
+                13);
 
             AddCuiText(
                 container,
                 formPanel,
                 "Viewer Name",
-                "0.02 0.62",
-                "0.2 0.7",
-                12,
+                "0.02 0.58",
+                "0.22 0.68",
+                14,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -2998,16 +2994,18 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft viewername",
                 draft.ViewerName ?? "DemoViewer",
-                "0.02 0.52",
-                "0.62 0.61");
+                "0.02 0.44",
+                "0.62 0.56",
+                16,
+                64);
 
             AddCuiText(
                 container,
                 formPanel,
                 "Viewer ID",
-                "0.02 0.43",
-                "0.2 0.51",
-                12,
+                "0.02 0.36",
+                "0.22 0.42",
+                14,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -3015,36 +3013,36 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft viewerid",
                 draft.ViewerId ?? "",
-                "0.02 0.33",
-                "0.30 0.42",
-                14,
+                "0.02 0.22",
+                "0.28 0.34",
+                16,
                 48);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft tier",
                 draft.TierStr ?? "1",
-                "0.32 0.33",
-                "0.38 0.42",
-                14,
+                "0.30 0.22",
+                "0.38 0.34",
+                16,
                 4);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft mode",
                 draft.Mode ?? "roaming",
-                "0.40 0.33",
-                "0.50 0.42",
-                14,
+                "0.40 0.22",
+                "0.52 0.34",
+                16,
                 24);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft kit",
                 draft.Kit ?? "-",
-                "0.52 0.33",
-                "0.62 0.42",
-                14,
+                "0.54 0.22",
+                "0.64 0.34",
+                16,
                 48);
             AddCuiButtonWithText(
                 container,
@@ -3052,17 +3050,17 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui draftreset",
                 "0.30 0.30 0.36 0.98",
                 "Reset Form",
-                "0.02 0.20",
-                "0.30 0.29",
-                12);
+                "0.02 0.06",
+                "0.32 0.18",
+                14);
 
             AddCuiText(
                 container,
                 formPanel,
                 "Target (viewerId / viewerName / INV-xxxxx)",
-                "0.66 0.62",
-                "0.98 0.7",
-                11,
+                "0.66 0.58",
+                "0.98 0.68",
+                13,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -3070,17 +3068,17 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft renametarget",
                 draft.RenameTarget ?? "",
-                "0.66 0.52",
-                "0.98 0.61",
-                14,
+                "0.66 0.44",
+                "0.98 0.56",
+                16,
                 64);
             AddCuiText(
                 container,
                 formPanel,
                 "New Name",
-                "0.66 0.43",
-                "0.9 0.51",
-                12,
+                "0.66 0.36",
+                "0.92 0.42",
+                14,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -3088,9 +3086,9 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft renamename",
                 draft.RenameName ?? "",
-                "0.66 0.33",
-                "0.98 0.42",
-                14,
+                "0.66 0.22",
+                "0.98 0.34",
+                16,
                 64);
             AddCuiButtonWithText(
                 container,
@@ -3098,9 +3096,9 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui renameapply",
                 "0.24 0.52 0.72 0.98",
                 "Apply Rename",
-                "0.66 0.20",
-                "0.98 0.29",
-                13);
+                "0.66 0.06",
+                "0.98 0.18",
+                15);
 
             CuiHelper.AddUi(player, container);
         }
