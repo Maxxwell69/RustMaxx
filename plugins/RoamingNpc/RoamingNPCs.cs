@@ -8586,6 +8586,143 @@ namespace Oxide.Plugins
             return true;
         }
 
+        private sealed class BridgeBoolEntry
+        {
+            public string Path;
+            public string Label;
+            public bool Value;
+        }
+
+        /// <summary>All public bool fields on <see cref="BotSetup"/> (nested classes only; skips lists/arrays).</summary>
+        [HookMethod("GetBridgeBotBoolTogglesJson")]
+        public object GetBridgeBotBoolTogglesJson(string templateKey)
+        {
+            try
+            {
+                var list = GetBridgeBoolListInternal(templateKey);
+                return list == null ? "[]" : JsonConvert.SerializeObject(list);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[RoamingNPCs] GetBridgeBotBoolTogglesJson: {ex.Message}");
+                return "[]";
+            }
+        }
+
+        [HookMethod("ToggleBridgeBotBoolByIndex")]
+        public object ToggleBridgeBotBoolByIndex(string templateKey, int index)
+        {
+            try
+            {
+                var list = GetBridgeBoolListInternal(templateKey);
+                if (list == null || index < 0 || index >= list.Count)
+                    return false;
+                return ToggleBridgeBotBoolByPath(templateKey, list[index].Path);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[RoamingNPCs] ToggleBridgeBotBoolByIndex: {ex.Message}");
+                return false;
+            }
+        }
+
+        [HookMethod("ToggleBridgeBotBoolByPath")]
+        public object ToggleBridgeBotBoolByPath(string templateKey, string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(templateKey) || string.IsNullOrWhiteSpace(path) || config?.bots == null)
+                    return false;
+                if (!config.bots.TryGetValue(templateKey.Trim(), out var root) || root == null)
+                    return false;
+                var parts = path.Split('.');
+                if (parts.Length == 0)
+                    return false;
+                object cur = root;
+                for (var i = 0; i < parts.Length - 1; i++)
+                {
+                    var fi = cur.GetType().GetField(parts[i], BindingFlags.Instance | BindingFlags.Public);
+                    if (fi == null)
+                        return false;
+                    cur = fi.GetValue(cur);
+                    if (cur == null)
+                        return false;
+                }
+
+                var lastFi =
+                    cur.GetType().GetField(parts[parts.Length - 1], BindingFlags.Instance | BindingFlags.Public);
+                if (lastFi == null || lastFi.FieldType != typeof(bool))
+                    return false;
+                lastFi.SetValue(cur, !(bool)lastFi.GetValue(cur));
+                SaveConfig();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[RoamingNPCs] ToggleBridgeBotBoolByPath: {ex.Message}");
+                return false;
+            }
+        }
+
+        private List<BridgeBoolEntry> GetBridgeBoolListInternal(string templateKey)
+        {
+            if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
+                return null;
+            var key = templateKey.Trim();
+            if (!config.bots.TryGetValue(key, out var setup) || setup == null)
+                return null;
+            var list = new List<BridgeBoolEntry>();
+            CollectBridgeBoolFields(setup, "", list, 0);
+            list.Sort((a, b) => string.CompareOrdinal(a.Path, b.Path));
+            return list;
+        }
+
+        private static void CollectBridgeBoolFields(object obj, string pathPrefix, List<BridgeBoolEntry> list, int depth)
+        {
+            if (obj == null || depth > 16)
+                return;
+            var t = obj.GetType();
+            foreach (var fi in t.GetFields(BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (fi.GetCustomAttribute<JsonIgnoreAttribute>() != null)
+                    continue;
+                var segment = fi.Name;
+                var fp = string.IsNullOrEmpty(pathPrefix) ? segment : pathPrefix + "." + segment;
+                if (fi.FieldType == typeof(bool))
+                {
+                    var jp = fi.GetCustomAttribute<JsonPropertyAttribute>();
+                    var label = jp != null && !string.IsNullOrEmpty(jp.PropertyName) ? jp.PropertyName : segment;
+                    list.Add(new BridgeBoolEntry
+                    {
+                        Path = fp,
+                        Label = label,
+                        Value = (bool)fi.GetValue(obj),
+                    });
+                }
+                else if (ShouldRecurseIntoBridgeFieldType(fi.FieldType))
+                {
+                    var nest = fi.GetValue(obj);
+                    if (nest != null)
+                        CollectBridgeBoolFields(nest, fp, list, depth + 1);
+                }
+            }
+        }
+
+        private static bool ShouldRecurseIntoBridgeFieldType(Type t)
+        {
+            if (t == null || t == typeof(string))
+                return false;
+            if (!t.IsClass)
+                return false;
+            if (typeof(IEnumerable).IsAssignableFrom(t))
+                return false;
+            if (t.Namespace != null &&
+                (t.Namespace.StartsWith("UnityEngine", StringComparison.Ordinal) ||
+                 t.Namespace.StartsWith("System.Reflection", StringComparison.Ordinal)))
+                return false;
+            return true;
+        }
+
         /// <summary>Strip Rich Text / length; if nothing left (emoji-only TikTok names, etc.), use Viewer_ + id digits so spawn never dies on empty name.</summary>
         private static string SanitizeBridgeDisplayName(string raw, string uniqueSuffixForFallback)
         {

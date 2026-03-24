@@ -19,7 +19,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.0")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.1")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2040,6 +2040,9 @@ namespace Oxide.Plugins
 
         private readonly Dictionary<ulong, int> _guiRoamingKeyPage = new();
 
+        /// <summary>Roaming tab: which bot template key is selected for bool toggles.</summary>
+        private readonly Dictionary<ulong, string> _guiRoamingSelectedKey = new();
+
         /// <summary>Selected profile slot (0–3) for the spawn form; set via GUI slot buttons or Load.</summary>
         private readonly Dictionary<ulong, int> _guiActiveProfileSlot = new();
 
@@ -2381,7 +2384,7 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 panel,
-                "<size=17><color=#d62828>ROAMING BOTS</color></size>\n<size=10><color=#8899aa>oxide/config/RoamingNPCs.json — Enable bot? per template</color></size>",
+                "<size=17><color=#d62828>ROAMING NPCs</color></size>\n<size=10><color=#8899aa>Pick a bot key → toggle every bool in RoamingNPCs.json for that template (scroll).</color></size>",
                 "0.02 0.88",
                 "0.98 0.99",
                 11,
@@ -2424,7 +2427,7 @@ namespace Oxide.Plugins
                         Text =
                         {
                             Text =
-                                "Bridge API missing on this RoamingNPCs build. Replace oxide/plugins/RoamingNPCs.cs with the latest from RustMaxx repo (bridge code is inside that file), then oxide.reload RoamingNPCs.",
+                                "Bridge API missing on this RoamingNPCs build. Replace oxide/plugins/RoamingNPCs.cs with the latest from RustMaxx repo, then oxide.reload RoamingNPCs.",
                             FontSize = 8,
                             Align = TextAnchor.UpperLeft,
                         },
@@ -2467,13 +2470,29 @@ namespace Oxide.Plugins
                 return;
             }
 
-            const int perPage = 10;
+            _guiRoamingSelectedKey.TryGetValue(player.userID, out var selRaw);
+            var canonKey = keys.FirstOrDefault(k => string.Equals(k, selRaw, StringComparison.OrdinalIgnoreCase)) ??
+                           keys[0];
+            _guiRoamingSelectedKey[player.userID] = canonKey;
+            var sel = canonKey;
+
+            const int perPage = 6;
             var page = GetRoamingKeyPage(player.userID);
             var totalPages = Math.Max(1, (int)Math.Ceiling(keys.Count / (float)perPage));
             page = Mathf.Clamp(page, 0, totalPages - 1);
             _guiRoamingKeyPage[player.userID] = page;
 
             var slice = keys.Skip(page * perPage).Take(perPage).ToList();
+
+            AddCuiText(
+                container,
+                panel,
+                $"Editing: {StripCuiMarkup(sel)}  —  all bool fields (nested) for this bot",
+                "0.02 0.805",
+                "0.98 0.845",
+                11,
+                TextAnchor.MiddleLeft,
+                "0.85 0.92 1 1");
 
             container.Add(
                 new CuiLabel
@@ -2489,9 +2508,9 @@ namespace Oxide.Plugins
                     panel,
                     $"maxxinvaders.gui roampage {page - 1}",
                     "0.14 0.14 0.16 0.95",
-                    "Prev keys",
+                    "Prev",
                     "0.52 0.755",
-                    "0.62 0.795",
+                    "0.60 0.795",
                     9,
                     TextAnchor.MiddleCenter,
                     "0.95 0.97 1 1");
@@ -2502,68 +2521,103 @@ namespace Oxide.Plugins
                     panel,
                     $"maxxinvaders.gui roampage {page + 1}",
                     "0.14 0.14 0.16 0.95",
-                    "Next keys",
-                    "0.63 0.755",
-                    "0.76 0.795",
+                    "Next",
+                    "0.61 0.755",
+                    "0.74 0.795",
                     9,
                     TextAnchor.MiddleCenter,
                     "0.95 0.97 1 1");
 
-            float ry = 0.72f;
+            var rowH = 0.034f;
+            var ry = 0.718f;
             foreach (var key in slice)
             {
-                var st = "off";
+                var st = "?";
                 try
                 {
                     var ready = RoamingNPCs.Call("IsBridgeTemplateReady", key) as string;
-                    if (ready == "ok") st = "on";
+                    if (ready == "ok") st = "ok";
                     else if (ready == "disabled") st = "off";
-                    else if (ready == "missing") st = "missing";
+                    else if (ready == "missing") st = "no cfg";
+                    else st = ready ?? "?";
                 }
                 catch
                 {
                     st = "?";
                 }
 
-                container.Add(
-                    new CuiLabel
-                    {
-                        Text = { Text = key, FontSize = 8, Align = TextAnchor.MiddleLeft },
-                        RectTransform = { AnchorMin = $"0.03 {ry - 0.036f}", AnchorMax = $"0.55 {ry}" },
-                    },
-                    panel);
-                container.Add(
-                    new CuiLabel
-                    {
-                        Text = { Text = $"bridge: {st}", FontSize = 7, Align = TextAnchor.MiddleRight },
-                        RectTransform = { AnchorMin = $"0.56 {ry - 0.036f}", AnchorMax = $"0.72 {ry}" },
-                    },
-                    panel);
+                var yb = ry - rowH;
+                var isSel = string.Equals(key, sel, StringComparison.OrdinalIgnoreCase);
+                var keyDisp = TruncateGui(key, 22);
+                AddCuiText(
+                    container,
+                    panel,
+                    (isSel ? "► " : "") + keyDisp,
+                    $"0.03 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
+                    $"0.38 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
+                    8,
+                    TextAnchor.MiddleLeft,
+                    isSel ? "0.4 0.85 1 1" : "0.9 0.92 1 1");
+                AddCuiText(
+                    container,
+                    panel,
+                    st,
+                    $"0.39 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
+                    $"0.50 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
+                    7,
+                    TextAnchor.MiddleCenter,
+                    "0.65 0.75 0.9 1");
+                AddCuiButtonWithText(
+                    container,
+                    panel,
+                    $"maxxinvaders.gui roamselectkey {key}",
+                    "0.22 0.42 0.62 0.95",
+                    "Select",
+                    $"0.51 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
+                    $"0.62 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
+                    8);
                 AddCuiButtonWithText(
                     container,
                     panel,
                     $"maxxinvaders.gui roamtoggle {key}",
                     "0.72 0.14 0.10 0.92",
-                    "Toggle Enable bot?",
-                    $"0.73 {ry - 0.036f}",
-                    $"0.97 {ry}",
+                    "Enable",
+                    $"0.63 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
+                    $"0.97 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
                     8);
-                ry -= 0.044f;
+                ry = yb - 0.004f;
             }
 
-            container.Add(
-                new CuiLabel
+            var boolScrollHost = container.Add(
+                new CuiPanel
                 {
-                    Text =
-                    {
-                        Text = "Access: /migrate-to-skills (Maxx tab) or /maxxinvaders roaming — Cursor: migrate-to-skills skill for .cursor rules",
-                        FontSize = 7,
-                        Align = TextAnchor.LowerLeft,
-                        Color = "0.65 0.72 0.78 1",
-                    },
-                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.048" },
+                    Image = { Color = "0.05 0.06 0.08 0.96" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.48" },
+                    CursorEnabled = true,
                 },
                 panel);
+
+            AddCuiText(
+                container,
+                boolScrollHost,
+                "Boolean options (oxide/config/RoamingNPCs.json) — click ON/OFF",
+                "0.02 0.88",
+                "0.98 0.98",
+                10,
+                TextAnchor.MiddleLeft,
+                "0.75 0.82 0.95 1");
+
+            var boolInner = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0 0 0 0" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.84" },
+                    CursorEnabled = true,
+                },
+                boolScrollHost);
+
+            AddRoamingBoolScrollList(container, boolInner, sel);
+
         }
 
         private string ResolveSpawnTemplateKeyFromDraft(SpawnDraft d)
@@ -2586,6 +2640,150 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(key)) return "?";
             key = key.Trim();
             return key.Length <= maxLen ? key : key.Substring(0, maxLen);
+        }
+
+        private sealed class BridgeBoolRow
+        {
+            public string Path;
+            public string Label;
+            public bool Value;
+        }
+
+        private static string TruncateGui(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            s = StripCuiMarkup(s);
+            return s.Length <= max ? s : s.Substring(0, max) + "…";
+        }
+
+        private void AddRoamingBoolScrollList(CuiElementContainer container, string scrollHostParent, string botKey)
+        {
+            const int rowH = 32;
+            List<BridgeBoolRow> rows = null;
+            if (RoamingNPCs != null && RoamingNPCs.IsLoaded && !string.IsNullOrEmpty(botKey))
+            {
+                try
+                {
+                    var json = RoamingNPCs.Call("GetBridgeBotBoolTogglesJson", botKey) as string;
+                    if (!string.IsNullOrEmpty(json) && json != "[]")
+                        rows = JsonConvert.DeserializeObject<List<BridgeBoolRow>>(json);
+                }
+                catch
+                {
+                    /* ignored */
+                }
+            }
+
+            var n = rows?.Count ?? 0;
+            var contentH = Mathf.Max(rowH * Mathf.Max(n, 1) + 8, rowH + 8);
+            var panelSize = -contentH;
+
+            var scrollerName = Guid.NewGuid().ToString("N");
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = scrollerName,
+                    Parent = scrollHostParent,
+                    Components =
+                    {
+                        new CuiNeedsCursorComponent(),
+                        new CuiImageComponent
+                        {
+                            Color = "0.06 0.07 0.09 0.92",
+                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                            ImageType = Image.Type.Tiled,
+                        },
+                        new CuiScrollViewComponent
+                        {
+                            ContentTransform = new CuiRectTransform
+                            {
+                                AnchorMin = "0 0.98",
+                                AnchorMax = "1 0.98",
+                                OffsetMin = $"0 {panelSize}",
+                                OffsetMax = "0 0",
+                            },
+                            Vertical = true,
+                            Horizontal = false,
+                            MovementType = ScrollRect.MovementType.Clamped,
+                            Elasticity = 0.25f,
+                            Inertia = true,
+                            DecelerationRate = 0.3f,
+                            ScrollSensitivity = 24f,
+                            VerticalScrollbar = new CuiScrollbar { AutoHide = true, Size = 16 },
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    },
+                });
+
+            if (n == 0)
+            {
+                AddCuiText(
+                    container,
+                    scrollerName,
+                    string.IsNullOrEmpty(botKey)
+                        ? "Select a bot key above, then scroll here to toggle every boolean in RoamingNPCs.json for that bot."
+                        : "No bool fields found (update RoamingNPCs to latest RustMaxx build).",
+                    "0.04 0.35",
+                    "0.96 0.88",
+                    11,
+                    TextAnchor.MiddleCenter,
+                    "0.75 0.8 0.9 1");
+                return;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var row = rows[i];
+                var offsetMin = -i * rowH - rowH;
+                var offsetMax = -i * rowH;
+                var rowName = Guid.NewGuid().ToString("N");
+                AddRawCuiElement(
+                    container,
+                    new CuiElement
+                    {
+                        Name = rowName,
+                        Parent = scrollerName,
+                        Components =
+                        {
+                            new CuiImageComponent
+                            {
+                                Color = "0.1 0.12 0.15 0.94",
+                                Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                                ImageType = Image.Type.Tiled,
+                            },
+                            new CuiRectTransformComponent
+                            {
+                                AnchorMin = "0 0.998",
+                                AnchorMax = "1 0.998",
+                                OffsetMin = $"0 {offsetMin}",
+                                OffsetMax = $"0 {offsetMax}",
+                            },
+                        },
+                    });
+
+                var lbl = TruncateGui(row.Label ?? row.Path ?? "?", 52);
+                AddCuiText(
+                    container,
+                    rowName,
+                    lbl,
+                    "0.02 0.12",
+                    "0.72 0.88",
+                    9,
+                    TextAnchor.MiddleLeft,
+                    "0.92 0.95 1 1");
+                var on = row.Value;
+                var btnCol = on ? "0.18 0.55 0.35 0.95" : "0.35 0.32 0.15 0.95";
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui roambooltoggle {i}",
+                    btnCol,
+                    on ? "ON" : "OFF",
+                    "0.74 0.12",
+                    "0.98 0.88",
+                    9);
+            }
         }
 
         private void AddScrollableInvadersBotList(
@@ -2885,31 +3083,84 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.10 0.11 0.14 0.95" },
-                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.42" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.44" },
                     CursorEnabled = true,
                 },
                 contentPanel);
 
-            AddCuiText(container, formPanel, "SPAWN", "0.02 0.90", "0.22 0.99", 18, TextAnchor.MiddleLeft, "1 1 1 1");
-            AddCuiText(container, formPanel, "RENAME", "0.58 0.90", "0.82 0.99", 18, TextAnchor.MiddleLeft, "1 1 1 1");
+            AddCuiText(
+                container,
+                formPanel,
+                "— Spawn —",
+                "0.03 0.88",
+                "0.46 0.98",
+                15,
+                TextAnchor.MiddleLeft,
+                "0.95 0.97 1 1");
+            AddCuiText(
+                container,
+                formPanel,
+                "— Rename existing bot —",
+                "0.52 0.88",
+                "0.97 0.98",
+                15,
+                TextAnchor.MiddleLeft,
+                "0.95 0.97 1 1");
 
             AddCuiButtonWithText(
                 container,
                 formPanel,
                 "maxxinvaders.gui spawnfields",
                 "0.22 0.48 0.72 0.98",
-                "Spawn From Form",
-                "0.08 0.78",
-                "0.92 0.88",
-                15);
+                "Spawn (use form)",
+                "0.03 0.76",
+                "0.23 0.86",
+                12);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui spawnrandom",
+                "0.20 0.55 0.35 0.95",
+                "Random spawn",
+                "0.25 0.76",
+                "0.46 0.86",
+                12);
 
             AddCuiText(
                 container,
                 formPanel,
-                "Bot name (in-world display; empty = Viewer name)",
-                "0.02 0.68",
-                "0.52 0.76",
-                12,
+                "Roaming template (edit list in MaxxInvaders.json → Gui)",
+                "0.03 0.66",
+                "0.46 0.72",
+                10,
+                TextAnchor.MiddleLeft,
+                "0.75 0.82 0.95 1");
+
+            for (var si = 0; si < 4; si++)
+            {
+                var k = si < tmplKeys.Count ? tmplKeys[si] : _cfg.DefaultRoamingTemplateKey;
+                var slotSel = Mathf.Clamp(draft.RoamingTemplateSlot, 0, 3) == si;
+                var x0 = 0.03f + si * 0.105f;
+                var x1 = x0 + 0.098f;
+                var col = slotSel ? _cfg.Gui.AccentColor : "0.18 0.22 0.28 0.95";
+                AddCuiButtonWithText(
+                    container,
+                    formPanel,
+                    $"maxxinvaders.gui tmplslot {si}",
+                    col,
+                    $"{si + 1}: {ShortTemplateKeyLabel(k ?? "?")}",
+                    $"{x0.ToString("F3", CultureInfo.InvariantCulture)} 0.54",
+                    $"{x1.ToString("F3", CultureInfo.InvariantCulture)} 0.63",
+                    8);
+            }
+
+            AddCuiText(
+                container,
+                formPanel,
+                "Bot display name (empty = viewer name)",
+                "0.03 0.44",
+                "0.46 0.50",
+                10,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -2917,46 +3168,18 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft botname",
                 draft.BotName ?? "",
-                "0.02 0.58",
-                "0.52 0.66",
-                15,
+                "0.03 0.34",
+                "0.46 0.42",
+                14,
                 64);
 
             AddCuiText(
                 container,
                 formPanel,
-                "Roaming template (keys in MaxxInvaders.json → Gui.SpawnRoamingTemplateKeys)",
-                "0.02 0.50",
-                "0.96 0.56",
-                11,
-                TextAnchor.MiddleLeft,
-                "0.75 0.8 0.9 1");
-
-            for (var si = 0; si < 4; si++)
-            {
-                var k = si < tmplKeys.Count ? tmplKeys[si] : _cfg.DefaultRoamingTemplateKey;
-                var sel = Mathf.Clamp(draft.RoamingTemplateSlot, 0, 3) == si;
-                var x0 = 0.02f + si * 0.245f;
-                var x1 = x0 + 0.235f;
-                var col = sel ? _cfg.Gui.AccentColor : "0.18 0.22 0.28 0.95";
-                AddCuiButtonWithText(
-                    container,
-                    formPanel,
-                    $"maxxinvaders.gui tmplslot {si}",
-                    col,
-                    $"{si + 1}: {ShortTemplateKeyLabel(k ?? "?")}",
-                    $"{x0.ToString("F3", CultureInfo.InvariantCulture)} 0.38",
-                    $"{x1.ToString("F3", CultureInfo.InvariantCulture)} 0.48",
-                    9);
-            }
-
-            AddCuiText(
-                container,
-                formPanel,
-                "Viewer Name (TikFinity / id)",
-                "0.02 0.30",
-                "0.28 0.36",
-                12,
+                "Viewer name (TikFinity / identity)",
+                "0.03 0.26",
+                "0.46 0.32",
+                10,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -2964,73 +3187,90 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft viewername",
                 draft.ViewerName ?? "DemoViewer",
-                "0.02 0.20",
-                "0.52 0.28",
-                14,
+                "0.03 0.16",
+                "0.46 0.24",
+                13,
                 64);
 
             AddCuiText(
                 container,
                 formPanel,
                 "Viewer ID",
-                "0.02 0.12",
-                "0.16 0.18",
-                11,
+                "0.03 0.095",
+                "0.12 0.13",
+                9,
                 TextAnchor.MiddleLeft,
-                "0.92 0.95 1 1");
+                "0.7 0.78 0.9 1");
+            AddCuiText(
+                container,
+                formPanel,
+                "Tier",
+                "0.14 0.095",
+                "0.20 0.13",
+                9,
+                TextAnchor.MiddleLeft,
+                "0.7 0.78 0.9 1");
+            AddCuiText(
+                container,
+                formPanel,
+                "Mode",
+                "0.22 0.095",
+                "0.30 0.13",
+                9,
+                TextAnchor.MiddleLeft,
+                "0.7 0.78 0.9 1");
+            AddCuiText(
+                container,
+                formPanel,
+                "Kit",
+                "0.32 0.095",
+                "0.40 0.13",
+                9,
+                TextAnchor.MiddleLeft,
+                "0.7 0.78 0.9 1");
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft viewerid",
                 draft.ViewerId ?? "",
-                "0.02 0.02",
-                "0.22 0.10",
-                13,
+                "0.03 0.02",
+                "0.12 0.08",
+                11,
                 48);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft tier",
                 draft.TierStr ?? "1",
-                "0.24 0.02",
-                "0.32 0.10",
-                13,
+                "0.14 0.02",
+                "0.20 0.08",
+                11,
                 4);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft mode",
                 draft.Mode ?? "roaming",
-                "0.34 0.02",
-                "0.46 0.10",
-                13,
+                "0.22 0.02",
+                "0.30 0.08",
+                11,
                 24);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft kit",
                 draft.Kit ?? "-",
-                "0.48 0.02",
-                "0.58 0.10",
-                13,
+                "0.32 0.02",
+                "0.45 0.08",
+                11,
                 48);
-
-            AddCuiButtonWithText(
-                container,
-                formPanel,
-                "maxxinvaders.gui draftreset",
-                "0.30 0.30 0.36 0.98",
-                "Reset Form",
-                "0.60 0.02",
-                "0.82 0.10",
-                12);
 
             AddCuiText(
                 container,
                 formPanel,
-                "Target (viewerId / viewerName / INV-xxxxx)",
-                "0.58 0.72",
-                "0.98 0.78",
+                "Which bot to rename",
+                "0.52 0.72",
+                "0.97 0.78",
                 11,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
@@ -3039,17 +3279,17 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft renametarget",
                 draft.RenameTarget ?? "",
-                "0.58 0.58",
-                "0.98 0.70",
-                13,
+                "0.52 0.60",
+                "0.97 0.70",
+                12,
                 64);
             AddCuiText(
                 container,
                 formPanel,
-                "New Name",
-                "0.58 0.48",
-                "0.82 0.54",
-                12,
+                "New display name",
+                "0.52 0.50",
+                "0.97 0.56",
+                11,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -3057,25 +3297,34 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft renamename",
                 draft.RenameName ?? "",
-                "0.58 0.36",
-                "0.98 0.46",
-                13,
+                "0.52 0.38",
+                "0.97 0.48",
+                12,
                 64);
             AddCuiButtonWithText(
                 container,
                 formPanel,
                 "maxxinvaders.gui renameapply",
                 "0.24 0.52 0.72 0.98",
-                "Apply Rename",
-                "0.58 0.22",
-                "0.98 0.32",
+                "Apply rename",
+                "0.52 0.26",
+                "0.97 0.36",
                 13);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui draftreset",
+                "0.30 0.30 0.36 0.98",
+                "Reset all fields",
+                "0.52 0.14",
+                "0.97 0.22",
+                11);
 
             var botsOuter = container.Add(
                 new CuiPanel
                 {
                     Image = { Color = "0.07 0.09 0.12 0.94" },
-                    RectTransform = { AnchorMin = "0.02 0.435", AnchorMax = "0.98 0.92" },
+                    RectTransform = { AnchorMin = "0.02 0.455", AnchorMax = "0.98 0.92" },
                     CursorEnabled = true,
                 },
                 contentPanel);
@@ -3174,6 +3423,43 @@ namespace Oxide.Plugins
                 return;
             }
 
+            if (args[0] == "roamselectkey" && args.Length > 1)
+            {
+                var rkey = string.Join(" ", args.Skip(1).ToArray()).Trim();
+                if (!string.IsNullOrEmpty(rkey))
+                    _guiRoamingSelectedKey[player.userID] = rkey;
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "roambooltoggle" && args.Length > 1 &&
+                int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var boolIdx))
+            {
+                if (!_guiRoamingSelectedKey.TryGetValue(player.userID, out var boolSel) || string.IsNullOrEmpty(boolSel))
+                {
+                    player.ChatMessage("[MaxxInvaders] On the Roaming tab, click Select on a bot key first.");
+                    OpenGui(player, GetGuiPage(player.userID));
+                    return;
+                }
+
+                if (RoamingNPCs != null && RoamingNPCs.IsLoaded)
+                {
+                    try
+                    {
+                        var ok = RoamingNPCs.Call("ToggleBridgeBotBoolByIndex", boolSel, boolIdx);
+                        if (ok is bool b && !b)
+                            player.ChatMessage("[MaxxInvaders] Toggle failed (reload RoamingNPCs to latest RustMaxx build).");
+                    }
+                    catch (Exception ex)
+                    {
+                        PrintWarning($"{LogPrefix} ToggleBridgeBotBoolByIndex: {ex.Message}");
+                    }
+                }
+
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
             if (args[0] == "draftreset")
             {
                 _spawnDrafts[player.userID] = new SpawnDraft();
@@ -3255,6 +3541,39 @@ namespace Oxide.Plugins
             {
                 var dSlot = GetSpawnDraft(player.userID);
                 dSlot.RoamingTemplateSlot = Mathf.Clamp(tmplSlot, 0, 3);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "spawnrandom")
+            {
+                var dr = GetSpawnDraft(player.userID);
+                var vid = "demo_" + Random.Range(100000, 999999);
+                var tierList = _cfg.TierDefinitions?.Keys.ToList();
+                var tier = tierList != null && tierList.Count > 0
+                    ? tierList[Random.Range(0, tierList.Count)]
+                    : Random.Range(1, 6);
+                var modeList = _cfg.AllowedBehaviorModes;
+                var mode = modeList != null && modeList.Count > 0
+                    ? modeList[Random.Range(0, modeList.Count)].Trim().ToLowerInvariant()
+                    : "roaming";
+                var dispName = !string.IsNullOrWhiteSpace(dr.BotName)
+                    ? dr.BotName.Trim()
+                    : (!string.IsNullOrWhiteSpace(dr.ViewerName) ? dr.ViewerName.Trim() : "RandomBot");
+                var gk = _cfg.Gui?.SpawnRoamingTemplateKeys;
+                string rtk;
+                if (gk != null && gk.Count > 0)
+                    rtk = gk[Random.Range(0, gk.Count)]?.Trim();
+                else
+                    rtk = ResolveSpawnTemplateKeyFromDraft(dr);
+                if (string.IsNullOrEmpty(rtk))
+                    rtk = string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey)
+                        ? "bob_resources_farmer"
+                        : _cfg.DefaultRoamingTemplateKey.Trim();
+                var resR = TrySpawn(dispName, vid, tier, "", mode, player, "gui_random", rtk);
+                player.ChatMessage(resR.Success
+                    ? $"[MaxxInvaders] Random spawn {resR.NpcId} — template {rtk}, tier {tier}, {mode}"
+                    : $"[MaxxInvaders] Random spawn failed: {resR.Error}");
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
