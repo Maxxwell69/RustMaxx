@@ -264,16 +264,32 @@ async function runWebhook(request: NextRequest, body: unknown) {
   const actionFromQuery = queryAction ? getActionFromPayload({ action: queryAction }) : null;
   const templateFromQuery = request.nextUrl.searchParams.get("template")?.trim() ?? null;
 
+  // Admin connection (scrap/message/template metadata) by TikFinity event name — load whenever the body names an event,
+  // even if ?action= will choose the final command (so chaos URLs still get connection scrap defaults).
+  let connectionFromAdmin: Awaited<ReturnType<typeof getConnectionByEventName>> = null;
+  let tikfinityEventNameForLog: string | null = null;
+  const rawConnectionName = getRawActionNameFromPayload(body);
+  if (rawConnectionName) {
+    const conn = await getConnectionByEventName(rawConnectionName);
+    if (conn) {
+      connectionFromAdmin = conn;
+      tikfinityEventNameForLog = rawConnectionName;
+    }
+  }
+
   let payload = normalizeWebhookPayload(body);
   let action: TikTriggerAction | null = null;
-  let tikfinityEventNameForLog: string | null = null;
 
-  if (payload) {
-    action = getActionForGift(payload.giftName);
-  }
-  if (!action && actionFromQuery) {
+  // Explicit ?action= wins over body giftName — TikFinity often sends a generic gift field that would otherwise override chaos etc.
+  if (actionFromQuery) {
     action = actionFromQuery;
-    payload = { viewerName: viewerFromBody(), giftName: actionFromQuery };
+    payload = {
+      viewerName:
+        extractViewerNameFromWebhookBody(body) ?? payload?.viewerName ?? viewerFromBody(),
+      giftName: actionFromQuery,
+    };
+  } else if (payload) {
+    action = getActionForGift(payload.giftName);
   }
   if (!action) {
     const directAction = getActionFromPayload(body);
@@ -282,17 +298,9 @@ async function runWebhook(request: NextRequest, body: unknown) {
       payload = { viewerName: viewerFromBody(), giftName: directAction };
     }
   }
-  let connectionFromAdmin: Awaited<ReturnType<typeof getConnectionByEventName>> = null;
-  if (!action) {
-    const rawName = getRawActionNameFromPayload(body);
-    if (rawName) {
-      connectionFromAdmin = await getConnectionByEventName(rawName);
-      if (connectionFromAdmin) {
-        tikfinityEventNameForLog = rawName;
-        action = connectionFromAdmin.server_action;
-        payload = { viewerName: viewerFromBody(), giftName: connectionFromAdmin.server_action };
-      }
-    }
+  if (!action && connectionFromAdmin) {
+    action = connectionFromAdmin.server_action;
+    payload = { viewerName: viewerFromBody(), giftName: connectionFromAdmin.server_action };
   }
 
   // No valid action from payload – don't default to wolf; skip and tell them how to specify action
