@@ -71,6 +71,8 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 Rust **Scientist** AI is engine-driven. MaxxInvaders maps modes to **optional prefabs per mode** and **NavMesh destinations** (roam, move toward nearest player, follow admin). It does **not** fully reimplement RoamingNPCs-style combat personalities. For “true” hostile tuning, prefer **prefab variants** (if your build exposes different scientist prefabs) and tier **health** — see `PrefabByBehaviorMode` in config.
 
+**Player damage (v1.0.5+):** Only modes **`hostile`** and **`attackplayer`** are allowed to **deal damage to real players**. Other modes (`roaming`, `friendly`, `neutral`, `defend`, `escort`, etc.) have **damage to players cancelled** in a hook — they may still *aim* or play animations, but hits should not hurt you. For killers, use **`hostile`** or **`attackplayer`**. Passive modes also get **stronger wander + steer-away** from nearby players so they move more instead of standing in one spot.
+
 ## Data files
 
 - **Config:** `oxide/config/MaxxInvaders.json`

@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.0.4")]
+    [Info("MaxxInvaders", "RustMaxx", "1.0.5")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -68,6 +68,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermAdmin, this);
             permission.RegisterPermission(PermUse, this);
             permission.RegisterPermission(PermDebug, this);
+            Subscribe(nameof(OnEntityTakeDamage));
         }
 
         private void OnServerInitialized()
@@ -682,6 +683,33 @@ namespace Oxide.Plugins
 
         #region Behavior tick (lightweight; full AI is engine-owned)
 
+        /// <summary>
+        /// Vanilla scientists still run combat AI. Only <c>hostile</c> and <c>attackplayer</c> may damage players.
+        /// </summary>
+        private static bool ModeAllowsDamageToPlayers(string mode)
+        {
+            if (string.IsNullOrEmpty(mode)) return false;
+            var m = mode.ToLowerInvariant();
+            return m == "hostile" || m == "attackplayer";
+        }
+
+        /// <summary>Block invader scientist damage to real players when mode is not explicitly hostile.</summary>
+        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
+        {
+            if (entity == null || info == null) return null;
+            var victim = entity as BasePlayer;
+            if (victim == null || victim.IsNpc) return null;
+            var initiator = info.Initiator;
+            if (initiator == null) return null;
+            var sci = initiator as ScientistNPC;
+            if (sci == null && initiator is BasePlayer bp && bp.IsNpc)
+                sci = bp as ScientistNPC;
+            if (sci == null) return null;
+            if (!_registry.TryGetByEntity(sci.net.ID.Value, out var r)) return null;
+            if (ModeAllowsDamageToPlayers(r.Mode)) return null;
+            return true;
+        }
+
         private void BehaviorTick()
         {
             foreach (var r in _registry.All().ToArray())
@@ -718,15 +746,46 @@ namespace Oxide.Plugins
                     case "neutral":
                     case "roaming":
                     default:
-                        SteerRandomRoam(r.Entity, 24f);
+                        // Engine AI still wants to fight; we steer more often + flee players so they wander instead of turret.
+                        SteerAwayFromNearestPlayer(r.Entity, 55f, 22f);
+                        SteerRandomRoam(r.Entity, 36f, 0.42f);
                         break;
                 }
             }
         }
 
-        private void SteerRandomRoam(ScientistNPC npc, float radius)
+        /// <summary>Move away from the nearest real player (passive modes).</summary>
+        private void SteerAwayFromNearestPlayer(ScientistNPC npc, float scareRadius, float fleeDistance)
         {
-            if (npc == null || Random.value > 0.15f) return;
+            if (npc == null || Random.value > 0.45f) return;
+            BasePlayer nearest = null;
+            var best = scareRadius * scareRadius;
+            var o = npc.transform.position;
+            foreach (var p in BasePlayer.activePlayerList)
+            {
+                if (p == null || !p.IsValid() || p.IsNpc) continue;
+                var d = (p.transform.position - o).sqrMagnitude;
+                if (d < best)
+                {
+                    best = d;
+                    nearest = p;
+                }
+            }
+            if (nearest == null) return;
+            var away = (o - nearest.transform.position).Flatten();
+            if (away.sqrMagnitude < 0.01f)
+                away = Random.insideUnitSphere.Flatten();
+            away.Normalize();
+            var target = o + away * fleeDistance;
+            target.y = TerrainMeta.HeightMap.GetHeight(target);
+            if (NavMesh.SamplePosition(target, out var hit, 6f, NavMesh.AllAreas))
+                target = hit.position;
+            TrySetDestination(npc, target);
+        }
+
+        private void SteerRandomRoam(ScientistNPC npc, float radius, float chance = 0.15f)
+        {
+            if (npc == null || Random.value > chance) return;
             var origin = npc.transform.position;
             var target = origin + Random.insideUnitSphere.Flatten() * radius;
             target.y = TerrainMeta.HeightMap.GetHeight(target);
