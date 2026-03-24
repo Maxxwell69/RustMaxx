@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.0")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.1")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -9093,27 +9093,7 @@ namespace Oxide.Plugins.RoamingNPCex
             ;
             return result;
         }
-        // Where/Count removed: they duplicated System.Linq.Enumerable and confused the Oxide compiler (ambiguous calls).
-        public static IEnumerable<TResult> OfType<TResult>(this IEnumerable source)
-        {
-            if (source == null)
-            {
-                throw Error.ArgumentNull("source");
-            }
-
-            return OfTypeIterator<TResult>(source);
-        }
-        private static IEnumerable<TResult> OfTypeIterator<TResult>(IEnumerable source)
-        {
-            foreach (object item in source)
-            {
-                if (item is TResult)
-                {
-                    yield return (TResult)item;
-                }
-            }
-        }
-        
+        // Where/Count/OfType removed: they duplicated System.Linq.Enumerable and confused the Oxide compiler (ambiguous calls).
         public static BuildingPrivlidge GetBuildingPrivlidge(Vector3 pos)
         {
             OBB obb = new(pos, Vector3.one, Quaternion.identity);
