@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.4.7")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.4.8")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2963,7 +2963,8 @@ namespace Oxide.Plugins
             return null;
         }
 
-        public List<CustomPet> GetBotsInRadius(Vector3 position, float radius) => listNpcPlayers.Values.Where(x => x != null ? (!x.IsDestroyed && Vector3.Distance(x.transform.position, position) <= radius) : false);
+        public List<CustomPet> GetBotsInRadius(Vector3 position, float radius) =>
+            System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(listNpcPlayers.Values, x => x != null ? (!x.IsDestroyed && Vector3.Distance(x.transform.position, position) <= radius) : false));
 
         public void KillBotsUnload()
         {
