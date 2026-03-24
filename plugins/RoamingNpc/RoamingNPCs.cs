@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.3")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.4")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8441,6 +8441,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region MaxxInvadersBridgeApi
+        [HookMethod("SpawnFromTemplateForBridge")]
         public object SpawnFromTemplateForBridge(string templateKey, string displayName, string uniqueSuffix)
         {
             if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
@@ -8490,6 +8491,7 @@ namespace Oxide.Plugins
             }
         }
 
+        [HookMethod("IsBridgeTemplateReady")]
         public object IsBridgeTemplateReady(string templateKey)
         {
             try
@@ -8509,6 +8511,7 @@ namespace Oxide.Plugins
             }
         }
 
+        [HookMethod("GetMaxxInvadersGuiSummary")]
         public object GetMaxxInvadersGuiSummary()
         {
             var sb = new StringBuilder();
@@ -8562,6 +8565,7 @@ namespace Oxide.Plugins
             return sb.ToString();
         }
 
+        [HookMethod("GetBridgeBotKeysCsv")]
         public object GetBridgeBotKeysCsv()
         {
             if (config?.bots == null || config.bots.Count == 0)
@@ -8569,6 +8573,7 @@ namespace Oxide.Plugins
             return string.Join(",", config.bots.Keys.OrderBy(x => x));
         }
 
+        [HookMethod("ToggleBridgeBotEnabled")]
         public object ToggleBridgeBotEnabled(string templateKey)
         {
             if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
