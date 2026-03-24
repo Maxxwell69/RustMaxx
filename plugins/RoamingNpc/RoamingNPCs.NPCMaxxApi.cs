@@ -123,6 +123,27 @@ namespace Oxide.Plugins
             return sb.ToString();
         }
 
+        /// <summary>Comma-separated bot keys (for MaxxInvaders Roaming tab). Empty string if none.</summary>
+        public object GetBridgeBotKeysCsv()
+        {
+            if (config?.bots == null || config.bots.Count == 0)
+                return "";
+            return string.Join(",", config.bots.Keys.OrderBy(x => x));
+        }
+
+        /// <summary>Flip Enable bot? for a template key and save RoamingNPCs.json.</summary>
+        public object ToggleBridgeBotEnabled(string templateKey)
+        {
+            if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
+                return false;
+            var key = templateKey.Trim();
+            if (!config.bots.TryGetValue(key, out var s) || s == null)
+                return false;
+            s.Enable = !s.Enable;
+            SaveConfig();
+            return true;
+        }
+
         private static string SanitizeBridgeDisplayName(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw))

@@ -60,7 +60,11 @@ Interface.Call("RemoveInvader", viewerId);
 | `/maxxinvaders clear` | admin | Despawn all tracked |
 | `/maxxinvaders debug on\|off` | debug | Verbose logging |
 
-In the **GUI**, use tabs **Invaders** (spawn + list + short bridge status) and **Setup** (full **MaxxInvaders** + **RoamingNPCs** config reference — read-only; edit `oxide/config/*.json` and reload). Use **Quick: spawn 1 demo NPC** for an instant test, or fill **viewer name**, **viewer id** (unique), **tier**, **mode**, **kit**, then **Spawn using fields below**. After editing a field, press **Enter** or click outside so Rust sends the value. **Reset form** gives a new random demo id.
+In the **GUI**, use tabs **Invaders** (spawn + list + bridge status), **Maxx** (edit **MaxxInvaders** options — saves `oxide/config/MaxxInvaders.json`), and **Roaming** (toggle **Enable bot?** per RoamingNPCs template — saves `oxide/config/RoamingNPCs.json`). You do not need to hand-edit JSON for those fields.
+
+**Chat access:** **`/migrate-to-skills`** opens the **Maxx** tab (same permission as the GUI). Also **`/maxxinvaders maxx`**, **`/maxxinvaders roaming`**, **`/maxxinvaders ui`**. The Cursor **migrate-to-skills** *skill* (`.cursor/skills`) is only for migrating rules/commands in the editor — not required for Rust.
+
+Use **Quick: spawn 1 demo NPC** for an instant test, or fill **viewer name**, **viewer id** (unique), **tier**, **mode**, **kit**, then **Spawn using fields below**. After editing a field, press **Enter** or click outside so Rust sends the value. **Reset form** gives a new random demo id.
 
 ## “Failed to create agent because it is not close enough to the NavMesh”
 
@@ -98,6 +102,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.2.0:** GUI tabs **Invaders | Maxx | Roaming**. **Maxx** edits core MaxxInvaders config in-game. **Roaming** toggles RoamingNPCs bot templates (requires **NPCMaxxApi** with `GetBridgeBotKeysCsv` + `ToggleBridgeBotEnabled`). Chat **`/migrate-to-skills`** opens the Maxx tab.
 - **1.1.4:** Config **`ScientistFallbackEnabled`** (default `true`). Set to `false` to **disable vanilla scientist spawns** and require a successful RoamingNPCs bridge only.
 - **1.1.3:** Stronger **NavMesh** snapping for spawns, roaming teleports, and scientist destinations to reduce “Failed to create agent…” console spam.
 - **1.1.2:** Admin **GUI** has **Invaders** vs **Setup** tabs. **Setup** shows a read-only summary of **MaxxInvaders** config (caps, spawn rules, bridge, tiers, prefabs, logging) and **RoamingNPCs** config (bot keys + enabled flags, live count). RoamingNPCs adds **`GetMaxxInvadersGuiSummary`** for the right column.

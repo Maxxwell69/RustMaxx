@@ -18,8 +18,8 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.1.4")]
-    [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.0")]
+    [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
         #region Constants & permissions
@@ -542,94 +542,6 @@ namespace Oxide.Plugins
             var fb = _cfg.ScientistFallbackEnabled ? "scientist fallback ON" : "scientist fallback OFF (roaming only)";
             return $"Roaming bridge: ON  |  Default template: {key}  |  {fb}\n{detail}\n" +
                    "Per-tier RoamingTemplateKey in MaxxInvaders.json overrides the default for that tier.";
-        }
-
-        private static string Trunc(string s, int max)
-        {
-            if (string.IsNullOrEmpty(s)) return "";
-            s = s.Trim();
-            return s.Length <= max ? s : s.Substring(0, max - 1) + "…";
-        }
-
-        /// <summary>Full read-only dump of MaxxInvaders.json-relevant options for the Setup tab.</summary>
-        private string BuildMaxxInvadersSetupSummaryText()
-        {
-            var sb = new StringBuilder();
-            var c = _cfg;
-            sb.AppendLine("<b>MaxxInvaders</b>");
-            sb.AppendLine("File: oxide/config/MaxxInvaders.json");
-            sb.AppendLine();
-            sb.AppendLine($"EnablePlugin={c.EnablePlugin}  DebugMode={c.DebugMode}");
-            sb.AppendLine($"MaxActiveNPCs={c.MaxActiveNPCs}  PreventDuplicateViewerNPCs={c.PreventDuplicateViewerNPCs}");
-            sb.AppendLine(
-                $"Spawn: radius={c.DefaultSpawnRadius:F0}m  minPlayerDist={c.MinimumDistanceFromPlayers:F0}m  attempts={c.SpawnAttempts}");
-            sb.AppendLine(
-                $"       blockSafeZone={c.BlockSpawnInSafeZones}  blockMonument={c.BlockSpawnInMonuments}");
-            sb.AppendLine(
-                $"Time: defaultLifetime={c.DefaultLifetimeSeconds:F0}s  viewerCooldown={c.PerViewerCooldownSeconds:F0}s");
-            sb.AppendLine(
-                $"      behaviorTick={c.BehaviorTickSeconds:F1}s  despawnUnload={c.DespawnOnUnload}  persist={c.PersistIntervalSeconds:F0}s");
-            sb.AppendLine(
-                $"Bridge: UseRoamingNPCsWhenAvailable={c.UseRoamingNPCsWhenAvailable}  ScientistFallbackEnabled={c.ScientistFallbackEnabled}  DefaultRoamingTemplateKey={c.DefaultRoamingTemplateKey ?? ""}");
-            sb.AppendLine($"Scientist prefab: {Trunc(c.DefaultScientistPrefab, 68)}");
-            if (c.ScientistPrefabFallbacks != null && c.ScientistPrefabFallbacks.Count > 0)
-            {
-                sb.AppendLine($"Prefab fallbacks ({c.ScientistPrefabFallbacks.Count}):");
-                foreach (var p in c.ScientistPrefabFallbacks.Take(6))
-                    sb.AppendLine($"  • {Trunc(p, 66)}");
-                if (c.ScientistPrefabFallbacks.Count > 6)
-                    sb.AppendLine($"  … +{c.ScientistPrefabFallbacks.Count - 6}");
-            }
-
-            sb.AppendLine("PrefabByBehaviorMode:");
-            if (c.PrefabByBehaviorMode != null)
-                foreach (var kv in c.PrefabByBehaviorMode.OrderBy(x => x.Key))
-                    sb.AppendLine($"  {kv.Key}: {Trunc(kv.Value, 48)}");
-
-            if (c.AllowedBehaviorModes != null && c.AllowedBehaviorModes.Count > 0)
-                sb.AppendLine($"Allowed modes: {string.Join(", ", c.AllowedBehaviorModes)}");
-
-            sb.AppendLine("Tiers (tier RoamingTemplateKey empty = use DefaultRoamingTemplateKey):");
-            if (c.TierDefinitions != null)
-                foreach (var kv in c.TierDefinitions.OrderBy(x => x.Key))
-                {
-                    var t = kv.Value;
-                    if (t == null) continue;
-                    var rt = string.IsNullOrWhiteSpace(t.RoamingTemplateKey) ? "(default)" : t.RoamingTemplateKey;
-                    sb.AppendLine(
-                        $"T{kv.Key} {t.DisplayName}: HP={t.Health:F0} maxAct={t.MaxActiveForTier} life={t.LifetimeSeconds:F0}s");
-                    sb.AppendLine(
-                        $"     defaultMode={t.DefaultBehaviorMode}  defaultKit={Trunc(t.DefaultKit ?? "", 16)}  roamTpl={rt}");
-                }
-
-            if (c.Gui != null)
-                sb.AppendLine(
-                    $"GUI: rowsPage={c.Gui.RowsPerPage}  panel={c.Gui.PanelColor}  accent={c.Gui.AccentColor}");
-            if (c.Logging != null)
-                sb.AppendLine(
-                    $"Logging: spawn={c.Logging.LogSpawn} cd={c.Logging.LogCooldown} dup={c.Logging.LogDuplicate} kit={c.Logging.LogKit} death={c.Logging.LogDeath} gui={c.Logging.LogGui}");
-
-            return sb.ToString();
-        }
-
-        private string BuildRoamingSetupSummaryFromPlugin()
-        {
-            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
-            {
-                return "<b>RoamingNPCs</b>\n\nNot loaded. Add RoamingNPCs.cs + RoamingNPCs.NPCMaxxApi.cs to oxide/plugins, reload.\n\nConfig path after first load: oxide/config/RoamingNPCs.json (Bots settings).";
-            }
-
-            try
-            {
-                var o = RoamingNPCs.Call("GetMaxxInvadersGuiSummary");
-                if (o is string s && !string.IsNullOrEmpty(s))
-                    return s;
-                return "RoamingNPCs returned no summary — update NPCMaxxApi.cs (GetMaxxInvadersGuiSummary).";
-            }
-            catch (Exception ex)
-            {
-                return $"RoamingNPCs summary error: {ex.Message}";
-            }
         }
 
         private SpawnResult TrySpawn(
@@ -1402,7 +1314,8 @@ namespace Oxide.Plugins
             if (player == null) return;
             if (args == null || args.Length == 0)
             {
-                player.ChatMessage("Usage: /maxxinvaders ui | list | spawn | kill | despawn | clear | debug on|off");
+                player.ChatMessage(
+                    "Usage: /migrate-to-skills (Maxx config) | /maxxinvaders ui | maxx | roaming | list | spawn | kill | …");
                 return;
             }
 
@@ -1411,6 +1324,18 @@ namespace Oxide.Plugins
             {
                 case "ui":
                     if (!CanAdmin(player)) return;
+                    OpenGui(player, 0);
+                    break;
+                case "setup":
+                case "config":
+                case "maxx":
+                    if (!CanAdmin(player)) return;
+                    _guiMainTab[player.userID] = GuiTabMaxxEdit;
+                    OpenGui(player, 0);
+                    break;
+                case "roaming":
+                    if (!CanAdmin(player)) return;
+                    _guiMainTab[player.userID] = GuiTabRoamingEdit;
                     OpenGui(player, 0);
                     break;
                 case "list":
@@ -1479,6 +1404,21 @@ namespace Oxide.Plugins
             OpenGui(player, 0);
         }
 
+        /// <summary>Opens the MaxxInvaders config editor tab (in-game). Cursor rule migration is a separate workflow.</summary>
+        [ChatCommand("migrate-to-skills")]
+        private void ChatMigrateToSkills(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            if (!CanAdmin(player))
+            {
+                player.ChatMessage("Requires maxxinvaders.admin.");
+                return;
+            }
+
+            _guiMainTab[player.userID] = GuiTabMaxxEdit;
+            OpenGui(player, 0);
+        }
+
         [ChatCommand("maxxinvaders.list")]
         private void ChatListAlias(BasePlayer player, string command, string[] args)
         {
@@ -1533,10 +1473,16 @@ namespace Oxide.Plugins
         }
 
         private readonly Dictionary<ulong, int> _guiPage = new();
-        /// <summary>0 = invaders list + spawn, 1 = full MaxxInvaders + RoamingNPCs config reference.</summary>
+        /// <summary>0 = invaders, 1 = edit MaxxInvaders.json, 2 = RoamingNPCs bot toggles.</summary>
         private readonly Dictionary<ulong, int> _guiMainTab = new();
 
+        private readonly Dictionary<ulong, int> _guiRoamingKeyPage = new();
+
         private readonly Dictionary<ulong, SpawnDraft> _spawnDrafts = new();
+
+        private const int GuiTabInvaders = 0;
+        private const int GuiTabMaxxEdit = 1;
+        private const int GuiTabRoamingEdit = 2;
 
         private sealed class SpawnDraft
         {
@@ -1565,6 +1511,411 @@ namespace Oxide.Plugins
         private int GetGuiPage(ulong userId) =>
             _guiPage.TryGetValue(userId, out var pg) ? pg : 0;
 
+        private int GetRoamingKeyPage(ulong userId) =>
+            _guiRoamingKeyPage.TryGetValue(userId, out var p) ? p : 0;
+
+        private void ApplyGuiCfgToggle(string field)
+        {
+            if (string.IsNullOrWhiteSpace(field) || _cfg == null) return;
+            switch (field.Trim())
+            {
+                case nameof(InvaderConfig.EnablePlugin):
+                    _cfg.EnablePlugin = !_cfg.EnablePlugin;
+                    break;
+                case nameof(InvaderConfig.DebugMode):
+                    _cfg.DebugMode = !_cfg.DebugMode;
+                    break;
+                case nameof(InvaderConfig.UseRoamingNPCsWhenAvailable):
+                    _cfg.UseRoamingNPCsWhenAvailable = !_cfg.UseRoamingNPCsWhenAvailable;
+                    break;
+                case nameof(InvaderConfig.ScientistFallbackEnabled):
+                    _cfg.ScientistFallbackEnabled = !_cfg.ScientistFallbackEnabled;
+                    break;
+                case nameof(InvaderConfig.PreventDuplicateViewerNPCs):
+                    _cfg.PreventDuplicateViewerNPCs = !_cfg.PreventDuplicateViewerNPCs;
+                    break;
+                case nameof(InvaderConfig.BlockSpawnInSafeZones):
+                    _cfg.BlockSpawnInSafeZones = !_cfg.BlockSpawnInSafeZones;
+                    break;
+                case nameof(InvaderConfig.BlockSpawnInMonuments):
+                    _cfg.BlockSpawnInMonuments = !_cfg.BlockSpawnInMonuments;
+                    break;
+                case nameof(InvaderConfig.DespawnOnUnload):
+                    _cfg.DespawnOnUnload = !_cfg.DespawnOnUnload;
+                    break;
+                default:
+                    return;
+            }
+
+            SaveConfig();
+        }
+
+        private void ApplyGuiCfgStr(string field, string value)
+        {
+            if (_cfg == null) return;
+            value = value?.Trim() ?? "";
+            if (field == nameof(InvaderConfig.DefaultRoamingTemplateKey))
+            {
+                _cfg.DefaultRoamingTemplateKey = value;
+                SaveConfig();
+            }
+        }
+
+        private void ApplyGuiCfgNum(string field, string valueRaw)
+        {
+            if (_cfg == null || string.IsNullOrWhiteSpace(valueRaw)) return;
+            var v = valueRaw.Trim();
+            switch (field)
+            {
+                case nameof(InvaderConfig.MaxActiveNPCs):
+                    if (int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i))
+                    {
+                        _cfg.MaxActiveNPCs = Mathf.Clamp(i, 1, 500);
+                        SaveConfig();
+                    }
+
+                    break;
+                case nameof(InvaderConfig.SpawnAttempts):
+                    if (int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var sa))
+                    {
+                        _cfg.SpawnAttempts = Mathf.Clamp(sa, 1, 200);
+                        SaveConfig();
+                    }
+
+                    break;
+                case nameof(InvaderConfig.DefaultSpawnRadius):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var dr))
+                    {
+                        _cfg.DefaultSpawnRadius = Mathf.Clamp(dr, 5f, 500f);
+                        SaveConfig();
+                    }
+
+                    break;
+                case nameof(InvaderConfig.MinimumDistanceFromPlayers):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var md))
+                    {
+                        _cfg.MinimumDistanceFromPlayers = Mathf.Clamp(md, 0f, 200f);
+                        SaveConfig();
+                    }
+
+                    break;
+                case nameof(InvaderConfig.PerViewerCooldownSeconds):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var cd))
+                    {
+                        _cfg.PerViewerCooldownSeconds = Mathf.Clamp(cd, 0f, 3600f);
+                        SaveConfig();
+                    }
+
+                    break;
+            }
+        }
+
+        private void AddMaxxConfigEditor(CuiElementContainer container, string panel, BasePlayer player)
+        {
+            float y = 0.88f;
+            void RowLabel(string text, float h = 0.034f)
+            {
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text = { Text = text, FontSize = 8, Align = TextAnchor.MiddleLeft },
+                        RectTransform = { AnchorMin = $"0.03 {y - h}", AnchorMax = $"0.97 {y}" },
+                    },
+                    panel);
+                y -= h + 0.008f;
+            }
+
+            void RowToggle(string label, bool current, string fieldName)
+            {
+                var on = current ? "ON" : "OFF";
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text = { Text = $"{label}: <b>{on}</b>", FontSize = 8, Align = TextAnchor.MiddleLeft },
+                        RectTransform = { AnchorMin = $"0.03 {y - 0.032f}", AnchorMax = $"0.72 {y}" },
+                    },
+                    panel);
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui cfgtoggle {fieldName}", Color = "0.2 0.45 0.35 0.95" },
+                        RectTransform = { AnchorMin = $"0.73 {y - 0.032f}", AnchorMax = $"0.97 {y}" },
+                        Text = { Text = "Toggle", FontSize = 8 },
+                    },
+                    panel);
+                y -= 0.044f;
+            }
+
+            RowLabel("<b>MaxxInvaders</b> — changes write oxide/config/MaxxInvaders.json", 0.038f);
+            RowToggle("EnablePlugin", _cfg.EnablePlugin, nameof(InvaderConfig.EnablePlugin));
+            RowToggle("DebugMode", _cfg.DebugMode, nameof(InvaderConfig.DebugMode));
+            RowToggle("UseRoamingNPCsWhenAvailable", _cfg.UseRoamingNPCsWhenAvailable,
+                nameof(InvaderConfig.UseRoamingNPCsWhenAvailable));
+            RowToggle("ScientistFallbackEnabled", _cfg.ScientistFallbackEnabled,
+                nameof(InvaderConfig.ScientistFallbackEnabled));
+            RowToggle("PreventDuplicateViewerNPCs", _cfg.PreventDuplicateViewerNPCs,
+                nameof(InvaderConfig.PreventDuplicateViewerNPCs));
+            RowToggle("BlockSpawnInSafeZones", _cfg.BlockSpawnInSafeZones, nameof(InvaderConfig.BlockSpawnInSafeZones));
+            RowToggle("BlockSpawnInMonuments", _cfg.BlockSpawnInMonuments,
+                nameof(InvaderConfig.BlockSpawnInMonuments));
+            RowToggle("DespawnOnUnload", _cfg.DespawnOnUnload, nameof(InvaderConfig.DespawnOnUnload));
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "DefaultRoamingTemplateKey", FontSize = 7, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
+                },
+                panel);
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = panel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 64,
+                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultRoamingTemplateKey)} ",
+                            FontSize = 10,
+                            IsPassword = false,
+                            Text = _cfg.DefaultRoamingTemplateKey ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
+                    },
+                });
+            y -= 0.048f;
+
+            void RowNum(string label, string field, string display)
+            {
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text = { Text = label, FontSize = 7, Align = TextAnchor.LowerLeft },
+                        RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
+                    },
+                    panel);
+                AddRawCuiElement(
+                    container,
+                    new CuiElement
+                    {
+                        Name = Guid.NewGuid().ToString("N"),
+                        Parent = panel,
+                        Components =
+                        {
+                            new CuiInputFieldComponent
+                            {
+                                Align = TextAnchor.MiddleLeft,
+                                CharsLimit = 16,
+                                Command = $"maxxinvaders.gui cfgnum {field} ",
+                                FontSize = 10,
+                                IsPassword = false,
+                                Text = display,
+                                NeedsKeyboard = true,
+                            },
+                            new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
+                        },
+                    });
+                y -= 0.048f;
+            }
+
+            RowNum("MaxActiveNPCs", nameof(InvaderConfig.MaxActiveNPCs), _cfg.MaxActiveNPCs.ToString());
+            RowNum("DefaultSpawnRadius", nameof(InvaderConfig.DefaultSpawnRadius),
+                _cfg.DefaultSpawnRadius.ToString(CultureInfo.InvariantCulture));
+            RowNum("MinimumDistanceFromPlayers", nameof(InvaderConfig.MinimumDistanceFromPlayers),
+                _cfg.MinimumDistanceFromPlayers.ToString(CultureInfo.InvariantCulture));
+            RowNum("SpawnAttempts", nameof(InvaderConfig.SpawnAttempts), _cfg.SpawnAttempts.ToString());
+            RowNum("PerViewerCooldownSeconds", nameof(InvaderConfig.PerViewerCooldownSeconds),
+                _cfg.PerViewerCooldownSeconds.ToString(CultureInfo.InvariantCulture));
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text =
+                            "Access: /migrate-to-skills opens this tab. Also /maxxinvaders maxx | /maxxinvaders roaming",
+                        FontSize = 7,
+                        Align = TextAnchor.LowerLeft,
+                        Color = "0.65 0.72 0.78 1",
+                    },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.055" },
+                },
+                panel);
+        }
+
+        private void AddRoamingBotsEditor(CuiElementContainer container, string panel, BasePlayer player)
+        {
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text =
+                            "<b>RoamingNPCs</b> — toggle <b>Enable bot?</b> per template (writes oxide/config/RoamingNPCs.json)",
+                        FontSize = 9,
+                        Align = TextAnchor.UpperLeft,
+                    },
+                    RectTransform = { AnchorMin = "0.02 0.86", AnchorMax = "0.98 0.905" },
+                },
+                panel);
+
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+            {
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text =
+                        {
+                            Text = "RoamingNPCs is not loaded. Add RoamingNPCs.cs + RoamingNPCs.NPCMaxxApi.cs to oxide/plugins.",
+                            FontSize = 9,
+                            Align = TextAnchor.MiddleLeft,
+                        },
+                        RectTransform = { AnchorMin = "0.03 0.04", AnchorMax = "0.97 0.85" },
+                    },
+                    panel);
+                return;
+            }
+
+            string csv = null;
+            try
+            {
+                var o = RoamingNPCs.Call("GetBridgeBotKeysCsv");
+                csv = o as string;
+            }
+            catch
+            {
+                /* missing API */
+            }
+
+            if (string.IsNullOrEmpty(csv))
+            {
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text =
+                        {
+                            Text =
+                                "Could not read bot keys — deploy RoamingNPCs.NPCMaxxApi.cs with GetBridgeBotKeysCsv + ToggleBridgeBotEnabled on the server, then oxide.reload RoamingNPCs.",
+                            FontSize = 8,
+                            Align = TextAnchor.UpperLeft,
+                        },
+                        RectTransform = { AnchorMin = "0.03 0.04", AnchorMax = "0.97 0.85" },
+                    },
+                    panel);
+                return;
+            }
+
+            var keys = csv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim())
+                .Where(x => x.Length > 0).ToList();
+            if (keys.Count == 0)
+            {
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text = { Text = "No bot templates in RoamingNPCs.json (Bots settings).", FontSize = 9 },
+                        RectTransform = { AnchorMin = "0.03 0.04", AnchorMax = "0.97 0.85" },
+                    },
+                    panel);
+                return;
+            }
+
+            const int perPage = 10;
+            var page = GetRoamingKeyPage(player.userID);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(keys.Count / (float)perPage));
+            page = Mathf.Clamp(page, 0, totalPages - 1);
+            _guiRoamingKeyPage[player.userID] = page;
+
+            var slice = keys.Skip(page * perPage).Take(perPage).ToList();
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = $"Keys {page + 1}/{totalPages}  ({keys.Count} total)", FontSize = 8 },
+                    RectTransform = { AnchorMin = "0.02 0.815", AnchorMax = "0.5 0.855" },
+                },
+                panel);
+
+            if (page > 0)
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui roampage {page - 1}", Color = "0.2 0.2 0.25 0.9" },
+                        RectTransform = { AnchorMin = "0.52 0.815", AnchorMax = "0.62 0.855" },
+                        Text = { Text = "Prev keys", FontSize = 8 },
+                    },
+                    panel);
+
+            if (page < totalPages - 1)
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui roampage {page + 1}", Color = "0.2 0.2 0.25 0.9" },
+                        RectTransform = { AnchorMin = "0.63 0.815", AnchorMax = "0.76 0.855" },
+                        Text = { Text = "Next keys", FontSize = 8 },
+                    },
+                    panel);
+
+            float ry = 0.78f;
+            foreach (var key in slice)
+            {
+                var st = "off";
+                try
+                {
+                    var ready = RoamingNPCs.Call("IsBridgeTemplateReady", key) as string;
+                    if (ready == "ok") st = "on";
+                    else if (ready == "disabled") st = "off";
+                    else if (ready == "missing") st = "missing";
+                }
+                catch
+                {
+                    st = "?";
+                }
+
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text = { Text = key, FontSize = 8, Align = TextAnchor.MiddleLeft },
+                        RectTransform = { AnchorMin = $"0.03 {ry - 0.036f}", AnchorMax = $"0.55 {ry}" },
+                    },
+                    panel);
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text = { Text = $"bridge: {st}", FontSize = 7, Align = TextAnchor.MiddleRight },
+                        RectTransform = { AnchorMin = $"0.56 {ry - 0.036f}", AnchorMax = $"0.72 {ry}" },
+                    },
+                    panel);
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui roamtoggle {key}", Color = "0.25 0.4 0.55 0.95" },
+                        RectTransform = { AnchorMin = $"0.73 {ry - 0.036f}", AnchorMax = $"0.97 {ry}" },
+                        Text = { Text = "Toggle Enable bot?", FontSize = 7 },
+                    },
+                    panel);
+                ry -= 0.044f;
+            }
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = "Access: /migrate-to-skills (Maxx tab) or /maxxinvaders roaming — Cursor: migrate-to-skills skill for .cursor rules",
+                        FontSize = 7,
+                        Align = TextAnchor.LowerLeft,
+                        Color = "0.65 0.72 0.78 1",
+                    },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.048" },
+                },
+                panel);
+        }
+
         private void OpenGui(BasePlayer player, int page)
         {
             if (player == null) return;
@@ -1589,30 +1940,42 @@ namespace Oxide.Plugins
                 "Overlay",
                 UiName);
 
-            var invTabCol = mainTab == 0 ? _cfg.Gui.AccentColor : "0.16 0.18 0.2 0.92";
-            var setupTabCol = mainTab == 1 ? _cfg.Gui.AccentColor : "0.16 0.18 0.2 0.92";
+            var invTabCol = mainTab == GuiTabInvaders ? _cfg.Gui.AccentColor : "0.16 0.18 0.2 0.92";
+            var maxxTabCol = mainTab == GuiTabMaxxEdit ? _cfg.Gui.AccentColor : "0.16 0.18 0.2 0.92";
+            var roamTabCol = mainTab == GuiTabRoamingEdit ? _cfg.Gui.AccentColor : "0.16 0.18 0.2 0.92";
 
             container.Add(
                 new CuiButton
                 {
                     Button = { Command = "maxxinvaders.gui tab 0", Color = invTabCol },
-                    RectTransform = { AnchorMin = "0.02 0.92", AnchorMax = "0.13 0.988" },
-                    Text = { Text = "Invaders", FontSize = 11 },
+                    RectTransform = { AnchorMin = "0.02 0.92", AnchorMax = "0.11 0.988" },
+                    Text = { Text = "Invaders", FontSize = 10 },
                 },
                 panel);
 
             container.Add(
                 new CuiButton
                 {
-                    Button = { Command = "maxxinvaders.gui tab 1", Color = setupTabCol },
-                    RectTransform = { AnchorMin = "0.135 0.92", AnchorMax = "0.26 0.988" },
-                    Text = { Text = "Setup", FontSize = 11 },
+                    Button = { Command = "maxxinvaders.gui tab 1", Color = maxxTabCol },
+                    RectTransform = { AnchorMin = "0.115 0.92", AnchorMax = "0.22 0.988" },
+                    Text = { Text = "Maxx", FontSize = 10 },
                 },
                 panel);
 
-            var titleLine = mainTab == 0
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui tab 2", Color = roamTabCol },
+                    RectTransform = { AnchorMin = "0.225 0.92", AnchorMax = "0.36 0.988" },
+                    Text = { Text = "Roaming", FontSize = 10 },
+                },
+                panel);
+
+            var titleLine = mainTab == GuiTabInvaders
                 ? $"<size=17><b>MaxxInvaders</b></size>  Active: {list.Count}  Page {page + 1}/{totalPages}"
-                : "<size=17><b>MaxxInvaders</b></size>  <size=12>Config reference (edit JSON + reload)</size>";
+                : mainTab == GuiTabMaxxEdit
+                    ? "<size=17><b>MaxxInvaders</b></size>  <size=11>Edit config (saves to JSON)</size>"
+                    : "<size=17><b>RoamingNPCs</b></size>  <size=11>Bot templates (Enable bot?)</size>";
 
             container.Add(
                 new CuiLabel
@@ -1623,11 +1986,11 @@ namespace Oxide.Plugins
                         FontSize = 13,
                         Align = TextAnchor.MiddleLeft,
                     },
-                    RectTransform = { AnchorMin = "0.27 0.92", AnchorMax = "0.64 0.99" },
+                    RectTransform = { AnchorMin = "0.37 0.92", AnchorMax = "0.64 0.99" },
                 },
                 panel);
 
-            if (mainTab == 0 && page > 0)
+            if (mainTab == GuiTabInvaders && page > 0)
                 container.Add(
                     new CuiButton
                     {
@@ -1637,7 +2000,7 @@ namespace Oxide.Plugins
                     },
                     panel);
 
-            if (mainTab == 0 && page < totalPages - 1)
+            if (mainTab == GuiTabInvaders && page < totalPages - 1)
                 container.Add(
                     new CuiButton
                     {
@@ -1665,51 +2028,16 @@ namespace Oxide.Plugins
                 },
                 panel);
 
-            if (mainTab == 1)
+            if (mainTab == GuiTabMaxxEdit)
             {
-                container.Add(
-                    new CuiLabel
-                    {
-                        Text =
-                        {
-                            Text = BuildMaxxInvadersSetupSummaryText(),
-                            FontSize = 8,
-                            Align = TextAnchor.UpperLeft,
-                            Color = "0.88 0.9 0.93 1",
-                        },
-                        RectTransform = { AnchorMin = "0.02 0.04", AnchorMax = "0.49 0.905" },
-                    },
-                    panel);
+                AddMaxxConfigEditor(container, panel, player);
+                CuiHelper.AddUi(player, container);
+                return;
+            }
 
-                container.Add(
-                    new CuiLabel
-                    {
-                        Text =
-                        {
-                            Text = BuildRoamingSetupSummaryFromPlugin(),
-                            FontSize = 8,
-                            Align = TextAnchor.UpperLeft,
-                            Color = "0.88 0.9 0.93 1",
-                        },
-                        RectTransform = { AnchorMin = "0.51 0.04", AnchorMax = "0.98 0.905" },
-                    },
-                    panel);
-
-                container.Add(
-                    new CuiLabel
-                    {
-                        Text =
-                        {
-                            Text =
-                                "After editing oxide/config/MaxxInvaders.json or RoamingNPCs.json run: oxide.reload MaxxInvaders | oxide.reload RoamingNPCs",
-                            FontSize = 8,
-                            Align = TextAnchor.MiddleLeft,
-                            Color = "0.65 0.7 0.75 1",
-                        },
-                        RectTransform = { AnchorMin = "0.02 0.01", AnchorMax = "0.98 0.038" },
-                    },
-                    panel);
-
+            if (mainTab == GuiTabRoamingEdit)
+            {
+                AddRoamingBotsEditor(container, panel, player);
                 CuiHelper.AddUi(player, container);
                 return;
             }
@@ -2018,7 +2346,59 @@ namespace Oxide.Plugins
             if (args[0] == "tab" && args.Length > 1 && int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture,
                     out var tabIdx))
             {
-                _guiMainTab[player.userID] = Mathf.Clamp(tabIdx, 0, 1);
+                _guiMainTab[player.userID] = Mathf.Clamp(tabIdx, 0, 2);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "cfgtoggle" && args.Length > 1)
+            {
+                ApplyGuiCfgToggle(args[1]);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "cfgstr" && args.Length > 1)
+            {
+                var fld = args[1];
+                var val = args.Length > 2 ? string.Join(" ", args.Skip(2).ToArray()) : "";
+                ApplyGuiCfgStr(fld, val);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "cfgnum" && args.Length > 1)
+            {
+                var fld = args[1];
+                var val = args.Length > 2 ? string.Join(" ", args.Skip(2).ToArray()) : "";
+                ApplyGuiCfgNum(fld, val);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "roamtoggle" && args.Length > 1)
+            {
+                var key = string.Join(" ", args.Skip(1).ToArray()).Trim();
+                if (RoamingNPCs != null && RoamingNPCs.IsLoaded && !string.IsNullOrEmpty(key))
+                {
+                    try
+                    {
+                        RoamingNPCs.Call("ToggleBridgeBotEnabled", key);
+                    }
+                    catch (Exception ex)
+                    {
+                        PrintWarning($"{LogPrefix} ToggleBridgeBotEnabled: {ex.Message}");
+                    }
+                }
+
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "roampage" && args.Length > 1 &&
+                int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rp))
+            {
+                _guiRoamingKeyPage[player.userID] = Mathf.Max(0, rp);
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
