@@ -1,5 +1,5 @@
 // NPCMaxx — Oxide bridge for webhooks / RCON to spawn Roaming NPCs with a viewer display name.
-// Requires: RoamingNPCs (RoamingNPCs.NPCMaxxApi.cs provides SpawnFromTemplateForBridge).
+// Requires: RoamingNPCs (SpawnFromTemplateForBridge lives in RoamingNPCs.cs MaxxInvaders bridge region).
 // Install: copy this folder into servers/Rust/oxide/plugins/
 //
 // Webhook flow: listener → RCON: npcmaxx.spawn <templateKey> <displayName...>

@@ -102,7 +102,8 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
-- **1.2.0:** GUI tabs **Invaders | Maxx | Roaming**. **Maxx** edits core MaxxInvaders config in-game. **Roaming** toggles RoamingNPCs bot templates (requires **NPCMaxxApi** with `GetBridgeBotKeysCsv` + `ToggleBridgeBotEnabled`). Chat **`/migrate-to-skills`** opens the Maxx tab.
+- **1.2.1:** RoamingNPCs bridge API is **embedded in `RoamingNPCs.cs`** (no separate `NPCMaxxApi.cs`). Clearer spawn failure messages (missing key vs disabled bot vs Respawn null).
+- **1.2.0:** GUI tabs **Invaders | Maxx | Roaming**. **Maxx** edits core MaxxInvaders config in-game. **Roaming** toggles RoamingNPCs bot templates. Chat **`/migrate-to-skills`** opens the Maxx tab.
 - **1.1.4:** Config **`ScientistFallbackEnabled`** (default `true`). Set to `false` to **disable vanilla scientist spawns** and require a successful RoamingNPCs bridge only.
 - **1.1.3:** Stronger **NavMesh** snapping for spawns, roaming teleports, and scientist destinations to reduce “Failed to create agent…” console spam.
 - **1.1.2:** Admin **GUI** has **Invaders** vs **Setup** tabs. **Setup** shows a read-only summary of **MaxxInvaders** config (caps, spawn rules, bridge, tiers, prefabs, logging) and **RoamingNPCs** config (bot keys + enabled flags, live count). RoamingNPCs adds **`GetMaxxInvadersGuiSummary`** for the right column.

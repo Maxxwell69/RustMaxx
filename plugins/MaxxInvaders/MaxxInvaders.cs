@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.0")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.1")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -486,6 +486,39 @@ namespace Oxide.Plugins
             return "bob_resources_farmer";
         }
 
+        /// <summary>Console detail when spawn bridge returns null (missing key, disabled bot, Respawn failed, etc.).</summary>
+        private string ExplainRoamingBridgeFailure(string templateKey)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+                return "RoamingNPCs is not loaded.";
+            try
+            {
+                var st = RoamingNPCs.Call("IsBridgeTemplateReady", templateKey) as string;
+                switch (st)
+                {
+                    case "ok":
+                        return
+                            $"Template \"{templateKey}\" is enabled but spawn returned null (RoamingNPCs Respawn failed — check server console / prefab).";
+                    case "missing":
+                        return
+                            $"No bot key \"{templateKey}\" under Bots settings in oxide/config/RoamingNPCs.json — add it or change DefaultRoamingTemplateKey.";
+                    case "disabled":
+                        return
+                            $"Bot \"{templateKey}\" has Enable bot? false — open MaxxInvaders Roaming tab and toggle ON, or edit JSON.";
+                    case "no_config":
+                        return "RoamingNPCs has no Bots config (reload plugin or restore RoamingNPCs.json).";
+                    default:
+                        return string.IsNullOrEmpty(st)
+                            ? "Could not read bridge status (reload RoamingNPCs with latest RoamingNPCs.cs)."
+                            : $"Bridge status: {st}";
+                }
+            }
+            catch
+            {
+                return "Could not query IsBridgeTemplateReady.";
+            }
+        }
+
         /// <summary>Multi-line status for admin GUI: RoamingNPCs load + default template key readiness.</summary>
         private string BuildRoamingGuiStatusText()
         {
@@ -659,7 +692,7 @@ namespace Oxide.Plugins
                         PrintWarning($"{LogPrefix} No spawn: ScientistFallbackEnabled=false but RoamingNPCs is not loaded.");
                     else
                         PrintWarning(
-                            $"{LogPrefix} No spawn: ScientistFallbackEnabled=false and RoamingNPCs bridge failed (template={roamingTemplate}, check bot key + Enable bot?).");
+                            $"{LogPrefix} No spawn: ScientistFallbackEnabled=false. {ExplainRoamingBridgeFailure(roamingTemplate)}");
                     return SpawnResult.Fail("roaming_only_failed");
                 }
 
@@ -1771,7 +1804,8 @@ namespace Oxide.Plugins
                     {
                         Text =
                         {
-                            Text = "RoamingNPCs is not loaded. Add RoamingNPCs.cs + RoamingNPCs.NPCMaxxApi.cs to oxide/plugins.",
+                            Text =
+                                "RoamingNPCs is not loaded. Copy RoamingNPCs.cs from the repo into oxide/plugins and run: oxide.reload RoamingNPCs",
                             FontSize = 9,
                             Align = TextAnchor.MiddleLeft,
                         },
@@ -1781,18 +1815,17 @@ namespace Oxide.Plugins
                 return;
             }
 
-            string csv = null;
+            object o = null;
             try
             {
-                var o = RoamingNPCs.Call("GetBridgeBotKeysCsv");
-                csv = o as string;
+                o = RoamingNPCs.Call("GetBridgeBotKeysCsv");
             }
             catch
             {
-                /* missing API */
+                /* old plugin */
             }
 
-            if (string.IsNullOrEmpty(csv))
+            if (o == null)
             {
                 container.Add(
                     new CuiLabel
@@ -1800,7 +1833,26 @@ namespace Oxide.Plugins
                         Text =
                         {
                             Text =
-                                "Could not read bot keys — deploy RoamingNPCs.NPCMaxxApi.cs with GetBridgeBotKeysCsv + ToggleBridgeBotEnabled on the server, then oxide.reload RoamingNPCs.",
+                                "Bridge API missing on this RoamingNPCs build. Replace oxide/plugins/RoamingNPCs.cs with the latest from RustMaxx repo (bridge code is inside that file), then oxide.reload RoamingNPCs.",
+                            FontSize = 8,
+                            Align = TextAnchor.UpperLeft,
+                        },
+                        RectTransform = { AnchorMin = "0.03 0.04", AnchorMax = "0.97 0.85" },
+                    },
+                    panel);
+                return;
+            }
+
+            var csv = o as string ?? "";
+            if (csv.Length == 0)
+            {
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text =
+                        {
+                            Text =
+                                "Bots settings has no keys. Add bot templates under Bots in oxide/config/RoamingNPCs.json, or delete the config and reload to regenerate defaults.",
                             FontSize = 8,
                             Align = TextAnchor.UpperLeft,
                         },
