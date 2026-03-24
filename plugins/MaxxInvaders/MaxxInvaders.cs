@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.6")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.7")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2750,53 +2750,67 @@ namespace Oxide.Plugins
                 y -= 0.09f;
             }
 
-            var profiles = GetRecentProfiles(6);
+            var profiles = GetRecentProfiles(4);
             if (profiles.Count > 0)
             {
                 var pPanel = container.Add(
                     new CuiPanel
                     {
                         Image = { Color = "0.08 0.10 0.14 0.92" },
-                        RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.17" },
+                        RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.22" },
                         CursorEnabled = true,
                     },
                     panel);
                 container.Add(
                     new CuiLabel
                     {
-                        Text = { Text = "Profiles (persistent): load or respawn even after death", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = "0.9 0.95 1 1" },
-                        RectTransform = { AnchorMin = "0.02 0.78", AnchorMax = "0.98 0.98" },
+                        Text = { Text = "Profiles (persistent): load or respawn even after death", FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "0.95 0.98 1 1" },
+                        RectTransform = { AnchorMin = "0.02 0.84", AnchorMax = "0.98 0.98" },
                     },
                     pPanel);
 
-                float py = 0.72f;
+                float py = 0.80f;
                 foreach (var pr in profiles)
                 {
+                    var prow = container.Add(
+                        new CuiPanel
+                        {
+                            Image = { Color = "0.14 0.18 0.24 0.92" },
+                            RectTransform = { AnchorMin = $"0.02 {py - 0.16f}", AnchorMax = $"0.98 {py}" },
+                        },
+                        pPanel);
                     container.Add(
                         new CuiLabel
                         {
-                            Text = { Text = $"{pr.ViewerName} ({pr.ViewerId})  T{pr.Tier}  {pr.Mode}", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = "0.88 0.92 0.98 1" },
-                            RectTransform = { AnchorMin = $"0.02 {py - 0.11f}", AnchorMax = $"0.72 {py}" },
+                            Text = { Text = $"{pr.ViewerName}  ({pr.ViewerId})", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" },
+                            RectTransform = { AnchorMin = "0.02 0.52", AnchorMax = "0.66 0.95" },
                         },
-                        pPanel);
+                        prow);
+                    container.Add(
+                        new CuiLabel
+                        {
+                            Text = { Text = $"Tier {pr.Tier}  |  Mode {pr.Mode}  |  Last: {(pr.Alive ? "Alive" : pr.RemovedAtUtc?.ToString("MM/dd HH:mm") ?? "Dead")}", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = "0.85 0.9 0.98 1" },
+                            RectTransform = { AnchorMin = "0.02 0.08", AnchorMax = "0.66 0.5" },
+                        },
+                        prow);
                     container.Add(
                         new CuiButton
                         {
                             Button = { Command = $"maxxinvaders.gui profileload {pr.ViewerId}", Color = "0.22 0.36 0.52 0.95" },
-                            RectTransform = { AnchorMin = $"0.74 {py - 0.11f}", AnchorMax = $"0.85 {py}" },
-                            Text = { Text = "Load", FontSize = 9, Color = "1 1 1 1" },
+                            RectTransform = { AnchorMin = "0.68 0.14", AnchorMax = "0.81 0.88" },
+                            Text = { Text = "Load", FontSize = 10, Color = "1 1 1 1" },
                         },
-                        pPanel);
+                        prow);
                     container.Add(
                         new CuiButton
                         {
                             Button = { Command = $"maxxinvaders.gui profilerespawn {pr.ViewerId}", Color = "0.20 0.52 0.36 0.95" },
-                            RectTransform = { AnchorMin = $"0.86 {py - 0.11f}", AnchorMax = $"0.98 {py}" },
-                            Text = { Text = "Respawn", FontSize = 9, Color = "1 1 1 1" },
+                            RectTransform = { AnchorMin = "0.82 0.14", AnchorMax = "0.98 0.88" },
+                            Text = { Text = "Respawn", FontSize = 10, Color = "1 1 1 1" },
                         },
-                        pPanel);
-                    py -= 0.125f;
-                    if (py < 0.08f) break;
+                        prow);
+                    py -= 0.19f;
+                    if (py < 0.18f) break;
                 }
             }
 
