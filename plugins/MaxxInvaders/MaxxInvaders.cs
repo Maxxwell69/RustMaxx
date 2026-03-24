@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.3")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.4")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -102,6 +102,11 @@ namespace Oxide.Plugins
 
         #region Config
 
+        /// <summary>
+        /// Roaming-first: set <see cref="UseRoamingNPCsWhenAvailable"/> and <see cref="DefaultRoamingTemplateKey"/> to match
+        /// RoamingNPCs.json Bots keys. Viewer name is passed at spawn time (TikFinity/RCON). Scientist prefab fields are omitted
+        /// from the saved JSON when <see cref="ScientistFallbackEnabled"/> is false.
+        /// </summary>
         private class InvaderConfig
         {
             public bool EnablePlugin { get; set; } = true;
@@ -223,6 +228,10 @@ namespace Oxide.Plugins
 
             public GuiSettings Gui { get; set; } = new();
             public LoggingSettings Logging { get; set; } = new();
+
+            public bool ShouldSerializeDefaultScientistPrefab() => ScientistFallbackEnabled;
+            public bool ShouldSerializeScientistPrefabFallbacks() => ScientistFallbackEnabled;
+            public bool ShouldSerializePrefabByBehaviorMode() => ScientistFallbackEnabled;
         }
 
         private class TierDefinition
@@ -237,6 +246,9 @@ namespace Oxide.Plugins
 
             /// <summary>RoamingNPCs bot template key; empty uses MaxxInvaders DefaultRoamingTemplateKey.</summary>
             public string RoamingTemplateKey { get; set; } = "";
+
+            public bool ShouldSerializeDefaultKit() => !string.IsNullOrWhiteSpace(DefaultKit);
+            public bool ShouldSerializeRoamingTemplateKey() => !string.IsNullOrWhiteSpace(RoamingTemplateKey);
         }
 
         private class GuiSettings
@@ -275,7 +287,27 @@ namespace Oxide.Plugins
                 PrintWarning($"{LogPrefix} Config read failed; using defaults.");
                 _cfg = new InvaderConfig();
             }
+
+            EnsureConfigDefaults();
             SaveConfig();
+        }
+
+        /// <summary>Fills nested objects and tier table when using a minimal JSON (roaming-only).</summary>
+        private void EnsureConfigDefaults()
+        {
+            var d = new InvaderConfig();
+            _cfg.Gui ??= d.Gui ?? new GuiSettings();
+            _cfg.Logging ??= d.Logging ?? new LoggingSettings();
+            if (_cfg.AllowedBehaviorModes == null || _cfg.AllowedBehaviorModes.Count == 0)
+                _cfg.AllowedBehaviorModes = new List<string>(d.AllowedBehaviorModes);
+            if (_cfg.TierDefinitions == null || _cfg.TierDefinitions.Count == 0)
+                _cfg.TierDefinitions = new Dictionary<int, TierDefinition>(d.TierDefinitions);
+            if (string.IsNullOrWhiteSpace(_cfg.DefaultScientistPrefab))
+                _cfg.DefaultScientistPrefab = d.DefaultScientistPrefab;
+            if (_cfg.ScientistPrefabFallbacks == null || _cfg.ScientistPrefabFallbacks.Count == 0)
+                _cfg.ScientistPrefabFallbacks = new List<string>(d.ScientistPrefabFallbacks);
+            if (_cfg.PrefabByBehaviorMode == null || _cfg.PrefabByBehaviorMode.Count == 0)
+                _cfg.PrefabByBehaviorMode = new Dictionary<string, string>(d.PrefabByBehaviorMode);
         }
 
         private void SaveConfig() => Config.WriteObject(_cfg, true);

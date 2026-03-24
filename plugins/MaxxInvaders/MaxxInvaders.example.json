@@ -1,110 +1,55 @@
 {
   "EnablePlugin": true,
-  "DebugMode": false,
   "MaxActiveNPCs": 24,
-  "PreventDuplicateViewerNPCs": true,
-  "DefaultSpawnRadius": 80.0,
-  "MinimumDistanceFromPlayers": 12.0,
-  "BlockSpawnInSafeZones": true,
-  "BlockSpawnInMonuments": true,
-  "DefaultLifetimeSeconds": 3600.0,
-  "PerViewerCooldownSeconds": 30.0,
-  "SpawnAttempts": 36,
-  "BehaviorTickSeconds": 1.5,
-  "DespawnOnUnload": true,
-  "PersistIntervalSeconds": 60.0,
   "UseRoamingNPCsWhenAvailable": true,
   "ScientistFallbackEnabled": false,
   "DefaultRoamingTemplateKey": "bob_resources_farmer",
-  "DefaultScientistPrefab": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-  "ScientistPrefabFallbacks": [
-    "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-    "assets/prefabs/npc/scientist/scientist.prefab",
-    "assets/content/npc/scientist/scientist.prefab",
-    "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
-    "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab"
-  ],
-  "PrefabByBehaviorMode": {
-    "friendly": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-    "hostile": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-    "neutral": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-    "roaming": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-    "defend": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-    "escort": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-    "attackplayer": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab"
-  },
+  "DefaultSpawnRadius": 80.0,
+  "PerViewerCooldownSeconds": 30.0,
   "AllowedBehaviorModes": [
+    "roaming",
     "friendly",
     "hostile",
     "neutral",
-    "roaming",
     "defend",
     "escort",
     "attackplayer"
   ],
   "TierDefinitions": {
     "1": {
-      "DisplayName": "Scout",
-      "RoamingTemplateKey": "",
+      "DisplayName": "Viewer",
       "Health": 100.0,
-      "DefaultKit": "",
       "DefaultBehaviorMode": "roaming",
-      "LifetimeSeconds": 1800.0,
-      "MaxActiveForTier": 8,
-      "AggressionHint": 0.2
+      "LifetimeSeconds": 3600.0,
+      "MaxActiveForTier": 12
     },
     "2": {
-      "DisplayName": "Raider",
-      "RoamingTemplateKey": "",
+      "DisplayName": "Viewer+",
       "Health": 150.0,
-      "DefaultKit": "",
-      "DefaultBehaviorMode": "hostile",
-      "LifetimeSeconds": 2400.0,
-      "MaxActiveForTier": 6,
-      "AggressionHint": 0.5
+      "DefaultBehaviorMode": "roaming",
+      "LifetimeSeconds": 3600.0,
+      "MaxActiveForTier": 8
     },
     "3": {
-      "DisplayName": "Veteran",
-      "RoamingTemplateKey": "",
+      "DisplayName": "Viewer++",
       "Health": 200.0,
-      "DefaultKit": "",
-      "DefaultBehaviorMode": "attackplayer",
-      "LifetimeSeconds": 3000.0,
-      "MaxActiveForTier": 4,
-      "AggressionHint": 0.75
+      "DefaultBehaviorMode": "roaming",
+      "LifetimeSeconds": 3600.0,
+      "MaxActiveForTier": 6
     },
     "4": {
-      "DisplayName": "Elite",
-      "RoamingTemplateKey": "",
+      "DisplayName": "Viewer+++",
       "Health": 275.0,
-      "DefaultKit": "",
-      "DefaultBehaviorMode": "attackplayer",
+      "DefaultBehaviorMode": "roaming",
       "LifetimeSeconds": 3600.0,
-      "MaxActiveForTier": 3,
-      "AggressionHint": 0.9
+      "MaxActiveForTier": 4
     },
     "5": {
-      "DisplayName": "Boss",
-      "RoamingTemplateKey": "",
+      "DisplayName": "Viewer boss",
       "Health": 400.0,
-      "DefaultKit": "",
-      "DefaultBehaviorMode": "hostile",
+      "DefaultBehaviorMode": "roaming",
       "LifetimeSeconds": 7200.0,
-      "MaxActiveForTier": 2,
-      "AggressionHint": 1.0
+      "MaxActiveForTier": 2
     }
-  },
-  "Gui": {
-    "RowsPerPage": 8,
-    "PanelColor": "0.1 0.1 0.12 0.95",
-    "AccentColor": "0.2 0.75 0.85 0.9"
-  },
-  "Logging": {
-    "LogSpawn": true,
-    "LogCooldown": true,
-    "LogDuplicate": true,
-    "LogKit": true,
-    "LogDeath": true,
-    "LogGui": true
   }
 }
