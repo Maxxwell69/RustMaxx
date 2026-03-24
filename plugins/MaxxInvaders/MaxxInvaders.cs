@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.1")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.2")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -60,6 +60,8 @@ namespace Oxide.Plugins
         private Timer _tickTimer;
         private Timer _persistTimer;
         private bool _debugRuntime;
+        private DateTime _lastRoamingSpawnFailWarnUtc;
+        private string _lastRoamingSpawnFailTemplate;
 
         #endregion
 
@@ -486,6 +488,14 @@ namespace Oxide.Plugins
             return "bob_resources_farmer";
         }
 
+        /// <summary>Normalize return from RoamingNPCs.Call (not always a string reference from uMod).</summary>
+        private static string NormalizeBridgeCallResult(object raw)
+        {
+            if (raw == null) return null;
+            if (raw is string s) return s;
+            return Convert.ToString(raw)?.Trim();
+        }
+
         /// <summary>Console detail when spawn bridge returns null (missing key, disabled bot, Respawn failed, etc.).</summary>
         private string ExplainRoamingBridgeFailure(string templateKey)
         {
@@ -493,30 +503,57 @@ namespace Oxide.Plugins
                 return "RoamingNPCs is not loaded.";
             try
             {
-                var st = RoamingNPCs.Call("IsBridgeTemplateReady", templateKey) as string;
+                var raw = RoamingNPCs.Call("IsBridgeTemplateReady", templateKey);
+                var st = NormalizeBridgeCallResult(raw);
+                if (string.IsNullOrEmpty(st))
+                {
+                    var ping = NormalizeBridgeCallResult(RoamingNPCs.Call("GetMaxxInvadersGuiSummary"));
+                    if (!string.IsNullOrEmpty(ping))
+                    {
+                        return
+                            $"IsBridgeTemplateReady returned nothing from RoamingNPCs (uMod Call issue). Template \"{templateKey}\" — check RoamingNPCs loaded once, no duplicate plugin name, then oxide.reload RoamingNPCs.";
+                    }
+
+                    return
+                        "RoamingNPCs bridge API not responding (IsBridgeTemplateReady + GetMaxxInvadersGuiSummary both null). " +
+                        "Use RustMaxx Integration RoamingNPCs.cs (MaxxInvadersBridgeApi region), save as oxide/plugins/RoamingNPCs.cs, then oxide.reload RoamingNPCs.";
+                }
+
+                if (st.StartsWith("error:", StringComparison.Ordinal))
+                    return $"RoamingNPCs IsBridgeTemplateReady: {st.Substring("error:".Length).Trim()}";
+
                 switch (st)
                 {
                     case "ok":
                         return
-                            $"Template \"{templateKey}\" is enabled but spawn returned null (RoamingNPCs Respawn failed — check server console / prefab).";
+                            $"Template \"{templateKey}\" is enabled but spawn returned null (sanitized viewer name empty, or RoamingNPCs Respawn failed — check server console / prefab).";
                     case "missing":
                         return
-                            $"No bot key \"{templateKey}\" under Bots settings in oxide/config/RoamingNPCs.json — add it or change DefaultRoamingTemplateKey.";
+                            $"No bot key \"{templateKey}\" under Bots settings in oxide/config/RoamingNPCs.json — add it or change DefaultRoamingTemplateKey / tier RoamingTemplateKey.";
                     case "disabled":
                         return
                             $"Bot \"{templateKey}\" has Enable bot? false — open MaxxInvaders Roaming tab and toggle ON, or edit JSON.";
                     case "no_config":
                         return "RoamingNPCs has no Bots config (reload plugin or restore RoamingNPCs.json).";
                     default:
-                        return string.IsNullOrEmpty(st)
-                            ? "Could not read bridge status (reload RoamingNPCs with latest RoamingNPCs.cs)."
-                            : $"Bridge status: {st}";
+                        return $"Bridge status: {st}";
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                return "Could not query IsBridgeTemplateReady.";
+                return $"Could not query IsBridgeTemplateReady: {ex.Message}";
             }
+        }
+
+        private void WarnRoamingOnlyFailedThrottled(string roamingTemplate, string detail)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastRoamingSpawnFailWarnUtc).TotalSeconds < 60d &&
+                string.Equals(_lastRoamingSpawnFailTemplate, roamingTemplate, StringComparison.Ordinal))
+                return;
+            _lastRoamingSpawnFailWarnUtc = now;
+            _lastRoamingSpawnFailTemplate = roamingTemplate;
+            PrintWarning($"{LogPrefix} No spawn: ScientistFallbackEnabled=false. {detail}");
         }
 
         /// <summary>Multi-line status for admin GUI: RoamingNPCs load + default template key readiness.</summary>
@@ -548,7 +585,7 @@ namespace Oxide.Plugins
                 /* older RoamingNPCs without API */
             }
 
-            var code = st as string ?? "";
+            var code = NormalizeBridgeCallResult(st) ?? "";
             string detail;
             switch (code)
             {
@@ -567,8 +604,14 @@ namespace Oxide.Plugins
                     detail = "RoamingNPCs has no Bots config loaded. Reload RoamingNPCs or restore RoamingNPCs.json.";
                     break;
                 default:
-                    detail =
-                        "Could not verify template (update RoamingNPCs to a build with IsBridgeTemplateReady). Spawns may still work.";
+                    if (code.StartsWith("error:", StringComparison.Ordinal))
+                        detail = $"IsBridgeTemplateReady: {code.Substring("error:".Length).Trim()}";
+                    else if (string.IsNullOrEmpty(code))
+                        detail =
+                            "Could not verify template (Call returned null — redeploy RustMaxx RoamingNPCs.cs, oxide.reload RoamingNPCs). Spawns may still work.";
+                    else
+                        detail =
+                            $"Unexpected bridge code: {code}. Spawns may still work.";
                     break;
             }
 
@@ -689,10 +732,10 @@ namespace Oxide.Plugins
                         PrintWarning(
                             $"{LogPrefix} No spawn: ScientistFallbackEnabled=false and UseRoamingNPCsWhenAvailable=false (invalid config).");
                     else if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
-                        PrintWarning($"{LogPrefix} No spawn: ScientistFallbackEnabled=false but RoamingNPCs is not loaded.");
+                        WarnRoamingOnlyFailedThrottled(roamingTemplate,
+                            "RoamingNPCs is not loaded.");
                     else
-                        PrintWarning(
-                            $"{LogPrefix} No spawn: ScientistFallbackEnabled=false. {ExplainRoamingBridgeFailure(roamingTemplate)}");
+                        WarnRoamingOnlyFailedThrottled(roamingTemplate, ExplainRoamingBridgeFailure(roamingTemplate));
                     return SpawnResult.Fail("roaming_only_failed");
                 }
 

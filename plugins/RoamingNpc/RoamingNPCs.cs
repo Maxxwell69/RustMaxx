@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.1")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.2")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8478,14 +8478,21 @@ namespace Oxide.Plugins
 
         public object IsBridgeTemplateReady(string templateKey)
         {
-            if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
-                return "no_config";
-            var key = templateKey.Trim();
-            if (!config.bots.TryGetValue(key, out BotSetup baseSetup) || baseSetup == null)
-                return "missing";
-            if (!baseSetup.Enable)
-                return "disabled";
-            return "ok";
+            try
+            {
+                if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
+                    return "no_config";
+                var key = templateKey.Trim();
+                if (!config.bots.TryGetValue(key, out BotSetup baseSetup) || baseSetup == null)
+                    return "missing";
+                if (!baseSetup.Enable)
+                    return "disabled";
+                return "ok";
+            }
+            catch (Exception ex)
+            {
+                return "error:" + ex.Message;
+            }
         }
 
         public object GetMaxxInvadersGuiSummary()
