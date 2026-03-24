@@ -1246,16 +1246,16 @@ namespace Oxide.Plugins
 
             if (args[0] == "action" && args.Length > 1 && args[1] == "refresh")
             {
-                var pg = 0;
-                if (_guiPage.TryGetValue(player.userID, out var p)) pg = p;
-                OpenGui(player, pg);
+                var refreshPage = 0;
+                if (_guiPage.TryGetValue(player.userID, out var savedPage)) refreshPage = savedPage;
+                OpenGui(player, refreshPage);
                 LogIf(_cfg.Logging.LogGui, $"gui refresh {player.displayName}", false);
                 return;
             }
 
-            if (args[0] == "page" && args.Length > 1 && int.TryParse(args[1], out var p))
+            if (args[0] == "page" && args.Length > 1 && int.TryParse(args[1], out var pageIndex))
             {
-                OpenGui(player, p);
+                OpenGui(player, pageIndex);
                 return;
             }
 
@@ -1276,18 +1276,18 @@ namespace Oxide.Plugins
             if (args[0] == "kill" && args.Length > 1)
             {
                 KillByNpcId(args[1], false);
-                var pg = 0;
-                if (_guiPage.TryGetValue(player.userID, out var p)) pg = p;
-                OpenGui(player, pg);
+                var afterKillPage = 0;
+                if (_guiPage.TryGetValue(player.userID, out var killPage)) afterKillPage = killPage;
+                OpenGui(player, afterKillPage);
                 return;
             }
 
             if (args[0] == "despawn" && args.Length > 1)
             {
                 KillByNpcId(args[1], true);
-                var pg2 = 0;
-                if (_guiPage.TryGetValue(player.userID, out var p2)) pg2 = p2;
-                OpenGui(player, pg2);
+                var afterDespawnPage = 0;
+                if (_guiPage.TryGetValue(player.userID, out var despawnPage)) afterDespawnPage = despawnPage;
+                OpenGui(player, afterDespawnPage);
                 return;
             }
         }
