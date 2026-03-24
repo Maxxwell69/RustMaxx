@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.7")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.8")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2291,57 +2291,89 @@ namespace Oxide.Plugins
             var spawnPanel = container.Add(
                 new CuiPanel
                 {
-                    Image = { Color = "0.12 0.14 0.18 0.92" },
+                    Image = { Color = "0.10 0.12 0.16 0.94" },
                     RectTransform = { AnchorMin = "0.02 0.54", AnchorMax = "0.98 0.848" },
                     CursorEnabled = true,
                 },
                 panel);
+
+            var spawnCard = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.14 0.17 0.22 0.96" },
+                    RectTransform = { AnchorMin = "0.02 0.08", AnchorMax = "0.63 0.95" },
+                    CursorEnabled = true,
+                },
+                spawnPanel);
+
+            var renameCard = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.13 0.16 0.2 0.96" },
+                    RectTransform = { AnchorMin = "0.65 0.08", AnchorMax = "0.98 0.95" },
+                    CursorEnabled = true,
+                },
+                spawnPanel);
 
             container.Add(
                 new CuiLabel
                 {
                     Text =
                     {
-                        Text = "<b>Spawn demo</b> — set a viewer name & id, then Spawn. Quick = random id.",
-                        FontSize = 12,
+                        Text = "<b>Spawn Viewer NPC</b>",
+                        FontSize = 14,
                         Align = TextAnchor.MiddleLeft,
                     },
-                    RectTransform = { AnchorMin = "0.03 0.88", AnchorMax = "0.97 0.98" },
+                    RectTransform = { AnchorMin = "0.03 0.90", AnchorMax = "0.97 0.98" },
                 },
-                spawnPanel);
-
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui quickdemo", Color = "0.15 0.45 0.35 0.95" },
-                    RectTransform = { AnchorMin = "0.03 0.76", AnchorMax = "0.48 0.86" },
-                    Text = { Text = "Quick: spawn 1 demo NPC", FontSize = 12 },
-                },
-                spawnPanel);
-
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui spawnfields", Color = "0.2 0.35 0.5 0.95" },
-                    RectTransform = { AnchorMin = "0.52 0.76", AnchorMax = "0.97 0.86" },
-                    Text = { Text = "Spawn using fields below", FontSize = 12 },
-                },
-                spawnPanel);
+                spawnCard);
 
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Viewer name", FontSize = 10, Align = TextAnchor.LowerLeft },
-                    RectTransform = { AnchorMin = "0.03 0.66", AnchorMax = "0.35 0.72" },
+                    Text =
+                    {
+                        Text = "Fill name + id, then click Spawn. Quick Spawn auto-generates id.",
+                        FontSize = 9,
+                        Align = TextAnchor.MiddleLeft,
+                        Color = "0.8 0.85 0.9 1",
+                    },
+                    RectTransform = { AnchorMin = "0.03 0.84", AnchorMax = "0.97 0.90" },
                 },
-                spawnPanel);
+                spawnCard);
+
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui quickdemo", Color = "0.18 0.55 0.40 0.95" },
+                    RectTransform = { AnchorMin = "0.03 0.74", AnchorMax = "0.48 0.82" },
+                    Text = { Text = "Quick Spawn", FontSize = 11 },
+                },
+                spawnCard);
+
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui spawnfields", Color = "0.22 0.42 0.62 0.95" },
+                    RectTransform = { AnchorMin = "0.52 0.74", AnchorMax = "0.97 0.82" },
+                    Text = { Text = "Spawn From Form", FontSize = 11 },
+                },
+                spawnCard);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Viewer Name", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.03 0.66", AnchorMax = "0.45 0.72" },
+                },
+                spawnCard);
 
             AddRawCuiElement(
                 container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
-                    Parent = spawnPanel,
+                    Parent = spawnCard,
                     Components =
                     {
                         new CuiInputFieldComponent
@@ -2361,17 +2393,17 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Viewer id (unique, no spaces)", FontSize = 10, Align = TextAnchor.LowerLeft },
-                    RectTransform = { AnchorMin = "0.03 0.48", AnchorMax = "0.5 0.54" },
+                    Text = { Text = "Viewer ID (unique)", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.03 0.48", AnchorMax = "0.45 0.54" },
                 },
-                spawnPanel);
+                spawnCard);
 
             AddRawCuiElement(
                 container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
-                    Parent = spawnPanel,
+                    Parent = spawnCard,
                     Components =
                     {
                         new CuiInputFieldComponent
@@ -2392,16 +2424,16 @@ namespace Oxide.Plugins
                 new CuiLabel
                 {
                     Text = { Text = "Tier", FontSize = 10, Align = TextAnchor.LowerLeft },
-                    RectTransform = { AnchorMin = "0.03 0.30", AnchorMax = "0.12 0.36" },
+                    RectTransform = { AnchorMin = "0.03 0.30", AnchorMax = "0.14 0.36" },
                 },
-                spawnPanel);
+                spawnCard);
 
             AddRawCuiElement(
                 container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
-                    Parent = spawnPanel,
+                    Parent = spawnCard,
                     Components =
                     {
                         new CuiInputFieldComponent
@@ -2414,7 +2446,7 @@ namespace Oxide.Plugins
                             Text = draft.TierStr ?? "1",
                             NeedsKeyboard = true,
                         },
-                        new CuiRectTransformComponent { AnchorMin = "0.03 0.22", AnchorMax = "0.12 0.29" },
+                        new CuiRectTransformComponent { AnchorMin = "0.03 0.22", AnchorMax = "0.14 0.29" },
                     },
                 });
 
@@ -2422,16 +2454,16 @@ namespace Oxide.Plugins
                 new CuiLabel
                 {
                     Text = { Text = "Mode", FontSize = 10, Align = TextAnchor.LowerLeft },
-                    RectTransform = { AnchorMin = "0.14 0.30", AnchorMax = "0.45 0.36" },
+                    RectTransform = { AnchorMin = "0.17 0.30", AnchorMax = "0.42 0.36" },
                 },
-                spawnPanel);
+                spawnCard);
 
             AddRawCuiElement(
                 container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
-                    Parent = spawnPanel,
+                    Parent = spawnCard,
                     Components =
                     {
                         new CuiInputFieldComponent
@@ -2444,24 +2476,24 @@ namespace Oxide.Plugins
                             Text = draft.Mode ?? "roaming",
                             NeedsKeyboard = true,
                         },
-                        new CuiRectTransformComponent { AnchorMin = "0.14 0.22", AnchorMax = "0.45 0.29" },
+                        new CuiRectTransformComponent { AnchorMin = "0.17 0.22", AnchorMax = "0.42 0.29" },
                     },
                 });
 
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Kit (- or empty)", FontSize = 10, Align = TextAnchor.LowerLeft },
-                    RectTransform = { AnchorMin = "0.47 0.30", AnchorMax = "0.97 0.36" },
+                    Text = { Text = "Kit (optional)", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.45 0.30", AnchorMax = "0.97 0.36" },
                 },
-                spawnPanel);
+                spawnCard);
 
             AddRawCuiElement(
                 container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
-                    Parent = spawnPanel,
+                    Parent = spawnCard,
                     Components =
                     {
                         new CuiInputFieldComponent
@@ -2474,39 +2506,55 @@ namespace Oxide.Plugins
                             Text = draft.Kit ?? "-",
                             NeedsKeyboard = true,
                         },
-                        new CuiRectTransformComponent { AnchorMin = "0.47 0.22", AnchorMax = "0.97 0.29" },
+                        new CuiRectTransformComponent { AnchorMin = "0.45 0.22", AnchorMax = "0.97 0.29" },
                     },
                 });
 
             container.Add(
                 new CuiButton
                 {
-                    Button = { Command = "maxxinvaders.gui draftreset", Color = "0.25 0.25 0.28 0.95" },
-                    RectTransform = { AnchorMin = "0.03 0.08", AnchorMax = "0.35 0.18" },
-                    Text = { Text = "Reset form (new random id)", FontSize = 11 },
+                    Button = { Command = "maxxinvaders.gui draftreset", Color = "0.28 0.28 0.33 0.95" },
+                    RectTransform = { AnchorMin = "0.03 0.08", AnchorMax = "0.42 0.16" },
+                    Text = { Text = "Reset Form", FontSize = 10 },
                 },
-                spawnPanel);
+                spawnCard);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "<b>Rename Active NPC</b>", FontSize = 14, Align = TextAnchor.MiddleLeft },
+                    RectTransform = { AnchorMin = "0.05 0.90", AnchorMax = "0.95 0.98" },
+                },
+                renameCard);
 
             container.Add(
                 new CuiLabel
                 {
                     Text =
                     {
-                        Text = "Rename active NPC (viewerId or INV id)",
-                        FontSize = 10,
-                        Align = TextAnchor.LowerLeft,
-                        Color = "0.7 0.7 0.75 1",
+                        Text = "Target = viewerId or INV-xxxxx",
+                        FontSize = 9,
+                        Align = TextAnchor.MiddleLeft,
+                        Color = "0.8 0.85 0.9 1",
                     },
-                    RectTransform = { AnchorMin = "0.38 0.14", AnchorMax = "0.97 0.2" },
+                    RectTransform = { AnchorMin = "0.05 0.84", AnchorMax = "0.95 0.90" },
                 },
-                spawnPanel);
+                renameCard);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Target", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.05 0.70", AnchorMax = "0.4 0.76" },
+                },
+                renameCard);
 
             AddRawCuiElement(
                 container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
-                    Parent = spawnPanel,
+                    Parent = renameCard,
                     Components =
                     {
                         new CuiInputFieldComponent
@@ -2519,16 +2567,24 @@ namespace Oxide.Plugins
                             Text = draft.RenameTarget ?? "",
                             NeedsKeyboard = true,
                         },
-                        new CuiRectTransformComponent { AnchorMin = "0.38 0.06", AnchorMax = "0.64 0.13" },
+                        new CuiRectTransformComponent { AnchorMin = "0.05 0.60", AnchorMax = "0.95 0.69" },
                     },
                 });
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "New Name", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.05 0.46", AnchorMax = "0.4 0.52" },
+                },
+                renameCard);
 
             AddRawCuiElement(
                 container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
-                    Parent = spawnPanel,
+                    Parent = renameCard,
                     Components =
                     {
                         new CuiInputFieldComponent
@@ -2541,18 +2597,18 @@ namespace Oxide.Plugins
                             Text = draft.RenameName ?? "",
                             NeedsKeyboard = true,
                         },
-                        new CuiRectTransformComponent { AnchorMin = "0.65 0.06", AnchorMax = "0.86 0.13" },
+                        new CuiRectTransformComponent { AnchorMin = "0.05 0.36", AnchorMax = "0.95 0.45" },
                     },
                 });
 
             container.Add(
                 new CuiButton
                 {
-                    Button = { Command = "maxxinvaders.gui renameapply", Color = "0.25 0.4 0.55 0.95" },
-                    RectTransform = { AnchorMin = "0.87 0.06", AnchorMax = "0.97 0.13" },
-                    Text = { Text = "Rename", FontSize = 10 },
+                    Button = { Command = "maxxinvaders.gui renameapply", Color = "0.24 0.45 0.62 0.95" },
+                    RectTransform = { AnchorMin = "0.05 0.22", AnchorMax = "0.95 0.30" },
+                    Text = { Text = "Apply Rename", FontSize = 11 },
                 },
-                spawnPanel);
+                renameCard);
 
             float y = 0.52f;
             foreach (var r in slice)
