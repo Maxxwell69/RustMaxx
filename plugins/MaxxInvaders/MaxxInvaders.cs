@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.9")]
+    [Info("MaxxInvaders", "RustMaxx", "1.4.0")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -422,10 +422,16 @@ namespace Oxide.Plugins
             /// <summary>ScientistNPC or RoamingNPCs CustomPet (BasePlayer).</summary>
             public BasePlayer NpcPlayer;
             public bool IsRoamingNpc;
+            /// <summary>RoamingNPCs bot template key used for this spawn.</summary>
+            public string RoamingTemplateKey = "";
+            /// <summary>When true, NPC pathfinds toward <see cref="AnchorPosition"/> until within <see cref="ReturnRunArrivalMeters"/>.</summary>
+            public bool ReturnRunActive;
             public Vector3 AnchorPosition;
             public DateTime SpawnedAtUtc;
             public DateTime? ExpiresAtUtc;
         }
+
+        private const float ReturnRunArrivalMeters = 20f;
 
         #endregion
 
@@ -662,7 +668,8 @@ namespace Oxide.Plugins
             string kitName,
             string mode,
             BasePlayer anchorPlayer,
-            string source)
+            string source,
+            string roamingTemplateOverride = null)
         {
             if (!_cfg.EnablePlugin)
                 return SpawnResult.Fail("plugin_disabled");
@@ -704,7 +711,9 @@ namespace Oxide.Plugins
 
             BasePlayer npcPlayer = null;
             var isRoaming = false;
-            var roamingTemplate = ResolveRoamingTemplateKey(tierDef);
+            var roamingTemplate = string.IsNullOrWhiteSpace(roamingTemplateOverride)
+                ? ResolveRoamingTemplateKey(tierDef)
+                : roamingTemplateOverride.Trim();
 
             if (_cfg.UseRoamingNPCsWhenAvailable && RoamingNPCs != null && RoamingNPCs.IsLoaded &&
                 !string.IsNullOrEmpty(roamingTemplate))
@@ -825,6 +834,7 @@ namespace Oxide.Plugins
                 EntityId = netId,
                 NpcPlayer = npcPlayer,
                 IsRoamingNpc = isRoaming,
+                RoamingTemplateKey = roamingTemplate ?? "",
                 AnchorPosition = pos,
                 SpawnedAtUtc = DateTime.UtcNow,
                 ExpiresAtUtc = lifetime > 0 ? DateTime.UtcNow.AddSeconds(lifetime) : null,
@@ -1047,6 +1057,19 @@ namespace Oxide.Plugins
                 var pos = r.NpcPlayer.transform.position;
                 UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
 
+                // Run back toward streamer anchor (GUI "Return") — pathfind until within 20m, no teleport.
+                if (r.ReturnRunActive && r.AnchorPosition != Vector3.zero)
+                {
+                    var distToAnchor = Vector3.Distance(pos, r.AnchorPosition);
+                    if (distToAnchor > ReturnRunArrivalMeters)
+                    {
+                        TrySetDestinationBasePlayer(r.NpcPlayer, r.AnchorPosition);
+                        continue;
+                    }
+
+                    r.ReturnRunActive = false;
+                }
+
                 // Keep NPCs inside streamer-centered radius (anchor set at spawn point).
                 if (_cfg.MaxDistanceFromAnchor > 5f)
                 {
@@ -1190,9 +1213,16 @@ namespace Oxide.Plugins
 
         private static void TrySetDestination(ScientistNPC npc, Vector3 worldPos)
         {
+            TrySetDestinationBasePlayer(npc, worldPos);
+        }
+
+        /// <summary>Roaming bridge NPCs and scientists: steer on NavMesh when possible.</summary>
+        private static void TrySetDestinationBasePlayer(BasePlayer bp, Vector3 worldPos)
+        {
+            if (bp == null || bp.IsDestroyed) return;
             try
             {
-                var agent = npc.GetComponent<NavMeshAgent>();
+                var agent = bp.GetComponent<NavMeshAgent>();
                 if (agent == null || !agent.isOnNavMesh) return;
                 if (!ResolveNavMeshPosition(worldPos, out var dest))
                     return;
@@ -1200,7 +1230,7 @@ namespace Oxide.Plugins
             }
             catch
             {
-                // NavMesh steering is best-effort; scientist brain still runs engine-side.
+                /* NavMesh steering is best-effort */
             }
         }
 
@@ -1263,6 +1293,73 @@ namespace Oxide.Plugins
             _registry.Remove(r);
             LogIf(_cfg.Logging.LogDeath, $"despawn npc={r.NpcId} reason={reason}", false);
             SaveDataFile();
+        }
+
+        private void SetGuiNpcTemplateField(ulong userId, string npcId, string value)
+        {
+            if (!_guiNpcTemplateField.TryGetValue(userId, out var d))
+            {
+                d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                _guiNpcTemplateField[userId] = d;
+            }
+
+            d[npcId] = value ?? "";
+        }
+
+        private string GetGuiNpcTemplateField(ulong userId, string npcId, string fallback)
+        {
+            if (_guiNpcTemplateField.TryGetValue(userId, out var d) &&
+                d.TryGetValue(npcId, out var v) &&
+                !string.IsNullOrWhiteSpace(v))
+                return v.Trim();
+            return fallback ?? "";
+        }
+
+        /// <summary>Despawn roaming invader and respawn with a different RoamingNPCs bot template key.</summary>
+        private bool TryRespawnWithRoamingTemplate(
+            BasePlayer admin,
+            string npcIdToken,
+            string newTemplateKey,
+            out string error)
+        {
+            error = null;
+            if (string.IsNullOrWhiteSpace(newTemplateKey))
+            {
+                error = "Enter a template key.";
+                return false;
+            }
+
+            newTemplateKey = newTemplateKey.Trim();
+            if (!TryFindInvader(npcIdToken, out var r))
+            {
+                error = "NPC not found.";
+                return false;
+            }
+
+            if (!r.IsRoamingNpc)
+            {
+                error = "Template swap applies to RoamingNPCs bots only (not scientist fallback).";
+                return false;
+            }
+
+            if (!_cfg.UseRoamingNPCsWhenAvailable || RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+            {
+                error = "RoamingNPCs is not loaded or bridge is off.";
+                return false;
+            }
+
+            var vn = r.ViewerName;
+            var vid = r.ViewerId;
+            var tier = r.Tier;
+            var kit = r.KitName ?? "";
+            var mode = r.Mode ?? "roaming";
+
+            _viewerCooldownUntil.Remove(vid);
+            DespawnInternal(r, "gui_roaming_template_change");
+            var res = TrySpawn(vn, vid, tier, kit, mode, admin, "gui_roaming_template_change", newTemplateKey);
+            if (res.Success) return true;
+            error = string.IsNullOrEmpty(res.ErrorDetail) ? res.Error ?? "spawn_failed" : res.ErrorDetail;
+            return false;
         }
 
         #endregion
@@ -1907,6 +2004,10 @@ namespace Oxide.Plugins
         /// <summary>Selected profile slot (0–3) for the spawn form; set via GUI slot buttons or Load.</summary>
         private readonly Dictionary<ulong, int> _guiActiveProfileSlot = new();
 
+        /// <summary>Per-NPC roaming template key typed in GUI before Apply (respawn).</summary>
+        private readonly Dictionary<ulong, Dictionary<string, string>> _guiNpcTemplateField =
+            new();
+
         private readonly Dictionary<ulong, SpawnDraft> _spawnDrafts = new();
 
         private const int GuiTabInvaders = 0;
@@ -2083,13 +2184,23 @@ namespace Oxide.Plugins
 
         private void AddMaxxConfigEditor(CuiElementContainer container, string panel, BasePlayer player)
         {
-            float y = 0.88f;
+            AddCuiText(
+                container,
+                panel,
+                "<size=17><color=#d62828>MAXX SETTINGS</color></size>\n<size=10><color=#8899aa>Writes oxide/config/MaxxInvaders.json</color></size>",
+                "0.03 0.90",
+                "0.97 0.99",
+                12,
+                TextAnchor.UpperLeft,
+                "0.95 0.97 1 1");
+
+            float y = 0.86f;
             void RowLabel(string text, float h = 0.034f)
             {
                 container.Add(
                     new CuiLabel
                     {
-                        Text = { Text = text, FontSize = 10, Align = TextAnchor.MiddleLeft },
+                        Text = { Text = text, FontSize = 10, Align = TextAnchor.MiddleLeft, Color = "0.9 0.92 0.96 1" },
                         RectTransform = { AnchorMin = $"0.03 {y - h}", AnchorMax = $"0.97 {y}" },
                     },
                     panel);
@@ -2102,22 +2213,22 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiLabel
                     {
-                        Text = { Text = $"{label}: <b>{on}</b>", FontSize = 10, Align = TextAnchor.MiddleLeft },
+                        Text = { Text = $"{label}: <b>{on}</b>", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = "0.9 0.92 0.96 1" },
                         RectTransform = { AnchorMin = $"0.03 {y - 0.032f}", AnchorMax = $"0.72 {y}" },
                     },
                     panel);
                 container.Add(
                     new CuiButton
                     {
-                        Button = { Command = $"maxxinvaders.gui cfgtoggle {fieldName}", Color = "0.2 0.45 0.35 0.95" },
+                        Button = { Command = $"maxxinvaders.gui cfgtoggle {fieldName}", Color = "0.72 0.14 0.10 0.92" },
                         RectTransform = { AnchorMin = $"0.73 {y - 0.032f}", AnchorMax = $"0.97 {y}" },
-                        Text = { Text = "Toggle", FontSize = 10 },
+                        Text = { Text = "Toggle", FontSize = 10, Color = "1 1 1 1" },
                     },
                     panel);
                 y -= 0.044f;
             }
 
-            RowLabel("<b>MaxxInvaders</b> — changes write oxide/config/MaxxInvaders.json", 0.038f);
+            RowLabel("<b>Options</b>", 0.03f);
             RowToggle("UseRoamingNPCsWhenAvailable", _cfg.UseRoamingNPCsWhenAvailable,
                 nameof(InvaderConfig.UseRoamingNPCsWhenAvailable));
             RowToggle("PreventDuplicateViewerNPCs", _cfg.PreventDuplicateViewerNPCs,
@@ -2221,19 +2332,15 @@ namespace Oxide.Plugins
 
         private void AddRoamingBotsEditor(CuiElementContainer container, string panel, BasePlayer player)
         {
-            container.Add(
-                new CuiLabel
-                {
-                    Text =
-                    {
-                        Text =
-                            "<b>RoamingNPCs</b> — toggle <b>Enable bot?</b> per template (writes oxide/config/RoamingNPCs.json)",
-                        FontSize = 9,
-                        Align = TextAnchor.UpperLeft,
-                    },
-                    RectTransform = { AnchorMin = "0.02 0.86", AnchorMax = "0.98 0.905" },
-                },
-                panel);
+            AddCuiText(
+                container,
+                panel,
+                "<size=17><color=#d62828>ROAMING BOTS</color></size>\n<size=10><color=#8899aa>oxide/config/RoamingNPCs.json — Enable bot? per template</color></size>",
+                "0.02 0.88",
+                "0.98 0.99",
+                11,
+                TextAnchor.UpperLeft,
+                "0.95 0.97 1 1");
 
             if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
             {
@@ -2325,8 +2432,8 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = $"Keys {page + 1}/{totalPages}  ({keys.Count} total)", FontSize = 8 },
-                    RectTransform = { AnchorMin = "0.02 0.815", AnchorMax = "0.5 0.855" },
+                    Text = { Text = $"Keys {page + 1}/{totalPages}  ({keys.Count} total)", FontSize = 9, Color = "0.85 0.88 0.92 1" },
+                    RectTransform = { AnchorMin = "0.02 0.755", AnchorMax = "0.5 0.795" },
                 },
                 panel);
 
@@ -2334,9 +2441,9 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiButton
                     {
-                        Button = { Command = $"maxxinvaders.gui roampage {page - 1}", Color = "0.2 0.2 0.25 0.9" },
-                        RectTransform = { AnchorMin = "0.52 0.815", AnchorMax = "0.62 0.855" },
-                        Text = { Text = "Prev keys", FontSize = 8 },
+                        Button = { Command = $"maxxinvaders.gui roampage {page - 1}", Color = "0.14 0.14 0.16 0.95" },
+                        RectTransform = { AnchorMin = "0.52 0.755", AnchorMax = "0.62 0.795" },
+                        Text = { Text = "Prev keys", FontSize = 9, Color = "0.95 0.97 1 1" },
                     },
                     panel);
 
@@ -2344,13 +2451,13 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiButton
                     {
-                        Button = { Command = $"maxxinvaders.gui roampage {page + 1}", Color = "0.2 0.2 0.25 0.9" },
-                        RectTransform = { AnchorMin = "0.63 0.815", AnchorMax = "0.76 0.855" },
-                        Text = { Text = "Next keys", FontSize = 8 },
+                        Button = { Command = $"maxxinvaders.gui roampage {page + 1}", Color = "0.14 0.14 0.16 0.95" },
+                        RectTransform = { AnchorMin = "0.63 0.755", AnchorMax = "0.76 0.795" },
+                        Text = { Text = "Next keys", FontSize = 9, Color = "0.95 0.97 1 1" },
                     },
                     panel);
 
-            float ry = 0.78f;
+            float ry = 0.72f;
             foreach (var key in slice)
             {
                 var st = "off";
@@ -2383,9 +2490,9 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiButton
                     {
-                        Button = { Command = $"maxxinvaders.gui roamtoggle {key}", Color = "0.25 0.4 0.55 0.95" },
+                        Button = { Command = $"maxxinvaders.gui roamtoggle {key}", Color = "0.72 0.14 0.10 0.92" },
                         RectTransform = { AnchorMin = $"0.73 {ry - 0.036f}", AnchorMax = $"0.97 {ry}" },
-                        Text = { Text = "Toggle Enable bot?", FontSize = 7 },
+                        Text = { Text = "Toggle Enable bot?", FontSize = 8, Color = "1 1 1 1" },
                     },
                     panel);
                 ry -= 0.044f;
@@ -2413,7 +2520,7 @@ namespace Oxide.Plugins
             _guiPage[player.userID] = page;
             if (!_guiMainTab.TryGetValue(player.userID, out var mainTab)) mainTab = 0;
 
-            var rows = mainTab == GuiTabInvaders ? Mathf.Min(_cfg.Gui.RowsPerPage, 4) : _cfg.Gui.RowsPerPage;
+            var rows = mainTab == GuiTabInvaders ? Mathf.Min(_cfg.Gui.RowsPerPage, 3) : _cfg.Gui.RowsPerPage;
             var list = _registry.All().ToList();
             var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (float)rows));
             page = Mathf.Clamp(page, 0, totalPages - 1);
@@ -2423,60 +2530,28 @@ namespace Oxide.Plugins
             var panel = container.Add(
                 new CuiPanel
                 {
-                    Image = { Color = _cfg.Gui.PanelColor },
-                    RectTransform = { AnchorMin = "0.05 0.1", AnchorMax = "0.95 0.9" },
+                    Image = { Color = "0.05 0.05 0.07 0.98" },
+                    RectTransform = { AnchorMin = "0.04 0.06", AnchorMax = "0.96 0.94" },
                     CursorEnabled = true,
                 },
                 "Overlay",
                 UiName);
 
-            var invTabCol = mainTab == GuiTabInvaders ? _cfg.Gui.AccentColor : "0.16 0.18 0.2 0.92";
-            var maxxTabCol = mainTab == GuiTabMaxxEdit ? _cfg.Gui.AccentColor : "0.16 0.18 0.2 0.92";
-            var roamTabCol = mainTab == GuiTabRoamingEdit ? _cfg.Gui.AccentColor : "0.16 0.18 0.2 0.92";
-
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui tab 0", Color = invTabCol },
-                    RectTransform = { AnchorMin = "0.02 0.92", AnchorMax = "0.11 0.988" },
-                    Text = { Text = "Invaders", FontSize = 10 },
-                },
-                panel);
-
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui tab 1", Color = maxxTabCol },
-                    RectTransform = { AnchorMin = "0.115 0.92", AnchorMax = "0.22 0.988" },
-                    Text = { Text = "Maxx", FontSize = 10 },
-                },
-                panel);
-
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui tab 2", Color = roamTabCol },
-                    RectTransform = { AnchorMin = "0.225 0.92", AnchorMax = "0.36 0.988" },
-                    Text = { Text = "Roaming", FontSize = 10 },
-                },
-                panel);
-
-            var titleLine = mainTab == GuiTabInvaders
-                ? $"<size=17><b>MaxxInvaders</b></size> v{Version}  On map: {list.Count}  Page {page + 1}/{totalPages}"
-                : mainTab == GuiTabMaxxEdit
-                    ? $"<size=17><b>MaxxInvaders</b></size> v{Version}  <size=11>Edit config (saves to JSON)</size>"
-                    : $"<size=17><b>RoamingNPCs</b></size>  <size=11>Bot templates (Enable bot?)</size>   <size=10>Maxx v{Version}</size>";
+            const string uiRustRed = "0.72 0.14 0.10 0.95";
+            const string uiSideBg = "0.04 0.04 0.06 0.98";
+            const string uiMuted = "0.14 0.14 0.16 0.92";
 
             container.Add(
                 new CuiLabel
                 {
                     Text =
                     {
-                        Text = titleLine,
-                        FontSize = 13,
+                        Text =
+                            $"<size=18><color=#dddddd>MAXX</color> <color=#d62828>INVADERS</color></size>  <size=11><color=#8899aa>v{Version}</color></size>",
+                        FontSize = 14,
                         Align = TextAnchor.MiddleLeft,
                     },
-                    RectTransform = { AnchorMin = "0.37 0.92", AnchorMax = "0.64 0.99" },
+                    RectTransform = { AnchorMin = "0.02 0.93", AnchorMax = "0.42 0.99" },
                 },
                 panel);
 
@@ -2484,9 +2559,9 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiButton
                     {
-                        Button = { Command = $"maxxinvaders.gui page {page - 1}", Color = "0.2 0.2 0.25 0.9" },
-                        RectTransform = { AnchorMin = "0.38 0.92", AnchorMax = "0.48 0.988" },
-                        Text = { Text = "Prev", FontSize = 11 },
+                        Button = { Command = $"maxxinvaders.gui page {page - 1}", Color = uiMuted },
+                        RectTransform = { AnchorMin = "0.52 0.93", AnchorMax = "0.59 0.99" },
+                        Text = { Text = "◀", FontSize = 13, Color = "0.95 0.95 1 1" },
                     },
                     panel);
 
@@ -2494,90 +2569,239 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiButton
                     {
-                        Button = { Command = $"maxxinvaders.gui page {page + 1}", Color = "0.2 0.2 0.25 0.9" },
-                        RectTransform = { AnchorMin = "0.49 0.92", AnchorMax = "0.59 0.988" },
-                        Text = { Text = "Next", FontSize = 11 },
+                        Button = { Command = $"maxxinvaders.gui page {page + 1}", Color = uiMuted },
+                        RectTransform = { AnchorMin = "0.60 0.93", AnchorMax = "0.67 0.99" },
+                        Text = { Text = "▶", FontSize = 13, Color = "0.95 0.95 1 1" },
                     },
                     panel);
+
+            if (mainTab == GuiTabInvaders)
+                AddCuiText(
+                    container,
+                    panel,
+                    $"Page {page + 1}/{totalPages}  ·  On map: {list.Count}",
+                    "0.68 0.93",
+                    "0.81 0.99",
+                    11,
+                    TextAnchor.MiddleRight,
+                    "0.72 0.78 0.88 1");
 
             container.Add(
                 new CuiButton
                 {
-                    Button = { Command = "maxxinvaders.gui action refresh", Color = "0.15 0.35 0.4 0.9" },
-                    RectTransform = { AnchorMin = "0.62 0.92", AnchorMax = "0.76 0.988" },
-                    Text = { Text = "Refresh", FontSize = 11 },
+                    Button = { Command = "maxxinvaders.gui action refresh", Color = "0.18 0.35 0.42 0.95" },
+                    RectTransform = { AnchorMin = "0.82 0.93", AnchorMax = "0.90 0.99" },
+                    Text = { Text = "Refresh", FontSize = 11, Color = "0.95 0.97 1 1" },
                 },
                 panel);
 
             container.Add(
                 new CuiButton
                 {
-                    Button = { Command = "maxxinvaders.gui action close", Color = "0.4 0.15 0.15 0.9" },
-                    RectTransform = { AnchorMin = "0.78 0.92", AnchorMax = "0.98 0.988" },
-                    Text = { Text = "Close", FontSize = 11 },
+                    Button = { Command = "maxxinvaders.gui action close", Color = uiRustRed },
+                    RectTransform = { AnchorMin = "0.91 0.93", AnchorMax = "0.99 0.99" },
+                    Text = { Text = "CLOSE", FontSize = 11, Color = "1 1 1 1" },
+                },
+                panel);
+
+            var sidebar = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = uiSideBg },
+                    RectTransform = { AnchorMin = "0.015 0.02", AnchorMax = "0.155 0.915" },
+                    CursorEnabled = true,
+                },
+                panel);
+
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui tab 0", Color = mainTab == GuiTabInvaders ? uiRustRed : uiMuted },
+                    RectTransform = { AnchorMin = "0.06 0.76", AnchorMax = "0.94 0.88" },
+                    Text = { Text = "INVADERS", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                },
+                sidebar);
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui tab 1", Color = mainTab == GuiTabMaxxEdit ? uiRustRed : uiMuted },
+                    RectTransform = { AnchorMin = "0.06 0.62", AnchorMax = "0.94 0.74" },
+                    Text = { Text = "MAXX SETTINGS", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                },
+                sidebar);
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui tab 2", Color = mainTab == GuiTabRoamingEdit ? uiRustRed : uiMuted },
+                    RectTransform = { AnchorMin = "0.06 0.48", AnchorMax = "0.94 0.60" },
+                    Text = { Text = "ROAMING", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                },
+                sidebar);
+
+            var contentPanel = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.08 0.08 0.10 0.96" },
+                    RectTransform = { AnchorMin = "0.16 0.02", AnchorMax = "0.985 0.915" },
+                    CursorEnabled = true,
                 },
                 panel);
 
             if (mainTab == GuiTabMaxxEdit)
             {
-                AddMaxxConfigEditor(container, panel, player);
+                AddMaxxConfigEditor(container, contentPanel, player);
                 CuiHelper.AddUi(player, container);
                 return;
             }
 
             if (mainTab == GuiTabRoamingEdit)
             {
-                AddRoamingBotsEditor(container, panel, player);
+                AddRoamingBotsEditor(container, contentPanel, player);
                 CuiHelper.AddUi(player, container);
                 return;
             }
 
-            container.Add(
-                new CuiLabel
-                {
-                    Text =
-                    {
-                        Text = BuildRoamingGuiStatusText(),
-                        FontSize = 9,
-                        Align = TextAnchor.UpperLeft,
-                        Color = "0.85 0.88 0.92 1",
-                    },
-                    RectTransform = { AnchorMin = "0.02 0.855", AnchorMax = "0.98 0.902" },
-                },
-                panel);
-
-            if (mainTab == GuiTabInvaders)
-            {
-                var onMap = list.Count == 0
-                    ? "No active bots on the map."
-                    : string.Join(
-                        "   |   ",
-                        list.Select(r =>
-                        {
-                            var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(r.ViewerName) ? "?" : r.ViewerName.Trim());
-                            var id = StripCuiMarkup(r.NpcId ?? "");
-                            return $"{nm}  ({id})";
-                        }));
-                AddCuiText(
-                    container,
-                    panel,
-                    $"<size=16><b>ACTIVE BOTS</b></size>\n{onMap}",
-                    "0.03 0.798",
-                    "0.97 0.848",
-                    14,
-                    TextAnchor.UpperLeft,
-                    "0.92 0.96 1 1");
-            }
+            AddCuiText(
+                container,
+                contentPanel,
+                BuildRoamingGuiStatusText(),
+                "0.02 0.91",
+                "0.98 0.99",
+                9,
+                TextAnchor.UpperLeft,
+                "0.78 0.82 0.88 1");
 
             var draft = GetSpawnDraft(player.userID);
+            const string uiRustRed2 = "0.72 0.14 0.10 0.95";
+            const string uiCard = "0.12 0.12 0.15 0.94";
+            const string uiGreen = "0.18 0.48 0.28 0.95";
+
+            var cardIdx = 0;
+            foreach (var r in slice)
+            {
+                var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
+                var top = 0.87f - cardIdx * 0.108f;
+                var bot = top - 0.098f;
+                var aMin = $"0.02 {bot.ToString("F4", CultureInfo.InvariantCulture)}";
+                var aMax = $"0.98 {top.ToString("F4", CultureInfo.InvariantCulture)}";
+                var card = container.Add(
+                    new CuiPanel
+                    {
+                        Image = { Color = uiCard },
+                        RectTransform = { AnchorMin = aMin, AnchorMax = aMax },
+                    },
+                    contentPanel);
+
+                var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(r.ViewerName) ? "?" : r.ViewerName.Trim());
+                var tmpl = r.IsRoamingNpc
+                    ? StripCuiMarkup(r.RoamingTemplateKey ?? _cfg.DefaultRoamingTemplateKey ?? "")
+                    : "(scientist)";
+                AddCuiText(
+                    container,
+                    card,
+                    $"<size=15><b>{nm}</b></size>  <size=11><color=#8899aa>{StripCuiMarkup(r.NpcId)}</color></size>\n" +
+                    $"<size=11>T{r.Tier}  {r.Mode}  HP {hp:F0}  {(r.IsRoamingNpc ? "Roaming" : "Scientist")}  template: {tmpl}</size>",
+                    "0.03 0.38",
+                    "0.62 0.95",
+                    11,
+                    TextAnchor.UpperLeft,
+                    "0.95 0.97 1 1");
+
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui tp {r.NpcId}", Color = _cfg.Gui.AccentColor },
+                        RectTransform = { AnchorMin = "0.63 0.52", AnchorMax = "0.72 0.92" },
+                        Text = { Text = "TP", FontSize = 11, Color = "1 1 1 1" },
+                    },
+                    card);
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui returnrun {r.NpcId}", Color = uiGreen },
+                        RectTransform = { AnchorMin = "0.73 0.52", AnchorMax = "0.86 0.92" },
+                        Text = { Text = "RETURN", FontSize = 10, Color = "1 1 1 1" },
+                    },
+                    card);
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui kill {r.NpcId}", Color = "0.45 0.12 0.12 0.95" },
+                        RectTransform = { AnchorMin = "0.87 0.52", AnchorMax = "0.93 0.92" },
+                        Text = { Text = "KILL", FontSize = 10, Color = "1 1 1 1" },
+                    },
+                    card);
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui despawn {r.NpcId}", Color = "0.35 0.32 0.15 0.95" },
+                        RectTransform = { AnchorMin = "0.94 0.52", AnchorMax = "0.99 0.92" },
+                        Text = { Text = "DESPAWN", FontSize = 8, Color = "1 1 1 1" },
+                    },
+                    card);
+
+                AddCuiText(
+                    container,
+                    card,
+                    "Roaming template (change = respawn bot):",
+                    "0.03 0.06",
+                    "0.38 0.34",
+                    9,
+                    TextAnchor.MiddleLeft,
+                    "0.7 0.75 0.82 1");
+                var tmplVal = GetGuiNpcTemplateField(player.userID, r.NpcId, r.RoamingTemplateKey ?? "");
+                AddRawCuiElement(
+                    container,
+                    new CuiElement
+                    {
+                        Name = Guid.NewGuid().ToString("N"),
+                        Parent = card,
+                        Components =
+                        {
+                            new CuiInputFieldComponent
+                            {
+                                Align = TextAnchor.MiddleLeft,
+                                CharsLimit = 64,
+                                Command = $"maxxinvaders.gui ntmpl {r.NpcId} ",
+                                FontSize = 11,
+                                IsPassword = false,
+                                Text = tmplVal,
+                                NeedsKeyboard = true,
+                            },
+                            new CuiRectTransformComponent { AnchorMin = "0.39 0.08", AnchorMax = "0.78 0.36" },
+                        },
+                    });
+                container.Add(
+                    new CuiButton
+                    {
+                        Button = { Command = $"maxxinvaders.gui applytmpl {r.NpcId}", Color = uiRustRed2 },
+                        RectTransform = { AnchorMin = "0.79 0.08", AnchorMax = "0.98 0.36" },
+                        Text = { Text = "APPLY TEMPLATE", FontSize = 9, Color = "1 1 1 1" },
+                    },
+                    card);
+
+                cardIdx++;
+            }
+
+            if (slice.Count == 0)
+                AddCuiText(
+                    container,
+                    contentPanel,
+                    "<size=14>No active bots.</size>\nSpawn one below or from TikFinity.",
+                    "0.04 0.62",
+                    "0.96 0.78",
+                    13,
+                    TextAnchor.MiddleLeft,
+                    "0.65 0.7 0.78 1");
+
             var formPanel = container.Add(
                 new CuiPanel
                 {
-                    Image = { Color = "0.11 0.13 0.18 0.95" },
-                    RectTransform = { AnchorMin = "0.02 0.54", AnchorMax = "0.98 0.792" },
+                    Image = { Color = "0.10 0.11 0.14 0.95" },
+                    RectTransform = { AnchorMin = "0.02 0.205", AnchorMax = "0.98 0.368" },
                     CursorEnabled = true,
                 },
-                panel);
+                contentPanel);
 
             container.Add(
                 new CuiLabel
@@ -2757,88 +2981,16 @@ namespace Oxide.Plugins
                 },
                 formPanel);
 
-            const float npcRowH = 0.052f;
-            const float npcRowStep = 0.054f;
-            float y = 0.525f;
-            foreach (var r in slice)
-            {
-                var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
-                var age = (DateTime.UtcNow - r.SpawnedAtUtc).TotalMinutes;
-                var yb = (y - npcRowH).ToString("F4", CultureInfo.InvariantCulture);
-                var yt = y.ToString("F4", CultureInfo.InvariantCulture);
-
-                var row = container.Add(
-                    new CuiPanel
-                    {
-                        Image = { Color = "0.15 0.15 0.18 0.85" },
-                        RectTransform = { AnchorMin = $"0.02 {yb}", AnchorMax = $"0.98 {yt}" },
-                    },
-                    panel);
-
-                var npcLine =
-                    $"<b>{(string.IsNullOrWhiteSpace(r.ViewerName) ? "?" : r.ViewerName.Trim())}</b>  ({r.NpcId})  T{r.Tier}  {r.Mode}  HP {hp:F0}  {age:F0}m";
-                AddCuiText(container, row, npcLine, "0.02 0.1", "0.70 0.9", 13, TextAnchor.MiddleLeft, "0.95 0.97 1 1");
-
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui tp {r.NpcId}", Color = _cfg.Gui.AccentColor },
-                        RectTransform = { AnchorMin = "0.69 0.15", AnchorMax = "0.75 0.85" },
-                        Text = { Text = "TP", FontSize = 10, Color = "0.95 0.97 1 1" },
-                    },
-                    row);
-
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui renametarget {r.NpcId}", Color = "0.25 0.45 0.55 0.95" },
-                        RectTransform = { AnchorMin = "0.76 0.15", AnchorMax = "0.84 0.85" },
-                        Text = { Text = "Use", FontSize = 9, Color = "0.95 0.97 1 1" },
-                    },
-                    row);
-
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui renamename {r.NpcId}", Color = "0.22 0.35 0.5 0.95" },
-                        RectTransform = { AnchorMin = "0.85 0.15", AnchorMax = "0.92 0.85" },
-                        Text = { Text = "Name", FontSize = 8, Color = "0.95 0.97 1 1" },
-                    },
-                    row);
-
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui kill {r.NpcId}", Color = "0.5 0.2 0.2 0.9" },
-                        RectTransform = { AnchorMin = "0.93 0.15", AnchorMax = "0.96 0.85" },
-                        Text = { Text = "K", FontSize = 10 },
-                    },
-                    row);
-
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui despawn {r.NpcId}", Color = "0.35 0.35 0.2 0.9" },
-                        RectTransform = { AnchorMin = "0.965 0.15", AnchorMax = "0.995 0.85" },
-                        Text = { Text = "D", FontSize = 9 },
-                    },
-                    row);
-
-                y -= npcRowStep;
-            }
-
             var profiles = GetRecentProfiles(4);
-            if (mainTab == GuiTabInvaders)
-            {
-                var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
-                var pPanel = container.Add(
-                    new CuiPanel
-                    {
-                        Image = { Color = "0.08 0.10 0.14 0.92" },
-                        RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.28" },
-                        CursorEnabled = true,
-                    },
-                    panel);
+            var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
+            var pPanel = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.08 0.10 0.14 0.92" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.195" },
+                    CursorEnabled = true,
+                },
+                contentPanel);
                 AddCuiText(
                     container,
                     pPanel,
@@ -2912,7 +3064,6 @@ namespace Oxide.Plugins
                         },
                         prow);
                 }
-            }
 
             CuiHelper.AddUi(player, container);
         }
@@ -3013,6 +3164,52 @@ namespace Oxide.Plugins
                 LoadProfileToDraft(dProf, profs[profSlot]);
                 player.ChatMessage(
                     $"[MaxxInvaders] Spawn form uses slot {profSlot + 1}: {profs[profSlot].ViewerName}");
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "returnrun" && args.Length > 1)
+            {
+                var nid = args[1].Trim();
+                if (!TryFindInvader(nid, out var rr))
+                    player.ChatMessage("[MaxxInvaders] NPC not found.");
+                else
+                {
+                    rr.AnchorPosition = player.transform.position;
+                    rr.ReturnRunActive = true;
+                    player.ChatMessage(
+                        "[MaxxInvaders] Bot is pathing back to within 20m of you (not a teleport).");
+                }
+
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "ntmpl" && args.Length > 1)
+            {
+                var nid = args[1].Trim();
+                var val = args.Length > 2 ? string.Join(" ", args.Skip(2).ToArray()) : "";
+                SetGuiNpcTemplateField(player.userID, nid, val);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "applytmpl" && args.Length > 1)
+            {
+                var nid = args[1].Trim();
+                var key = GetGuiNpcTemplateField(player.userID, nid, null);
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    player.ChatMessage(
+                        $"[MaxxInvaders] Type a Roaming template key next to {nid}, then Apply again.");
+                    OpenGui(player, GetGuiPage(player.userID));
+                    return;
+                }
+
+                if (TryRespawnWithRoamingTemplate(player, nid, key, out var terr))
+                    player.ChatMessage($"[MaxxInvaders] Respawned with template {key}.");
+                else
+                    player.ChatMessage($"[MaxxInvaders] Template change failed: {terr}");
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
