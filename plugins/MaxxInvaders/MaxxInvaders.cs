@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.5")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.6")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1351,6 +1351,33 @@ namespace Oxide.Plugins
             arg.ReplyWith("OK");
         }
 
+        [ConsoleCommand("maxxinvaders.rename")]
+        private void CmdConsoleRename(ConsoleSystem.Arg arg)
+        {
+            if (arg.Connection != null)
+            {
+                arg.ReplyWith("Run from server console or RCON only.");
+                return;
+            }
+
+            var parts = ParseQuotedArgs(arg);
+            if (parts.Count < 2)
+            {
+                arg.ReplyWith("Usage: maxxinvaders.rename <viewerId|npcId> <newName>");
+                return;
+            }
+
+            var key = parts[0];
+            var newName = string.Join(" ", parts.Skip(1));
+            if (!RenameInvaderInternal(key, newName, out var err))
+            {
+                arg.ReplyWith($"Rename failed: {err}");
+                return;
+            }
+
+            arg.ReplyWith("OK");
+        }
+
         [ConsoleCommand("maxxinvaders.clearall")]
         private void CmdConsoleClearAll(ConsoleSystem.Arg arg)
         {
@@ -1431,7 +1458,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /migrate-to-skills (Maxx config) | /maxxinvaders ui | maxx | roaming | list | spawn | kill | …");
+                    "Usage: /migrate-to-skills (Maxx config) | /maxxinvaders ui | maxx | roaming | list | spawn | rename | kill | …");
                 return;
             }
 
@@ -1485,6 +1512,20 @@ namespace Oxide.Plugins
                     }
                     KillByNpcId(args[1], sub == "despawn");
                     player.ChatMessage("Done (see console if not found).");
+                    break;
+                case "rename":
+                    if (!CanAdmin(player)) return;
+                    if (args.Length < 3)
+                    {
+                        player.ChatMessage("Usage: /maxxinvaders rename <viewerId|npcId> <newName>");
+                        return;
+                    }
+                    var renameKey = args[1];
+                    var renameName = string.Join(" ", args.Skip(2));
+                    if (RenameInvaderInternal(renameKey, renameName, out var renameErr))
+                        player.ChatMessage("Renamed.");
+                    else
+                        player.ChatMessage($"Rename failed: {renameErr}");
                     break;
                 case "clear":
                     if (!CanAdmin(player)) return;
@@ -1549,6 +1590,59 @@ namespace Oxide.Plugins
         private bool CanUse(BasePlayer p) =>
             p.IsAdmin || permission.UserHasPermission(p.UserIDString, PermUse) ||
             permission.UserHasPermission(p.UserIDString, PermAdmin);
+
+        private static string NormalizeViewerName(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            var s = raw.Trim().Replace("<", "").Replace(">", "");
+            if (s.Length > 24) s = s.Substring(0, 24);
+            return string.IsNullOrWhiteSpace(s) ? null : s;
+        }
+
+        private bool TryFindInvader(string token, out InvaderRuntime runtime)
+        {
+            runtime = null;
+            if (string.IsNullOrWhiteSpace(token)) return false;
+            token = token.Trim();
+
+            if (_registry.TryGetByViewer(token, out runtime))
+                return true;
+
+            foreach (var r in _registry.All())
+            {
+                if (r == null) continue;
+                if (string.Equals(r.NpcId, token, StringComparison.OrdinalIgnoreCase))
+                {
+                    runtime = r;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool RenameInvaderInternal(string viewerOrNpcId, string newName, out string error)
+        {
+            error = null;
+            var normalized = NormalizeViewerName(newName);
+            if (string.IsNullOrEmpty(normalized))
+            {
+                error = "invalid_name";
+                return false;
+            }
+
+            if (!TryFindInvader(viewerOrNpcId, out var r))
+            {
+                error = "not_found";
+                return false;
+            }
+
+            r.ViewerName = normalized;
+            if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+                r.NpcPlayer.displayName = normalized;
+
+            LogIf(true, $"rename npc={r.NpcId} viewer={r.ViewerId} -> {normalized}", false);
+            return true;
+        }
 
         private void ChatList(BasePlayer player)
         {
@@ -2675,6 +2769,13 @@ namespace Oxide.Plugins
             if (!_registry.TryGetByViewer(viewerId, out var r)) return false;
             DespawnInternal(r, "api_remove");
             return true;
+        }
+
+        /// <summary>Rename active invader by viewerId or npcId: Interface.Call("RenameInvader", "viewerIdOrNpcId", "New Name").</summary>
+        [HookMethod("RenameInvader")]
+        public object RenameInvader(string viewerIdOrNpcId, string newName)
+        {
+            return RenameInvaderInternal(viewerIdOrNpcId, newName, out _);
         }
 
         #endregion
