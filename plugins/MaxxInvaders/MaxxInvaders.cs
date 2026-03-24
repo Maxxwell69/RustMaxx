@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.0.2")]
+    [Info("MaxxInvaders", "RustMaxx", "1.0.3")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1090,6 +1090,15 @@ namespace Oxide.Plugins
 
         #region GUI
 
+        /// <summary>
+        /// CuiElementContainer adds Add(CuiButton, string) overloads; a plain Add(CuiElement) call
+        /// can bind to the wrong overload — append via List&lt;CuiElement&gt; instead.
+        /// </summary>
+        private static void AddRawCuiElement(CuiElementContainer container, CuiElement element)
+        {
+            ((List<CuiElement>)container).Add(element);
+        }
+
         private readonly Dictionary<ulong, int> _guiPage = new();
         private readonly Dictionary<ulong, SpawnDraft> _spawnDrafts = new();
 
@@ -1244,7 +1253,8 @@ namespace Oxide.Plugins
                 },
                 spawnPanel);
 
-            container.Add(
+            AddRawCuiElement(
+                container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
@@ -1273,7 +1283,8 @@ namespace Oxide.Plugins
                 },
                 spawnPanel);
 
-            container.Add(
+            AddRawCuiElement(
+                container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
@@ -1302,7 +1313,8 @@ namespace Oxide.Plugins
                 },
                 spawnPanel);
 
-            container.Add(
+            AddRawCuiElement(
+                container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
@@ -1331,7 +1343,8 @@ namespace Oxide.Plugins
                 },
                 spawnPanel);
 
-            container.Add(
+            AddRawCuiElement(
+                container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
@@ -1360,7 +1373,8 @@ namespace Oxide.Plugins
                 },
                 spawnPanel);
 
-            container.Add(
+            AddRawCuiElement(
+                container,
                 new CuiElement
                 {
                     Name = Guid.NewGuid().ToString("N"),
