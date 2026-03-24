@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.4")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.5")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -767,7 +767,11 @@ namespace Oxide.Plugins
                         WarnRoamingOnlyFailedThrottled(roamingTemplate,
                             "RoamingNPCs is not loaded.");
                     else
-                        WarnRoamingOnlyFailedThrottled(roamingTemplate, ExplainRoamingBridgeFailure(roamingTemplate));
+                    {
+                        var detail = ExplainRoamingBridgeFailure(roamingTemplate);
+                        WarnRoamingOnlyFailedThrottled(roamingTemplate, detail);
+                        return SpawnResult.Fail("roaming_only_failed", detail);
+                    }
                     return SpawnResult.Fail("roaming_only_failed");
                 }
 
@@ -859,14 +863,15 @@ namespace Oxide.Plugins
         {
             public bool Success;
             public string Error;
+            public string ErrorDetail;
             public string NpcId;
             public ulong EntityId;
 
             public static SpawnResult Ok(string npcId, ulong entityId) =>
                 new() { Success = true, NpcId = npcId, EntityId = entityId };
 
-            public static SpawnResult Fail(string err) =>
-                new() { Success = false, Error = err };
+            public static SpawnResult Fail(string err, string detail = null) =>
+                new() { Success = false, Error = err, ErrorDetail = detail };
         }
 
         private string NextNpcId()
@@ -1266,7 +1271,10 @@ namespace Oxide.Plugins
             var result = TrySpawn(viewerName, viewerId, tier, kit, mode, null, "console");
             if (!result.Success)
             {
-                arg.ReplyWith($"Error: {result.Error}");
+                if (!string.IsNullOrWhiteSpace(result.ErrorDetail))
+                    arg.ReplyWith($"Error: {result.Error} | {result.ErrorDetail}");
+                else
+                    arg.ReplyWith($"Error: {result.Error}");
                 return;
             }
 
