@@ -59,6 +59,8 @@ Interface.Call("RemoveInvader", viewerId);
 | `/maxxinvaders clear` | admin | Despawn all tracked |
 | `/maxxinvaders debug on\|off` | debug | Verbose logging |
 
+In the **GUI**, use **Quick: spawn 1 demo NPC** for an instant test, or fill **viewer name**, **viewer id** (unique), **tier**, **mode**, **kit**, then **Spawn using fields below**. After editing a field, press **Enter** or click outside so Rust sends the value. **Reset form** gives a new random demo id.
+
 ## Behavior modes — limitations (honest)
 
 Rust **Scientist** AI is engine-driven. MaxxInvaders maps modes to **optional prefabs per mode** and **NavMesh destinations** (roam, move toward nearest player, follow admin). It does **not** fully reimplement RoamingNPCs-style combat personalities. For “true” hostile tuning, prefer **prefab variants** (if your build exposes different scientist prefabs) and tier **health** — see `PrefabByBehaviorMode` in config.

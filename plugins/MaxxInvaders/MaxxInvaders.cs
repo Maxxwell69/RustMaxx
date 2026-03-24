@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.0.0")]
+    [Info("MaxxInvaders", "RustMaxx", "1.0.1")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -76,6 +76,8 @@ namespace Oxide.Plugins
             _persistTimer?.Destroy();
             foreach (var player in BasePlayer.activePlayerList)
                 CuiHelper.DestroyUi(player, UiName);
+
+            _spawnDrafts.Clear();
 
             if (_cfg?.DespawnOnUnload == true)
                 _registry.DespawnAll(this, "plugin_unload");
@@ -1089,6 +1091,34 @@ namespace Oxide.Plugins
         #region GUI
 
         private readonly Dictionary<ulong, int> _guiPage = new();
+        private readonly Dictionary<ulong, SpawnDraft> _spawnDrafts = new();
+
+        private sealed class SpawnDraft
+        {
+            public string ViewerName = "DemoViewer";
+            public string ViewerId;
+            public string TierStr = "1";
+            public string Kit = "-";
+            public string Mode = "roaming";
+
+            public SpawnDraft()
+            {
+                ViewerId = "demo_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            }
+        }
+
+        private SpawnDraft GetSpawnDraft(ulong userId)
+        {
+            if (!_spawnDrafts.TryGetValue(userId, out var d))
+            {
+                d = new SpawnDraft();
+                _spawnDrafts[userId] = d;
+            }
+            return d;
+        }
+
+        private int GetGuiPage(ulong userId) =>
+            _guiPage.TryGetValue(userId, out var pg) ? pg : 0;
 
         private void OpenGui(BasePlayer player, int page)
         {
@@ -1165,7 +1195,221 @@ namespace Oxide.Plugins
                     },
                     panel);
 
-            float y = 0.88f;
+            var draft = GetSpawnDraft(player.userID);
+            var spawnPanel = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.12 0.14 0.18 0.92" },
+                    RectTransform = { AnchorMin = "0.02 0.54", AnchorMax = "0.98 0.905" },
+                    CursorEnabled = true,
+                },
+                panel);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = "<b>Spawn demo</b> — set a viewer name & id, then Spawn. Quick = random id.",
+                        FontSize = 12,
+                        Align = TextAnchor.MiddleLeft,
+                    },
+                    RectTransform = { AnchorMin = "0.03 0.88", AnchorMax = "0.97 0.98" },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui quickdemo", Color = "0.15 0.45 0.35 0.95" },
+                    RectTransform = { AnchorMin = "0.03 0.76", AnchorMax = "0.48 0.86" },
+                    Text = { Text = "Quick: spawn 1 demo NPC", FontSize = 12 },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui spawnfields", Color = "0.2 0.35 0.5 0.95" },
+                    RectTransform = { AnchorMin = "0.52 0.76", AnchorMax = "0.97 0.86" },
+                    Text = { Text = "Spawn using fields below", FontSize = 12 },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Viewer name", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.03 0.66", AnchorMax = "0.35 0.72" },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = spawnPanel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 64,
+                            Command = "maxxinvaders.gui draft viewername",
+                            FontSize = 13,
+                            IsPassword = false,
+                            Text = draft.ViewerName ?? "DemoViewer",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0.03 0.56", AnchorMax = "0.97 0.65" },
+                    },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Viewer id (unique, no spaces)", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.03 0.48", AnchorMax = "0.5 0.54" },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = spawnPanel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 48,
+                            Command = "maxxinvaders.gui draft viewerid",
+                            FontSize = 13,
+                            IsPassword = false,
+                            Text = draft.ViewerId ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0.03 0.38", AnchorMax = "0.97 0.47" },
+                    },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Tier", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.03 0.30", AnchorMax = "0.12 0.36" },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = spawnPanel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 4,
+                            Command = "maxxinvaders.gui draft tier",
+                            FontSize = 13,
+                            IsPassword = false,
+                            Text = draft.TierStr ?? "1",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0.03 0.22", AnchorMax = "0.12 0.29" },
+                    },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Mode", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.14 0.30", AnchorMax = "0.45 0.36" },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = spawnPanel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 24,
+                            Command = "maxxinvaders.gui draft mode",
+                            FontSize = 13,
+                            IsPassword = false,
+                            Text = draft.Mode ?? "roaming",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0.14 0.22", AnchorMax = "0.45 0.29" },
+                    },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Kit (- or empty)", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = "0.47 0.30", AnchorMax = "0.97 0.36" },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = spawnPanel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 48,
+                            Command = "maxxinvaders.gui draft kit",
+                            FontSize = 13,
+                            IsPassword = false,
+                            Text = draft.Kit ?? "-",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0.47 0.22", AnchorMax = "0.97 0.29" },
+                    },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui draftreset", Color = "0.25 0.25 0.28 0.95" },
+                    RectTransform = { AnchorMin = "0.03 0.08", AnchorMax = "0.35 0.18" },
+                    Text = { Text = "Reset form (new random id)", FontSize = 11 },
+                },
+                spawnPanel);
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = "Anchor: near you. Kit needs Kits plugin. Mode: roaming, hostile, attackplayer, …",
+                        FontSize = 9,
+                        Align = TextAnchor.MiddleLeft,
+                        Color = "0.7 0.7 0.75 1",
+                    },
+                    RectTransform = { AnchorMin = "0.38 0.06", AnchorMax = "0.97 0.19" },
+                },
+                spawnPanel);
+
+            float y = 0.52f;
             foreach (var r in slice)
             {
                 var hp = r.Entity != null && !r.Entity.IsDestroyed ? r.Entity.health : 0f;
@@ -1236,6 +1480,73 @@ namespace Oxide.Plugins
 
             var args = arg.Args;
             if (args == null || args.Length == 0) return;
+
+            if (args[0] == "draftreset")
+            {
+                _spawnDrafts[player.userID] = new SpawnDraft();
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "quickdemo")
+            {
+                var vid = "demo_" + Random.Range(100000, 999999);
+                var res = TrySpawn("DemoViewer", vid, 1, "", "roaming", player, "gui_quick");
+                player.ChatMessage(res.Success
+                    ? $"[MaxxInvaders] Spawned {res.NpcId}"
+                    : $"[MaxxInvaders] Failed: {res.Error}");
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "spawnfields")
+            {
+                var d = GetSpawnDraft(player.userID);
+                if (!int.TryParse(d.TierStr?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                        out var tier))
+                    tier = 1;
+                var kit = d.Kit == "-" || string.IsNullOrWhiteSpace(d.Kit) ? "" : d.Kit.Trim();
+                var mode = string.IsNullOrWhiteSpace(d.Mode) ? "roaming" : d.Mode.Trim().ToLowerInvariant();
+                var name = string.IsNullOrWhiteSpace(d.ViewerName) ? "DemoViewer" : d.ViewerName.Trim();
+                var vid = string.IsNullOrWhiteSpace(d.ViewerId)
+                    ? "demo_" + Random.Range(100000, 999999)
+                    : d.ViewerId.Trim();
+                var res = TrySpawn(name, vid, tier, kit, mode, player, "gui");
+                player.ChatMessage(res.Success
+                    ? $"[MaxxInvaders] Spawned {res.NpcId}"
+                    : $"[MaxxInvaders] Failed: {res.Error}");
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "draft" && args.Length >= 2)
+            {
+                var field = args[1].ToLowerInvariant();
+                var value = args.Length > 2 ? string.Join(" ", args.Skip(2).ToArray()) : "";
+                var d = GetSpawnDraft(player.userID);
+                switch (field)
+                {
+                    case "viewername":
+                        d.ViewerName = string.IsNullOrEmpty(value) ? "DemoViewer" : value;
+                        break;
+                    case "viewerid":
+                        d.ViewerId = string.IsNullOrWhiteSpace(value)
+                            ? "demo_" + Guid.NewGuid().ToString("N").Substring(0, 8)
+                            : value.Trim();
+                        break;
+                    case "tier":
+                        d.TierStr = string.IsNullOrWhiteSpace(value) ? "1" : value.Trim();
+                        break;
+                    case "kit":
+                        d.Kit = string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+                        break;
+                    case "mode":
+                        d.Mode = string.IsNullOrWhiteSpace(value) ? "roaming" : value.Trim().ToLowerInvariant();
+                        break;
+                }
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
 
             if (args[0] == "action" && args.Length > 1 && args[1] == "close")
             {
