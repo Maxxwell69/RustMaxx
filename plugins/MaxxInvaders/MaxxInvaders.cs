@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.2")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.3")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1485,6 +1485,9 @@ namespace Oxide.Plugins
                     if (!CanUse(player)) return;
                     ChatList(player);
                     break;
+                case "version":
+                    player.ChatMessage($"MaxxInvaders v{Version}");
+                    break;
                 case "spawn":
                     if (!CanAdmin(player)) return;
                     if (args.Length < 3)
@@ -2221,10 +2224,10 @@ namespace Oxide.Plugins
                 panel);
 
             var titleLine = mainTab == GuiTabInvaders
-                ? $"<size=17><b>MaxxInvaders</b></size>  Active: {list.Count}  Page {page + 1}/{totalPages}"
+                ? $"<size=17><b>MaxxInvaders</b></size> v{Version}  Active: {list.Count}  Page {page + 1}/{totalPages}"
                 : mainTab == GuiTabMaxxEdit
-                    ? "<size=17><b>MaxxInvaders</b></size>  <size=11>Edit config (saves to JSON)</size>"
-                    : "<size=17><b>RoamingNPCs</b></size>  <size=11>Bot templates (Enable bot?)</size>";
+                    ? $"<size=17><b>MaxxInvaders</b></size> v{Version}  <size=11>Edit config (saves to JSON)</size>"
+                    : $"<size=17><b>RoamingNPCs</b></size>  <size=11>Bot templates (Enable bot?)</size>   <size=10>Maxx v{Version}</size>";
 
             container.Add(
                 new CuiLabel
