@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.2")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.3")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2284,6 +2284,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public MemoryBot CustomMemory;
             [JsonIgnore] private bool isNewData = false;
             [JsonIgnore] public bool IsRespawnData = false;
+            /// <summary>Set only for MaxxInvaders/TikFinity bridge spawns — skips OnRoamingNPCSpawn so other plugins cannot return false and block viewer NPCs.</summary>
+            [JsonIgnore] public bool SpawnedFromMaxxInvadersBridge;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -3067,9 +3069,12 @@ namespace Oxide.Plugins
         }
         public CustomPet Respawn(DataBot data, bool isRespawn = false)
         {
-            // Allow addons to prevent spawning
-            object hookResult = Interface.CallHook("OnRoamingNPCSpawn", data.NameSetup, data);
-            if (hookResult is bool && !(bool)hookResult) return null;
+            // Allow addons to prevent spawning (bridge spawns skip — MaxxInvaders must not be blocked here)
+            if (!data.SpawnedFromMaxxInvadersBridge)
+            {
+                object hookResult = Interface.CallHook("OnRoamingNPCSpawn", data.NameSetup, data);
+                if (hookResult is bool && !(bool)hookResult) return null;
+            }
 
             data.IsRespawnData = isRespawn;
             Vector3 positionSpawn = data.GetSpawnPosition(this);
@@ -8444,7 +8449,10 @@ namespace Oxide.Plugins
             if (!config.bots.TryGetValue(key, out BotSetup baseSetup) || baseSetup == null || !baseSetup.Enable)
                 return null;
 
-            string safe = SanitizeBridgeDisplayName(displayName);
+            string suffix = string.IsNullOrWhiteSpace(uniqueSuffix)
+                ? $"{DateTime.UtcNow.Ticks}_{UnityEngine.Random.Range(1000, 9999)}"
+                : uniqueSuffix.Trim();
+            string safe = SanitizeBridgeDisplayName(displayName, suffix);
             if (string.IsNullOrEmpty(safe))
                 return null;
 
@@ -8465,15 +8473,21 @@ namespace Oxide.Plugins
             setup.Amount = 1;
             setup.Name = safe;
 
-            string suffix = string.IsNullOrWhiteSpace(uniqueSuffix)
-                ? $"{DateTime.UtcNow.Ticks}_{UnityEngine.Random.Range(1000, 9999)}"
-                : uniqueSuffix.Trim();
             string uniqueKey = $"{key}_{suffix}";
 
             var data = new DataBot(uniqueKey, setup);
             data.DisplayName = safe;
+            data.SpawnedFromMaxxInvadersBridge = true;
 
-            return Respawn(data);
+            try
+            {
+                return Respawn(data);
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] MaxxInvaders bridge Respawn failed: {ex}");
+                return null;
+            }
         }
 
         public object IsBridgeTemplateReady(string templateKey)
@@ -8538,7 +8552,7 @@ namespace Oxide.Plugins
 
                 sb.AppendLine();
                 sb.AppendLine("Notes: disabled bots cannot be used by the bridge.");
-                sb.AppendLine("Display names from MaxxInvaders are sanitized (max 24 chars, no angle brackets).");
+                sb.AppendLine("Display names: max 24 chars, no angle brackets; emoji-only names become Viewer_ + viewer id digits.");
             }
             catch (Exception ex)
             {
@@ -8567,15 +8581,30 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private static string SanitizeBridgeDisplayName(string raw)
+        /// <summary>Strip Rich Text / length; if nothing left (emoji-only TikTok names, etc.), use Viewer_ + id digits so spawn never dies on empty name.</summary>
+        private static string SanitizeBridgeDisplayName(string raw, string uniqueSuffixForFallback)
         {
-            if (string.IsNullOrWhiteSpace(raw))
-                return null;
-            string s = raw.Trim();
-            if (s.Length > 24)
-                s = s.Substring(0, 24);
-            s = s.Replace("<", "").Replace(">", "");
-            return string.IsNullOrEmpty(s) ? null : s;
+            string s = null;
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                s = raw.Trim();
+                if (s.Length > 24)
+                    s = s.Substring(0, 24);
+                s = s.Replace("<", "").Replace(">", "").Trim();
+            }
+
+            if (!string.IsNullOrEmpty(s))
+                return s;
+
+            var id = string.IsNullOrWhiteSpace(uniqueSuffixForFallback) ? "viewer" : uniqueSuffixForFallback.Trim();
+            var digits = new string(id.Where(char.IsDigit).ToArray());
+            if (digits.Length > 10)
+                digits = digits.Substring(digits.Length - 10);
+            if (string.IsNullOrEmpty(digits))
+                digits = ((uint)Math.Abs(id.GetHashCode())).ToString();
+            if (digits.Length > 10)
+                digits = digits.Substring(0, 10);
+            return $"Viewer_{digits}";
         }
         #endregion
     }

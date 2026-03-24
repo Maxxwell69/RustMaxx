@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.2")]
+    [Info("MaxxInvaders", "RustMaxx", "1.2.3")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -127,10 +127,10 @@ namespace Oxide.Plugins
             public bool UseRoamingNPCsWhenAvailable { get; set; } = true;
 
             /// <summary>
-            /// When false, MaxxInvaders never spawns vanilla scientists; spawn succeeds only if the RoamingNPCs bridge
-            /// returns an NPC (requires UseRoamingNPCsWhenAvailable, RoamingNPCs loaded, valid enabled template).
+            /// When false (RustMaxx default), never spawns vanilla scientists — only RoamingNPCs bridge NPCs.
+            /// Set true only if you want scientists when the bridge fails or RoamingNPCs is unloaded.
             /// </summary>
-            public bool ScientistFallbackEnabled { get; set; } = true;
+            public bool ScientistFallbackEnabled { get; set; } = false;
 
             /// <summary>Template key under RoamingNPCs config "Bots settings" when tier has no RoamingTemplateKey.</summary>
             public string DefaultRoamingTemplateKey { get; set; } = "bob_resources_farmer";
@@ -526,7 +526,7 @@ namespace Oxide.Plugins
                 {
                     case "ok":
                         return
-                            $"Template \"{templateKey}\" is enabled but spawn returned null (sanitized viewer name empty, or RoamingNPCs Respawn failed — check server console / prefab).";
+                            $"Template \"{templateKey}\" is enabled but spawn returned null (RoamingNPCs Respawn threw or returned null — check server console; bridge spawns skip OnRoamingNPCSpawn as of RoamingNPCs 0.5.3).";
                     case "missing":
                         return
                             $"No bot key \"{templateKey}\" under Bots settings in oxide/config/RoamingNPCs.json — add it or change DefaultRoamingTemplateKey / tier RoamingTemplateKey.";
