@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.2.9")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.0")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1616,6 +1616,11 @@ namespace Oxide.Plugins
                     runtime = r;
                     return true;
                 }
+                if (string.Equals(r.ViewerName, token, StringComparison.OrdinalIgnoreCase))
+                {
+                    runtime = r;
+                    return true;
+                }
                 if (string.Equals(r.NpcId, token, StringComparison.OrdinalIgnoreCase))
                 {
                     runtime = r;
@@ -1635,10 +1640,18 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            if (!TryFindInvader(viewerOrNpcId, out var r))
+            var key = viewerOrNpcId?.Trim() ?? "";
+            if (!TryFindInvader(key, out var r))
             {
-                error = "not_found (use viewerId or INV-xxxxx)";
-                return false;
+                // Convenience fallback: if exactly one NPC is active, rename that one.
+                var all = _registry.All().Where(x => x != null).ToList();
+                if (all.Count == 1)
+                    r = all[0];
+                else
+                {
+                    error = "not_found (use viewerId, viewerName, or INV-xxxxx)";
+                    return false;
+                }
             }
 
             r.ViewerName = normalized;
@@ -2326,7 +2339,7 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text = "<b>Spawn Viewer NPC</b>",
-                        FontSize = 14,
+                        FontSize = 16,
                         Align = TextAnchor.MiddleLeft,
                     },
                     RectTransform = { AnchorMin = "0.03 0.90", AnchorMax = "0.97 0.98" },
@@ -2339,7 +2352,7 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text = "Fill name + id, then click Spawn. Quick Spawn auto-generates id.",
-                        FontSize = 9,
+                        FontSize = 11,
                         Align = TextAnchor.MiddleLeft,
                         Color = "0.8 0.85 0.9 1",
                     },
@@ -2352,7 +2365,7 @@ namespace Oxide.Plugins
                 {
                     Button = { Command = "maxxinvaders.gui quickdemo", Color = "0.18 0.55 0.40 0.95" },
                     RectTransform = { AnchorMin = "0.03 0.74", AnchorMax = "0.48 0.82" },
-                    Text = { Text = "Quick Spawn", FontSize = 11 },
+                    Text = { Text = "Quick Spawn", FontSize = 13 },
                 },
                 spawnCard);
 
@@ -2361,14 +2374,14 @@ namespace Oxide.Plugins
                 {
                     Button = { Command = "maxxinvaders.gui spawnfields", Color = "0.22 0.42 0.62 0.95" },
                     RectTransform = { AnchorMin = "0.52 0.74", AnchorMax = "0.97 0.82" },
-                    Text = { Text = "Spawn From Form", FontSize = 11 },
+                    Text = { Text = "Spawn From Form", FontSize = 13 },
                 },
                 spawnCard);
 
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Viewer Name", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Viewer Name", FontSize = 12, Align = TextAnchor.LowerLeft },
                     RectTransform = { AnchorMin = "0.03 0.66", AnchorMax = "0.45 0.72" },
                 },
                 spawnCard);
@@ -2386,7 +2399,7 @@ namespace Oxide.Plugins
                             Align = TextAnchor.MiddleLeft,
                             CharsLimit = 64,
                             Command = "maxxinvaders.gui draft viewername",
-                            FontSize = 13,
+                            FontSize = 15,
                             IsPassword = false,
                             Text = draft.ViewerName ?? "DemoViewer",
                             NeedsKeyboard = true,
@@ -2398,7 +2411,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Viewer ID (unique)", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Viewer ID (unique)", FontSize = 12, Align = TextAnchor.LowerLeft },
                     RectTransform = { AnchorMin = "0.03 0.48", AnchorMax = "0.45 0.54" },
                 },
                 spawnCard);
@@ -2416,7 +2429,7 @@ namespace Oxide.Plugins
                             Align = TextAnchor.MiddleLeft,
                             CharsLimit = 48,
                             Command = "maxxinvaders.gui draft viewerid",
-                            FontSize = 13,
+                            FontSize = 15,
                             IsPassword = false,
                             Text = draft.ViewerId ?? "",
                             NeedsKeyboard = true,
@@ -2428,7 +2441,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Tier", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Tier", FontSize = 12, Align = TextAnchor.LowerLeft },
                     RectTransform = { AnchorMin = "0.03 0.30", AnchorMax = "0.14 0.36" },
                 },
                 spawnCard);
@@ -2446,7 +2459,7 @@ namespace Oxide.Plugins
                             Align = TextAnchor.MiddleLeft,
                             CharsLimit = 4,
                             Command = "maxxinvaders.gui draft tier",
-                            FontSize = 13,
+                            FontSize = 15,
                             IsPassword = false,
                             Text = draft.TierStr ?? "1",
                             NeedsKeyboard = true,
@@ -2458,7 +2471,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Mode", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Mode", FontSize = 12, Align = TextAnchor.LowerLeft },
                     RectTransform = { AnchorMin = "0.17 0.30", AnchorMax = "0.42 0.36" },
                 },
                 spawnCard);
@@ -2476,7 +2489,7 @@ namespace Oxide.Plugins
                             Align = TextAnchor.MiddleLeft,
                             CharsLimit = 24,
                             Command = "maxxinvaders.gui draft mode",
-                            FontSize = 13,
+                            FontSize = 15,
                             IsPassword = false,
                             Text = draft.Mode ?? "roaming",
                             NeedsKeyboard = true,
@@ -2488,7 +2501,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Kit (optional)", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Kit (optional)", FontSize = 12, Align = TextAnchor.LowerLeft },
                     RectTransform = { AnchorMin = "0.45 0.30", AnchorMax = "0.97 0.36" },
                 },
                 spawnCard);
@@ -2506,7 +2519,7 @@ namespace Oxide.Plugins
                             Align = TextAnchor.MiddleLeft,
                             CharsLimit = 48,
                             Command = "maxxinvaders.gui draft kit",
-                            FontSize = 13,
+                            FontSize = 15,
                             IsPassword = false,
                             Text = draft.Kit ?? "-",
                             NeedsKeyboard = true,
@@ -2520,14 +2533,14 @@ namespace Oxide.Plugins
                 {
                     Button = { Command = "maxxinvaders.gui draftreset", Color = "0.28 0.28 0.33 0.95" },
                     RectTransform = { AnchorMin = "0.03 0.08", AnchorMax = "0.42 0.16" },
-                    Text = { Text = "Reset Form", FontSize = 10 },
+                    Text = { Text = "Reset Form", FontSize = 12 },
                 },
                 spawnCard);
 
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "<b>Rename Active NPC</b>", FontSize = 14, Align = TextAnchor.MiddleLeft },
+                    Text = { Text = "<b>Rename Active NPC</b>", FontSize = 16, Align = TextAnchor.MiddleLeft },
                     RectTransform = { AnchorMin = "0.05 0.90", AnchorMax = "0.95 0.98" },
                 },
                 renameCard);
@@ -2538,7 +2551,7 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text = "Target = viewerId or INV-xxxxx (or click Use/Name on a row below)",
-                        FontSize = 9,
+                        FontSize = 11,
                         Align = TextAnchor.MiddleLeft,
                         Color = "0.8 0.85 0.9 1",
                     },
@@ -2549,7 +2562,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Target", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Target", FontSize = 12, Align = TextAnchor.LowerLeft },
                     RectTransform = { AnchorMin = "0.05 0.70", AnchorMax = "0.4 0.76" },
                 },
                 renameCard);
@@ -2567,7 +2580,7 @@ namespace Oxide.Plugins
                             Align = TextAnchor.MiddleLeft,
                             CharsLimit = 64,
                             Command = "maxxinvaders.gui draft renametarget",
-                            FontSize = 12,
+                            FontSize = 15,
                             IsPassword = false,
                             Text = draft.RenameTarget ?? "",
                             NeedsKeyboard = true,
@@ -2579,7 +2592,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "New Name", FontSize = 10, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "New Name", FontSize = 12, Align = TextAnchor.LowerLeft },
                     RectTransform = { AnchorMin = "0.05 0.46", AnchorMax = "0.4 0.52" },
                 },
                 renameCard);
@@ -2597,7 +2610,7 @@ namespace Oxide.Plugins
                             Align = TextAnchor.MiddleLeft,
                             CharsLimit = 64,
                             Command = "maxxinvaders.gui draft renamename",
-                            FontSize = 12,
+                            FontSize = 15,
                             IsPassword = false,
                             Text = draft.RenameName ?? "",
                             NeedsKeyboard = true,
@@ -2611,7 +2624,7 @@ namespace Oxide.Plugins
                 {
                     Button = { Command = "maxxinvaders.gui renameapply", Color = "0.24 0.45 0.62 0.95" },
                     RectTransform = { AnchorMin = "0.05 0.22", AnchorMax = "0.95 0.30" },
-                    Text = { Text = "Apply Rename", FontSize = 11 },
+                    Text = { Text = "Apply Rename", FontSize = 13 },
                 },
                 renameCard);
 
