@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.2")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.3")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -675,7 +675,9 @@ namespace Oxide.Plugins
             {
                 try
                 {
-                    var ro = RoamingNPCs.Call("SpawnFromTemplateForBridge", roamingTemplate, viewerName, viewerId);
+                    var anchorSteam = anchorPlayer != null ? anchorPlayer.userID : 0UL;
+                    var ro = RoamingNPCs.Call("SpawnFromTemplateForBridge", roamingTemplate, viewerName, viewerId,
+                        anchorSteam);
                     npcPlayer = ro as BasePlayer;
                     if (npcPlayer != null && !npcPlayer.IsDestroyed)
                     {

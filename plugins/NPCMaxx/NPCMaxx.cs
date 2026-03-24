@@ -48,7 +48,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            object result = roaming.Call("SpawnFromTemplateForBridge", templateKey, displayName, null);
+            object result = roaming.Call("SpawnFromTemplateForBridge", templateKey, displayName, null, 0UL);
             if (result == null)
             {
                 PrintWarning($"{LogPrefix} Spawn failed (unknown template, disabled, blocked hook, or invalid name). template={templateKey} name={displayName}");

@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.5")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.6")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -1642,6 +1642,11 @@ namespace Oxide.Plugins
             [JsonProperty(RU ? "Игнорировать других NPC?" : "Ignore other NPCs?")]
             public bool _ignoreNPCs = false;
 
+            [JsonProperty(RU
+                ? "MaxxInvaders: защищать якорного игрока (стример)? Бот не атакует его и атакует того, кто его ранил (нужен Steam ID с моста)."
+                : "MaxxInvaders: protect anchor streamer? Bot won't attack them and fights players who damage them (requires bridge anchor Steam ID).")]
+            public bool _protectBridgeAnchorPlayer = false;
+
             [JsonIgnore] public float RadiusWeaponAttacked => Mathf.Max(5, _radiusWeaponAttacked);
             [JsonIgnore] public float RadiusMeleeAttacked => Mathf.Max(2, _radiusMeleeAttacked);
         }
@@ -2286,6 +2291,11 @@ namespace Oxide.Plugins
             [JsonIgnore] public bool IsRespawnData = false;
             /// <summary>Set only for MaxxInvaders/TikFinity bridge spawns — skips OnRoamingNPCSpawn so other plugins cannot return false and block viewer NPCs.</summary>
             [JsonIgnore] public bool SpawnedFromMaxxInvadersBridge;
+            /// <summary>Steam ID of the in-game anchor to protect when BattleState._protectBridgeAnchorPlayer is true (MaxxInvaders bridge).</summary>
+            [JsonIgnore] public ulong BridgeProtectAnchorUserId;
+            /// <summary>Player to pursue after they damaged the protected anchor.</summary>
+            [JsonIgnore] public ulong BridgeRetaliationTargetUserId;
+            [JsonIgnore] public float BridgeRetaliationExpireTime;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -2897,6 +2907,34 @@ namespace Oxide.Plugins
 #endif
                 }
                 else info.damageTypes.ScaleAll(0);
+            }
+
+            TryAssignBridgeProtectorRetaliation(target, info);
+        }
+
+        /// <summary>When a MaxxInvaders anchor (streamer) takes damage from a real player, bodyguard bots retaliate.</summary>
+        private void TryAssignBridgeProtectorRetaliation(BaseCombatEntity target, HitInfo info)
+        {
+            if (target is not BasePlayer victim || !victim.userID.IsSteamId() || victim.IsNpc)
+                return;
+            if (info?.InitiatorPlayer is not BasePlayer attacker || attacker == null || attacker == victim ||
+                !attacker.userID.IsSteamId() || attacker.IsNpc)
+                return;
+            if (listNpcPlayers == null || listNpcPlayers.Count == 0)
+                return;
+
+            foreach (var pet in listNpcPlayers.Values)
+            {
+                if (pet == null || pet.IsDestroyed || pet.Data?.Setup?.BattleState == null)
+                    continue;
+                if (!pet.Data.Setup.BattleState._protectBridgeAnchorPlayer)
+                    continue;
+                if (pet.Data.BridgeProtectAnchorUserId == 0UL ||
+                    pet.Data.BridgeProtectAnchorUserId != victim.userID)
+                    continue;
+
+                pet.Data.BridgeRetaliationTargetUserId = attacker.userID;
+                pet.Data.BridgeRetaliationExpireTime = Time.realtimeSinceStartup + 120f;
             }
         }
         private void OnCollectiblePickedup(CollectibleEntity collectible, CustomPet customPet, Item item)
@@ -6734,7 +6772,15 @@ namespace Oxide.Plugins
 
                 if (IsValid() && !owner.InSafeZone())
                 {
-                    target = brain.GetNearestEntity<BasePlayer>(CheckTarget);
+                    if (owner.Data != null && IsBridgeRetaliationActive() && owner.Data.BridgeRetaliationTargetUserId != 0UL)
+                    {
+                        var retal = BasePlayer.FindByID(owner.Data.BridgeRetaliationTargetUserId);
+                        if (retal != null && CheckTarget(retal))
+                            target = retal;
+                    }
+
+                    if (target == null)
+                        target = brain.GetNearestEntity<BasePlayer>(CheckTarget);
 
                     if (target != null) lastSeenTarget = 0f;
                 }
@@ -6747,6 +6793,9 @@ namespace Oxide.Plugins
                     }
                 }
 
+                if (owner.Data != null && !IsBridgeRetaliationActive())
+                    owner.Data.BridgeRetaliationTargetUserId = 0UL;
+
                 if (target != null && owner.Distance(target) > 150f)
                 {
                     RemoveTarget(target, true);
@@ -6757,9 +6806,31 @@ namespace Oxide.Plugins
 
                 return target != null;
             }
+
+            private bool IsBridgeRetaliationActive()
+            {
+                return owner?.Data != null && Time.realtimeSinceStartup < owner.Data.BridgeRetaliationExpireTime;
+            }
+
             private bool CheckTarget(BasePlayer player)
             {
-                return player != null && player?.IsAlive() == true && !player.InSafeZone() && (owner.IsVisible(player, layerVisible) || player.IsVisible(owner, layerVisible)) && (IsAggressiveToOwner(player) || owner.GetPersonality() == PersonalityBot.Aggressive) && ((owner?.Data?.Setup?.BattleState._ignoreSleepingPlayers ?? false) ? !player.IsSleeping() : true);
+                if (owner?.Data == null)
+                    return false;
+                if (player == null || player.IsAlive() != true || player.InSafeZone())
+                    return false;
+                if (!(owner.IsVisible(player, layerVisible) || player.IsVisible(owner, layerVisible)))
+                    return false;
+                if ((owner?.Data?.Setup?.BattleState._ignoreSleepingPlayers ?? false) && player.IsSleeping())
+                    return false;
+
+                if (owner.Data.BridgeProtectAnchorUserId != 0UL &&
+                    player.userID == owner.Data.BridgeProtectAnchorUserId)
+                    return false;
+
+                if (IsBridgeRetaliationActive() && player.userID == owner.Data.BridgeRetaliationTargetUserId)
+                    return true;
+
+                return IsAggressiveToOwner(player) || owner.GetPersonality() == PersonalityBot.Aggressive;
             }
             protected override bool IsAggressiveToOwner(BaseCombatEntity entity)
             {
@@ -6779,7 +6850,9 @@ namespace Oxide.Plugins
 
                     if (Target?.IsValid() == true)
                     {
-                        if (owner.GetPersonality() == PersonalityBot.Friendly)
+                        var retaliate = owner.Data != null && IsBridgeRetaliationActive() &&
+                                        Target.userID == owner.Data.BridgeRetaliationTargetUserId;
+                        if (owner.GetPersonality() == PersonalityBot.Friendly && !retaliate)
                         {
                             yield return RunAwayCoroutine();
                         }
@@ -8474,7 +8547,8 @@ namespace Oxide.Plugins
         }
 
         [HookMethod("SpawnFromTemplateForBridge")]
-        public object SpawnFromTemplateForBridge(string templateKey, string displayName, string uniqueSuffix)
+        public object SpawnFromTemplateForBridge(string templateKey, string displayName, string uniqueSuffix,
+            ulong anchorSteamIdToProtect = 0)
         {
             if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
                 return null;
@@ -8511,6 +8585,8 @@ namespace Oxide.Plugins
             var data = new DataBot(uniqueKey, setup);
             data.DisplayName = safe;
             data.SpawnedFromMaxxInvadersBridge = true;
+            if (anchorSteamIdToProtect != 0UL && setup.BattleState._protectBridgeAnchorPlayer)
+                data.BridgeProtectAnchorUserId = anchorSteamIdToProtect;
 
             try
             {
