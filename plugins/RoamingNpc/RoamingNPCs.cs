@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.4")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.5")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8441,13 +8441,45 @@ namespace Oxide.Plugins
         #endregion
 
         #region MaxxInvadersBridgeApi
+        private static readonly JsonSerializerSettings BridgeBoolJsonSettings = new JsonSerializerSettings
+        {
+            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        };
+
+        /// <summary>Resolve dictionary key (case-sensitive storage; GUI may pass different casing).</summary>
+        private bool TryResolveBotConfigKey(string templateKey, out string canonicalKey, out BotSetup setup)
+        {
+            canonicalKey = null;
+            setup = null;
+            if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
+                return false;
+            var key = templateKey.Trim();
+            if (config.bots.TryGetValue(key, out setup) && setup != null)
+            {
+                canonicalKey = key;
+                return true;
+            }
+
+            foreach (var kv in config.bots)
+            {
+                if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase) && kv.Value != null)
+                {
+                    canonicalKey = kv.Key;
+                    setup = kv.Value;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         [HookMethod("SpawnFromTemplateForBridge")]
         public object SpawnFromTemplateForBridge(string templateKey, string displayName, string uniqueSuffix)
         {
             if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
                 return null;
-            string key = templateKey.Trim();
-            if (!config.bots.TryGetValue(key, out BotSetup baseSetup) || baseSetup == null || !baseSetup.Enable)
+            if (!TryResolveBotConfigKey(templateKey, out string key, out BotSetup baseSetup) || baseSetup == null ||
+                !baseSetup.Enable)
                 return null;
 
             string suffix = string.IsNullOrWhiteSpace(uniqueSuffix)
@@ -8498,8 +8530,7 @@ namespace Oxide.Plugins
             {
                 if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
                     return "no_config";
-                var key = templateKey.Trim();
-                if (!config.bots.TryGetValue(key, out BotSetup baseSetup) || baseSetup == null)
+                if (!TryResolveBotConfigKey(templateKey, out _, out BotSetup baseSetup) || baseSetup == null)
                     return "missing";
                 if (!baseSetup.Enable)
                     return "disabled";
@@ -8578,8 +8609,7 @@ namespace Oxide.Plugins
         {
             if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
                 return false;
-            var key = templateKey.Trim();
-            if (!config.bots.TryGetValue(key, out var s) || s == null)
+            if (!TryResolveBotConfigKey(templateKey, out _, out var s) || s == null)
                 return false;
             s.Enable = !s.Enable;
             SaveConfig();
@@ -8600,7 +8630,7 @@ namespace Oxide.Plugins
             try
             {
                 var list = GetBridgeBoolListInternal(templateKey);
-                return list == null ? "[]" : JsonConvert.SerializeObject(list);
+                return list == null ? "[]" : JsonConvert.SerializeObject(list, BridgeBoolJsonSettings);
             }
             catch (Exception ex)
             {
@@ -8633,7 +8663,7 @@ namespace Oxide.Plugins
             {
                 if (string.IsNullOrWhiteSpace(templateKey) || string.IsNullOrWhiteSpace(path) || config?.bots == null)
                     return false;
-                if (!config.bots.TryGetValue(templateKey.Trim(), out var root) || root == null)
+                if (!TryResolveBotConfigKey(templateKey, out _, out var root) || root == null)
                     return false;
                 var parts = path.Split('.');
                 if (parts.Length == 0)
@@ -8668,8 +8698,7 @@ namespace Oxide.Plugins
         {
             if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
                 return null;
-            var key = templateKey.Trim();
-            if (!config.bots.TryGetValue(key, out var setup) || setup == null)
+            if (!TryResolveBotConfigKey(templateKey, out _, out var setup) || setup == null)
                 return null;
             var list = new List<BridgeBoolEntry>();
             CollectBridgeBoolFields(setup, "", list, 0);

@@ -8,6 +8,8 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
@@ -19,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.1")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.2")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2384,10 +2386,10 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 panel,
-                "<size=17><color=#d62828>ROAMING NPCs</color></size>\n<size=10><color=#8899aa>Pick a bot key → toggle every bool in RoamingNPCs.json for that template (scroll).</color></size>",
+                "<size=18><color=#d62828>ROAMING NPCs</color></size>\n<size=12><color=#8899aa>Pick a bot key → toggle every bool in RoamingNPCs.json for that template (scroll).</color></size>",
                 "0.02 0.88",
                 "0.98 0.99",
-                11,
+                12,
                 TextAnchor.UpperLeft,
                 "0.95 0.97 1 1");
 
@@ -2400,7 +2402,7 @@ namespace Oxide.Plugins
                         {
                             Text =
                                 "RoamingNPCs is not loaded. Copy RoamingNPCs.cs from the repo into oxide/plugins and run: oxide.reload RoamingNPCs",
-                            FontSize = 9,
+                            FontSize = 12,
                             Align = TextAnchor.MiddleLeft,
                         },
                         RectTransform = { AnchorMin = "0.03 0.04", AnchorMax = "0.97 0.85" },
@@ -2428,7 +2430,7 @@ namespace Oxide.Plugins
                         {
                             Text =
                                 "Bridge API missing on this RoamingNPCs build. Replace oxide/plugins/RoamingNPCs.cs with the latest from RustMaxx repo, then oxide.reload RoamingNPCs.",
-                            FontSize = 8,
+                            FontSize = 11,
                             Align = TextAnchor.UpperLeft,
                         },
                         RectTransform = { AnchorMin = "0.03 0.04", AnchorMax = "0.97 0.85" },
@@ -2447,7 +2449,7 @@ namespace Oxide.Plugins
                         {
                             Text =
                                 "Bots settings has no keys. Add bot templates under Bots in oxide/config/RoamingNPCs.json, or delete the config and reload to regenerate defaults.",
-                            FontSize = 8,
+                            FontSize = 11,
                             Align = TextAnchor.UpperLeft,
                         },
                         RectTransform = { AnchorMin = "0.03 0.04", AnchorMax = "0.97 0.85" },
@@ -2463,7 +2465,7 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiLabel
                     {
-                        Text = { Text = "No bot templates in RoamingNPCs.json (Bots settings).", FontSize = 9 },
+                        Text = { Text = "No bot templates in RoamingNPCs.json (Bots settings).", FontSize = 12 },
                         RectTransform = { AnchorMin = "0.03 0.04", AnchorMax = "0.97 0.85" },
                     },
                     panel);
@@ -2490,14 +2492,14 @@ namespace Oxide.Plugins
                 $"Editing: {StripCuiMarkup(sel)}  —  all bool fields (nested) for this bot",
                 "0.02 0.805",
                 "0.98 0.845",
-                11,
+                12,
                 TextAnchor.MiddleLeft,
                 "0.85 0.92 1 1");
 
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = $"Keys {page + 1}/{totalPages}  ({keys.Count} total)", FontSize = 9, Color = "0.85 0.88 0.92 1" },
+                    Text = { Text = $"Keys {page + 1}/{totalPages}  ({keys.Count} total)", FontSize = 11, Color = "0.85 0.88 0.92 1" },
                     RectTransform = { AnchorMin = "0.02 0.755", AnchorMax = "0.5 0.795" },
                 },
                 panel);
@@ -2524,22 +2526,22 @@ namespace Oxide.Plugins
                     "Next",
                     "0.61 0.755",
                     "0.74 0.795",
-                    9,
+                    11,
                     TextAnchor.MiddleCenter,
                     "0.95 0.97 1 1");
 
-            var rowH = 0.034f;
+            var rowH = 0.038f;
             var ry = 0.718f;
             foreach (var key in slice)
             {
                 var st = "?";
                 try
                 {
-                    var ready = RoamingNPCs.Call("IsBridgeTemplateReady", key) as string;
+                    var ready = NormalizeBridgeCallResult(RoamingNPCs.Call("IsBridgeTemplateReady", key));
                     if (ready == "ok") st = "ok";
                     else if (ready == "disabled") st = "off";
                     else if (ready == "missing") st = "no cfg";
-                    else st = ready ?? "?";
+                    else st = string.IsNullOrEmpty(ready) ? "?" : ready;
                 }
                 catch
                 {
@@ -2548,23 +2550,23 @@ namespace Oxide.Plugins
 
                 var yb = ry - rowH;
                 var isSel = string.Equals(key, sel, StringComparison.OrdinalIgnoreCase);
-                var keyDisp = TruncateGui(key, 22);
+                var keyDisp = TruncateGui(key, 20);
                 AddCuiText(
                     container,
                     panel,
                     (isSel ? "► " : "") + keyDisp,
                     $"0.03 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
-                    $"0.38 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
-                    8,
+                    $"0.36 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
+                    11,
                     TextAnchor.MiddleLeft,
                     isSel ? "0.4 0.85 1 1" : "0.9 0.92 1 1");
                 AddCuiText(
                     container,
                     panel,
                     st,
-                    $"0.39 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
+                    $"0.37 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
                     $"0.50 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
-                    7,
+                    11,
                     TextAnchor.MiddleCenter,
                     "0.65 0.75 0.9 1");
                 AddCuiButtonWithText(
@@ -2575,7 +2577,7 @@ namespace Oxide.Plugins
                     "Select",
                     $"0.51 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
                     $"0.62 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
-                    8);
+                    11);
                 AddCuiButtonWithText(
                     container,
                     panel,
@@ -2584,7 +2586,7 @@ namespace Oxide.Plugins
                     "Enable",
                     $"0.63 {yb.ToString("F4", CultureInfo.InvariantCulture)}",
                     $"0.97 {ry.ToString("F4", CultureInfo.InvariantCulture)}",
-                    8);
+                    11);
                 ry = yb - 0.004f;
             }
 
@@ -2603,7 +2605,7 @@ namespace Oxide.Plugins
                 "Boolean options (oxide/config/RoamingNPCs.json) — click ON/OFF",
                 "0.02 0.88",
                 "0.98 0.98",
-                10,
+                12,
                 TextAnchor.MiddleLeft,
                 "0.75 0.82 0.95 1");
 
@@ -2649,6 +2651,70 @@ namespace Oxide.Plugins
             public bool Value;
         }
 
+        /// <summary>
+        /// uMod Call may not return string; JSON may be PascalCase or camelCase. Parse defensively.
+        /// </summary>
+        private static List<BridgeBoolRow> TryParseBridgeBoolJson(object raw)
+        {
+            var json = raw?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(json) || json == "[]")
+                return null;
+
+            try
+            {
+                var a = JArray.Parse(json);
+                var list = new List<BridgeBoolRow>();
+                foreach (var tok in a)
+                {
+                    if (tok is not JObject o) continue;
+                    var path = (string)o["Path"] ?? (string)o["path"];
+                    if (string.IsNullOrEmpty(path)) continue;
+                    var valTok = o["Value"] ?? o["value"];
+                    var val = valTok != null && valTok.Type != JTokenType.Null && valTok.Value<bool>();
+                    list.Add(new BridgeBoolRow
+                    {
+                        Path = path,
+                        Label = (string)o["Label"] ?? (string)o["label"] ?? path,
+                        Value = val,
+                    });
+                }
+
+                if (list.Count > 0)
+                    return list;
+            }
+            catch
+            {
+                /* try class deserialize */
+            }
+
+            try
+            {
+                var list = JsonConvert.DeserializeObject<List<BridgeBoolRow>>(json);
+                if (list != null && list.Count > 0)
+                    return list;
+            }
+            catch
+            {
+                /* next */
+            }
+
+            try
+            {
+                var list = JsonConvert.DeserializeObject<List<BridgeBoolRow>>(json, new JsonSerializerSettings
+                {
+                    ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                });
+                if (list != null && list.Count > 0)
+                    return list;
+            }
+            catch
+            {
+                /* give up */
+            }
+
+            return null;
+        }
+
         private static string TruncateGui(string s, int max)
         {
             if (string.IsNullOrEmpty(s)) return "";
@@ -2658,19 +2724,20 @@ namespace Oxide.Plugins
 
         private void AddRoamingBoolScrollList(CuiElementContainer container, string scrollHostParent, string botKey)
         {
-            const int rowH = 32;
+            const int rowH = 38;
             List<BridgeBoolRow> rows = null;
-            if (RoamingNPCs != null && RoamingNPCs.IsLoaded && !string.IsNullOrEmpty(botKey))
+            var apiMissing = RoamingNPCs == null || !RoamingNPCs.IsLoaded;
+            object rawJson = null;
+            if (!apiMissing && !string.IsNullOrEmpty(botKey))
             {
                 try
                 {
-                    var json = RoamingNPCs.Call("GetBridgeBotBoolTogglesJson", botKey) as string;
-                    if (!string.IsNullOrEmpty(json) && json != "[]")
-                        rows = JsonConvert.DeserializeObject<List<BridgeBoolRow>>(json);
+                    rawJson = RoamingNPCs.Call("GetBridgeBotBoolTogglesJson", botKey);
+                    rows = TryParseBridgeBoolJson(rawJson);
                 }
                 catch
                 {
-                    /* ignored */
+                    rows = null;
                 }
             }
 
@@ -2718,15 +2785,30 @@ namespace Oxide.Plugins
 
             if (n == 0)
             {
+                string msg;
+                if (string.IsNullOrEmpty(botKey))
+                    msg =
+                        "Select a bot key above (Select), then scroll here. Each row toggles one bool in RoamingNPCs.json.";
+                else if (apiMissing)
+                    msg =
+                        "RoamingNPCs plugin not loaded. Add RoamingNPCs.cs to oxide/plugins and: oxide.reload RoamingNPCs";
+                else if (rawJson == null)
+                    msg =
+                        "Bridge API missing: server needs RustMaxx RoamingNPCs.cs (GetBridgeBotBoolTogglesJson). Copy plugins/RoamingNpc/RoamingNPCs.cs from the repo → oxide/plugins → oxide.reload RoamingNPCs";
+                else if (string.IsNullOrWhiteSpace(rawJson.ToString()) || rawJson.ToString().Trim() == "[]")
+                    msg =
+                        "No bool data for this key (bot missing in config?) or plugin not updated. Reload RoamingNPCs after copying the latest RustMaxx RoamingNPCs.cs.";
+                else
+                    msg =
+                        "Could not read bool list (JSON). Reload MaxxInvaders + RoamingNPCs from the RustMaxx repo.";
+
                 AddCuiText(
                     container,
                     scrollerName,
-                    string.IsNullOrEmpty(botKey)
-                        ? "Select a bot key above, then scroll here to toggle every boolean in RoamingNPCs.json for that bot."
-                        : "No bool fields found (update RoamingNPCs to latest RustMaxx build).",
-                    "0.04 0.35",
+                    msg,
+                    "0.04 0.28",
                     "0.96 0.88",
-                    11,
+                    12,
                     TextAnchor.MiddleCenter,
                     "0.75 0.8 0.9 1");
                 return;
@@ -2762,14 +2844,14 @@ namespace Oxide.Plugins
                         },
                     });
 
-                var lbl = TruncateGui(row.Label ?? row.Path ?? "?", 52);
+                var lbl = TruncateGui(row.Label ?? row.Path ?? "?", 48);
                 AddCuiText(
                     container,
                     rowName,
                     lbl,
                     "0.02 0.12",
-                    "0.72 0.88",
-                    9,
+                    "0.70 0.88",
+                    11,
                     TextAnchor.MiddleLeft,
                     "0.92 0.95 1 1");
                 var on = row.Value;
@@ -2780,9 +2862,9 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui roambooltoggle {i}",
                     btnCol,
                     on ? "ON" : "OFF",
-                    "0.74 0.12",
+                    "0.72 0.12",
                     "0.98 0.88",
-                    9);
+                    11);
             }
         }
 
