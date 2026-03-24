@@ -14,6 +14,7 @@
   "DespawnOnUnload": true,
   "PersistIntervalSeconds": 60.0,
   "UseRoamingNPCsWhenAvailable": true,
+  "ScientistFallbackEnabled": true,
   "DefaultRoamingTemplateKey": "bob_resources_farmer",
   "DefaultScientistPrefab": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
   "ScientistPrefabFallbacks": [

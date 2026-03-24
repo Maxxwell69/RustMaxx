@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.1.3")]
+    [Info("MaxxInvaders", "RustMaxx", "1.1.4")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -119,9 +119,16 @@ namespace Oxide.Plugins
 
             /// <summary>
             /// When true and RoamingNPCs is loaded, spawns use that plugin’s bot templates (full gather/hunt/roam AI).
-            /// Falls back to vanilla scientists if the bridge fails or RoamingNPCs is missing.
+            /// Falls back to vanilla scientists if the bridge fails or RoamingNPCs is missing — unless
+            /// <see cref="ScientistFallbackEnabled"/> is false.
             /// </summary>
             public bool UseRoamingNPCsWhenAvailable { get; set; } = true;
+
+            /// <summary>
+            /// When false, MaxxInvaders never spawns vanilla scientists; spawn succeeds only if the RoamingNPCs bridge
+            /// returns an NPC (requires UseRoamingNPCsWhenAvailable, RoamingNPCs loaded, valid enabled template).
+            /// </summary>
+            public bool ScientistFallbackEnabled { get; set; } = true;
 
             /// <summary>Template key under RoamingNPCs config "Bots settings" when tier has no RoamingTemplateKey.</summary>
             public string DefaultRoamingTemplateKey { get; set; } = "bob_resources_farmer";
@@ -532,7 +539,8 @@ namespace Oxide.Plugins
                     break;
             }
 
-            return $"Roaming bridge: ON  |  Default template: {key}\n{detail}\n" +
+            var fb = _cfg.ScientistFallbackEnabled ? "scientist fallback ON" : "scientist fallback OFF (roaming only)";
+            return $"Roaming bridge: ON  |  Default template: {key}  |  {fb}\n{detail}\n" +
                    "Per-tier RoamingTemplateKey in MaxxInvaders.json overrides the default for that tier.";
         }
 
@@ -562,7 +570,7 @@ namespace Oxide.Plugins
             sb.AppendLine(
                 $"      behaviorTick={c.BehaviorTickSeconds:F1}s  despawnUnload={c.DespawnOnUnload}  persist={c.PersistIntervalSeconds:F0}s");
             sb.AppendLine(
-                $"Bridge: UseRoamingNPCsWhenAvailable={c.UseRoamingNPCsWhenAvailable}  DefaultRoamingTemplateKey={c.DefaultRoamingTemplateKey ?? ""}");
+                $"Bridge: UseRoamingNPCsWhenAvailable={c.UseRoamingNPCsWhenAvailable}  ScientistFallbackEnabled={c.ScientistFallbackEnabled}  DefaultRoamingTemplateKey={c.DefaultRoamingTemplateKey ?? ""}");
             sb.AppendLine($"Scientist prefab: {Trunc(c.DefaultScientistPrefab, 68)}");
             if (c.ScientistPrefabFallbacks != null && c.ScientistPrefabFallbacks.Count > 0)
             {
@@ -730,6 +738,19 @@ namespace Oxide.Plugins
 
             if (npcPlayer == null)
             {
+                if (!_cfg.ScientistFallbackEnabled)
+                {
+                    if (!_cfg.UseRoamingNPCsWhenAvailable)
+                        PrintWarning(
+                            $"{LogPrefix} No spawn: ScientistFallbackEnabled=false and UseRoamingNPCsWhenAvailable=false (invalid config).");
+                    else if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+                        PrintWarning($"{LogPrefix} No spawn: ScientistFallbackEnabled=false but RoamingNPCs is not loaded.");
+                    else
+                        PrintWarning(
+                            $"{LogPrefix} No spawn: ScientistFallbackEnabled=false and RoamingNPCs bridge failed (template={roamingTemplate}, check bot key + Enable bot?).");
+                    return SpawnResult.Fail("roaming_only_failed");
+                }
+
                 var prefab = ResolvePrefab(mode);
                 if (!TryCreateScientistNpc(prefab, pos, out var scientist, out var ent))
                 {

@@ -9,6 +9,7 @@ Viewer-linked NPCs for TikFinity / RustMaxx relay events. **1.1.0+** can spawn *
 3. MaxxInvaders calls `SpawnFromTemplateForBridge(templateKey, displayName, viewerId)`, then **teleports** the spawned NPC to the same validated spawn position it uses for scientists. RoamingNPCs owns movement and AI after that; MaxxInvaders only tracks lifecycle, GUI, and hooks.
 4. **Kits** are **not** applied to roaming spawns (the template outfits the bot). Kits still apply to scientist fallback spawns.
 5. Set **`UseRoamingNPCsWhenAvailable`** to `false` if you only want vanilla scientists.
+6. Set **`ScientistFallbackEnabled`** to **`false`** if you **never** want scientists — spawns only succeed when the RoamingNPCs bridge returns a bot (otherwise you get error `roaming_only_failed`). Keep **`UseRoamingNPCsWhenAvailable`** `true` and RoamingNPCs loaded with valid templates.
 
 ## Ideas borrowed from RoamingNPCs (when using scientist fallback)
 
@@ -97,6 +98,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.1.4:** Config **`ScientistFallbackEnabled`** (default `true`). Set to `false` to **disable vanilla scientist spawns** and require a successful RoamingNPCs bridge only.
 - **1.1.3:** Stronger **NavMesh** snapping for spawns, roaming teleports, and scientist destinations to reduce “Failed to create agent…” console spam.
 - **1.1.2:** Admin **GUI** has **Invaders** vs **Setup** tabs. **Setup** shows a read-only summary of **MaxxInvaders** config (caps, spawn rules, bridge, tiers, prefabs, logging) and **RoamingNPCs** config (bot keys + enabled flags, live count). RoamingNPCs adds **`GetMaxxInvadersGuiSummary`** for the right column.
 - **1.1.1:** Admin **GUI** shows live RoamingNPCs bridge status (plugin loaded, default template key OK / missing / disabled) and lists each invader as **RoamingNPCs** vs **Scientist**. RoamingNPCs exposes **`IsBridgeTemplateReady`** for the check.
