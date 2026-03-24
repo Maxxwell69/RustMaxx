@@ -61,6 +61,10 @@ Interface.Call("RemoveInvader", viewerId);
 
 In the **GUI**, use tabs **Invaders** (spawn + list + short bridge status) and **Setup** (full **MaxxInvaders** + **RoamingNPCs** config reference — read-only; edit `oxide/config/*.json` and reload). Use **Quick: spawn 1 demo NPC** for an instant test, or fill **viewer name**, **viewer id** (unique), **tier**, **mode**, **kit**, then **Spawn using fields below**. After editing a field, press **Enter** or click outside so Rust sends the value. **Reset form** gives a new random demo id.
 
+## “Failed to create agent because it is not close enough to the NavMesh”
+
+Spawns must land on **walkable NavMesh**. MaxxInvaders **1.1.3+** expands NavMesh sampling (up to ~28 m) for spawn points, scientist **Spawn()**, RoamingNPCs **Teleport**, and scientist steering targets. If this still spams the console, try **smaller** `DefaultSpawnRadius`, **more** `SpawnAttempts`, or test in open terrain away from cliffs, quarry edges, or monument gaps. **RoamingNPCs** bots use their own spawn logic first; we only snap positions after **Teleport**.
+
 ## “Couldn’t find prefab … scientistnpc_roam”
 
 Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/humannpc/scientist/`. The old path `assets/prefabs/npc/scientist/scientistnpc_roam.prefab` often **does not exist** on current builds.
@@ -93,6 +97,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.1.3:** Stronger **NavMesh** snapping for spawns, roaming teleports, and scientist destinations to reduce “Failed to create agent…” console spam.
 - **1.1.2:** Admin **GUI** has **Invaders** vs **Setup** tabs. **Setup** shows a read-only summary of **MaxxInvaders** config (caps, spawn rules, bridge, tiers, prefabs, logging) and **RoamingNPCs** config (bot keys + enabled flags, live count). RoamingNPCs adds **`GetMaxxInvadersGuiSummary`** for the right column.
 - **1.1.1:** Admin **GUI** shows live RoamingNPCs bridge status (plugin loaded, default template key OK / missing / disabled) and lists each invader as **RoamingNPCs** vs **Scientist**. RoamingNPCs exposes **`IsBridgeTemplateReady`** for the check.
 - **1.1.0:** Optional **RoamingNPCs** bridge (`UseRoamingNPCsWhenAvailable`, `DefaultRoamingTemplateKey`, per-tier `RoamingTemplateKey`). Viewer bots use full roaming AI when the bridge succeeds.

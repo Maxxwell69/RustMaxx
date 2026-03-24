@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.1.2")]
+    [Info("MaxxInvaders", "RustMaxx", "1.1.3")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -685,9 +685,14 @@ namespace Oxide.Plugins
                     if (npcPlayer != null && !npcPlayer.IsDestroyed)
                     {
                         isRoaming = true;
+                        var teleportPos = pos;
+                        if (ResolveNavMeshPosition(pos, out var snapped))
+                            teleportPos = snapped;
                         try
                         {
-                            npcPlayer.Teleport(pos);
+                            npcPlayer.Teleport(teleportPos);
+                            if (ResolveNavMeshPosition(npcPlayer.transform.position, out var after))
+                                npcPlayer.Teleport(after);
                         }
                         catch
                         {
@@ -695,12 +700,15 @@ namespace Oxide.Plugins
                         }
 
                         var captured = npcPlayer;
+                        var capPos = teleportPos;
                         timer.Once(0.2f, () =>
                         {
                             try
                             {
-                                if (captured != null && !captured.IsDestroyed)
-                                    captured.Teleport(pos);
+                                if (captured == null || captured.IsDestroyed) return;
+                                captured.Teleport(capPos);
+                                if (ResolveNavMeshPosition(captured.transform.position, out var after2))
+                                    captured.Teleport(after2);
                             }
                             catch
                             {
@@ -733,6 +741,8 @@ namespace Oxide.Plugins
 
                 scientist.enableSaving = false;
                 scientist.displayName = $"[Invader] {viewerName}";
+                if (ResolveNavMeshPosition(scientist.transform.position, out var sciSnap))
+                    scientist.transform.position = sciSnap;
                 scientist.Spawn();
 
                 var hpSci = tierDef.Health > 0 ? tierDef.Health : 100f;
@@ -831,6 +841,28 @@ namespace Oxide.Plugins
             _data.History.RemoveRange(0, _data.History.Count - max);
         }
 
+        /// <summary>
+        /// Snaps a world position onto walkable NavMesh. Terrain height alone is often a few meters off the mesh,
+        /// which triggers "Failed to create agent because it is not close enough to the NavMesh" on NPC spawn.
+        /// </summary>
+        private static readonly float[] NavMeshResolveRadii = { 4f, 8f, 12f, 16f, 22f, 28f };
+
+        private static bool ResolveNavMeshPosition(Vector3 approximate, out Vector3 onMesh, float maxSearch = 28f)
+        {
+            onMesh = approximate;
+            foreach (var r in NavMeshResolveRadii)
+            {
+                if (r > maxSearch) break;
+                if (NavMesh.SamplePosition(approximate, out var hit, r, NavMesh.AllAreas))
+                {
+                    onMesh = hit.position;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private bool TryFindSpawnPosition(BasePlayer anchorPlayer, out Vector3 pos)
         {
             pos = default;
@@ -849,8 +881,7 @@ namespace Oxide.Plugins
                 if (_cfg.BlockSpawnInMonuments && InMonumentArea(tryPos)) continue;
                 if (_cfg.BlockSpawnInSafeZones && InSafeZone(tryPos)) continue;
                 if (WaterLevel.Test(tryPos, true, true)) continue;
-                if (!NavMesh.SamplePosition(tryPos, out var hit, 4f, NavMesh.AllAreas)) continue;
-                tryPos = hit.position;
+                if (!ResolveNavMeshPosition(tryPos, out tryPos)) continue;
 
                 if (TooCloseToPlayers(tryPos, _cfg.MinimumDistanceFromPlayers)) continue;
 
@@ -1017,8 +1048,8 @@ namespace Oxide.Plugins
             away.Normalize();
             var target = o + away * fleeDistance;
             target.y = TerrainMeta.HeightMap.GetHeight(target);
-            if (NavMesh.SamplePosition(target, out var hit, 6f, NavMesh.AllAreas))
-                target = hit.position;
+            if (ResolveNavMeshPosition(target, out var onMesh))
+                target = onMesh;
             TrySetDestination(npc, target);
         }
 
@@ -1028,6 +1059,8 @@ namespace Oxide.Plugins
             var origin = npc.transform.position;
             var target = origin + Random.insideUnitSphere.Flatten() * radius;
             target.y = TerrainMeta.HeightMap.GetHeight(target);
+            if (ResolveNavMeshPosition(target, out var onMesh))
+                target = onMesh;
             TrySetDestination(npc, target);
         }
 
@@ -1047,7 +1080,12 @@ namespace Oxide.Plugins
                 }
             }
             if (best != null)
-                TrySetDestination(npc, best.transform.position);
+            {
+                var dest = best.transform.position;
+                if (ResolveNavMeshPosition(dest, out var onMesh))
+                    dest = onMesh;
+                TrySetDestination(npc, dest);
+            }
         }
 
         private void SteerTowardNearestAdmin(ScientistNPC npc, float range)
@@ -1067,7 +1105,12 @@ namespace Oxide.Plugins
                 }
             }
             if (best != null)
-                TrySetDestination(npc, best.transform.position);
+            {
+                var dest = best.transform.position;
+                if (ResolveNavMeshPosition(dest, out var onMesh))
+                    dest = onMesh;
+                TrySetDestination(npc, dest);
+            }
         }
 
         private static void TrySetDestination(ScientistNPC npc, Vector3 worldPos)
@@ -1075,8 +1118,10 @@ namespace Oxide.Plugins
             try
             {
                 var agent = npc.GetComponent<NavMeshAgent>();
-                if (agent != null && agent.isOnNavMesh)
-                    agent.SetDestination(worldPos);
+                if (agent == null || !agent.isOnNavMesh) return;
+                if (!ResolveNavMeshPosition(worldPos, out var dest))
+                    return;
+                agent.SetDestination(dest);
             }
             catch
             {
