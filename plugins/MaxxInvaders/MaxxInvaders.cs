@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.8")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.9")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1861,6 +1861,43 @@ namespace Oxide.Plugins
             ((List<CuiElement>)container).Add(element);
         }
 
+        /// <summary>Rust CUI: CuiTextComponent tends to render more reliably than CuiLabel inside nested panels.</summary>
+        private static string StripCuiMarkup(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("<", "(").Replace(">", ")");
+        }
+
+        private static void AddCuiText(
+            CuiElementContainer container,
+            string parent,
+            string text,
+            string anchorMin,
+            string anchorMax,
+            int fontSize = 14,
+            TextAnchor align = TextAnchor.MiddleLeft,
+            string color = "0.96 0.98 1 1")
+        {
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = parent,
+                    Components =
+                    {
+                        new CuiTextComponent
+                        {
+                            Text = text,
+                            FontSize = fontSize,
+                            Align = align,
+                            Color = color,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax },
+                    },
+                });
+        }
+
         private readonly Dictionary<ulong, int> _guiPage = new();
         /// <summary>0 = invaders, 1 = edit MaxxInvaders.json, 2 = RoamingNPCs bot toggles.</summary>
         private readonly Dictionary<ulong, int> _guiMainTab = new();
@@ -2376,7 +2413,7 @@ namespace Oxide.Plugins
             _guiPage[player.userID] = page;
             if (!_guiMainTab.TryGetValue(player.userID, out var mainTab)) mainTab = 0;
 
-            var rows = _cfg.Gui.RowsPerPage;
+            var rows = mainTab == GuiTabInvaders ? Mathf.Min(_cfg.Gui.RowsPerPage, 4) : _cfg.Gui.RowsPerPage;
             var list = _registry.All().ToList();
             var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (float)rows));
             page = Mathf.Clamp(page, 0, totalPages - 1);
@@ -2425,7 +2462,7 @@ namespace Oxide.Plugins
                 panel);
 
             var titleLine = mainTab == GuiTabInvaders
-                ? $"<size=17><b>MaxxInvaders</b></size> v{Version}  Active: {list.Count}  Page {page + 1}/{totalPages}"
+                ? $"<size=17><b>MaxxInvaders</b></size> v{Version}  On map: {list.Count}  Page {page + 1}/{totalPages}"
                 : mainTab == GuiTabMaxxEdit
                     ? $"<size=17><b>MaxxInvaders</b></size> v{Version}  <size=11>Edit config (saves to JSON)</size>"
                     : $"<size=17><b>RoamingNPCs</b></size>  <size=11>Bot templates (Enable bot?)</size>   <size=10>Maxx v{Version}</size>";
@@ -2509,12 +2546,35 @@ namespace Oxide.Plugins
                 },
                 panel);
 
+            if (mainTab == GuiTabInvaders)
+            {
+                var onMap = list.Count == 0
+                    ? "No active bots on the map."
+                    : string.Join(
+                        "   |   ",
+                        list.Select(r =>
+                        {
+                            var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(r.ViewerName) ? "?" : r.ViewerName.Trim());
+                            var id = StripCuiMarkup(r.NpcId ?? "");
+                            return $"{nm}  ({id})";
+                        }));
+                AddCuiText(
+                    container,
+                    panel,
+                    $"<size=16><b>ACTIVE BOTS</b></size>\n{onMap}",
+                    "0.03 0.798",
+                    "0.97 0.848",
+                    14,
+                    TextAnchor.UpperLeft,
+                    "0.92 0.96 1 1");
+            }
+
             var draft = GetSpawnDraft(player.userID);
             var formPanel = container.Add(
                 new CuiPanel
                 {
                     Image = { Color = "0.11 0.13 0.18 0.95" },
-                    RectTransform = { AnchorMin = "0.02 0.54", AnchorMax = "0.98 0.848" },
+                    RectTransform = { AnchorMin = "0.02 0.54", AnchorMax = "0.98 0.792" },
                     CursorEnabled = true,
                 },
                 panel);
@@ -2697,35 +2757,27 @@ namespace Oxide.Plugins
                 },
                 formPanel);
 
-            float y = 0.52f;
+            const float npcRowH = 0.052f;
+            const float npcRowStep = 0.054f;
+            float y = 0.525f;
             foreach (var r in slice)
             {
                 var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
-                var pos = r.NpcPlayer != null ? r.NpcPlayer.transform.position.ToString() : r.ToString();
                 var age = (DateTime.UtcNow - r.SpawnedAtUtc).TotalMinutes;
+                var yb = (y - npcRowH).ToString("F4", CultureInfo.InvariantCulture);
+                var yt = y.ToString("F4", CultureInfo.InvariantCulture);
 
                 var row = container.Add(
                     new CuiPanel
                     {
                         Image = { Color = "0.15 0.15 0.18 0.85" },
-                        RectTransform = { AnchorMin = $"0.02 {y - 0.08f}", AnchorMax = $"0.98 {y}" },
+                        RectTransform = { AnchorMin = $"0.02 {yb}", AnchorMax = $"0.98 {yt}" },
                     },
                     panel);
 
-                container.Add(
-                    new CuiLabel
-                    {
-                        Text =
-                        {
-                            Text =
-                                $"{r.NpcId}  {r.ViewerName}  ({r.ViewerId})  T{r.Tier}  {(r.IsRoamingNpc ? "RoamingNPCs" : "Scientist")}  {r.Mode}  HP:{hp:F0}  {age:F1}m",
-                            FontSize = 13,
-                            Align = TextAnchor.MiddleLeft,
-                            Color = "0.92 0.95 1 1",
-                        },
-                        RectTransform = { AnchorMin = "0.02 0", AnchorMax = "0.72 1" },
-                    },
-                    row);
+                var npcLine =
+                    $"<b>{(string.IsNullOrWhiteSpace(r.ViewerName) ? "?" : r.ViewerName.Trim())}</b>  ({r.NpcId})  T{r.Tier}  {r.Mode}  HP {hp:F0}  {age:F0}m";
+                AddCuiText(container, row, npcLine, "0.02 0.1", "0.70 0.9", 13, TextAnchor.MiddleLeft, "0.95 0.97 1 1");
 
                 container.Add(
                     new CuiButton
@@ -2772,109 +2824,93 @@ namespace Oxide.Plugins
                     },
                     row);
 
-                y -= 0.09f;
+                y -= npcRowStep;
             }
 
             var profiles = GetRecentProfiles(4);
-            if (profiles.Count > 0)
+            if (mainTab == GuiTabInvaders)
             {
                 var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
                 var pPanel = container.Add(
                     new CuiPanel
                     {
                         Image = { Color = "0.08 0.10 0.14 0.92" },
-                        RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.26" },
+                        RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.28" },
                         CursorEnabled = true,
                     },
                     panel);
-                container.Add(
-                    new CuiLabel
-                    {
-                        Text = { Text = "Profiles (persistent): pick a slot to fill the spawn form", FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "0.95 0.98 1 1" },
-                        RectTransform = { AnchorMin = "0.02 0.88", AnchorMax = "0.98 0.98" },
-                    },
-                    pPanel);
-                container.Add(
-                    new CuiLabel
-                    {
-                        Text = { Text = "Active slot (spawn form above)", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = "0.78 0.84 0.92 1" },
-                        RectTransform = { AnchorMin = "0.02 0.805", AnchorMax = "0.55 0.87" },
-                    },
-                    pPanel);
-                for (var si = 0; si < 4; si++)
-                {
-                    var hasSlot = si < profiles.Count;
-                    var isActive = activeSlot == si;
-                    var btnCol = isActive
-                        ? _cfg.Gui.AccentColor
-                        : hasSlot
-                            ? "0.18 0.22 0.30 0.95"
-                            : "0.12 0.12 0.14 0.75";
-                    var label = hasSlot ? $"{si + 1}" : $"{si + 1} —";
-                    var ax1 = (0.02 + si * 0.235).ToString("F4", CultureInfo.InvariantCulture);
-                    var ax2 = (0.02 + si * 0.235 + 0.22).ToString("F4", CultureInfo.InvariantCulture);
-                    container.Add(
-                        new CuiButton
-                        {
-                            Button = { Command = $"maxxinvaders.gui profslot {si}", Color = btnCol },
-                            RectTransform =
-                            {
-                                AnchorMin = $"{ax1} 0.68",
-                                AnchorMax = $"{ax2} 0.795",
-                            },
-                            Text = { Text = label, FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                        },
-                        pPanel);
-                }
+                AddCuiText(
+                    container,
+                    pPanel,
+                    "<size=14><b>CLASSES</b></size>  (saved viewers — tap Use to load the spawn form)",
+                    "0.02 0.88",
+                    "0.98 0.98",
+                    12,
+                    TextAnchor.MiddleLeft,
+                    "0.95 0.98 1 1");
 
-                float py = 0.66f;
-                var idx = 0;
-                foreach (var pr in profiles)
+                const float classRowH = 0.17f;
+                for (var idx = 0; idx < 4; idx++)
                 {
+                    var pr = idx < profiles.Count ? profiles[idx] : null;
                     var rowActive = activeSlot == idx;
+                    var pyTop = 0.86f - idx * classRowH;
+                    var pyBot = pyTop - (classRowH - 0.02f);
+                    var aMin = $"0.02 {pyBot.ToString("F4", CultureInfo.InvariantCulture)}";
+                    var aMax = $"0.98 {pyTop.ToString("F4", CultureInfo.InvariantCulture)}";
+
                     var prow = container.Add(
                         new CuiPanel
                         {
                             Image =
                             {
-                                Color = rowActive ? "0.18 0.32 0.48 0.95" : "0.14 0.18 0.24 0.92",
+                                Color = rowActive ? "0.2 0.38 0.55 0.96" : "0.12 0.16 0.22 0.96",
                             },
-                            RectTransform = { AnchorMin = $"0.02 {py - 0.13f}", AnchorMax = $"0.98 {py}" },
+                            RectTransform = { AnchorMin = aMin, AnchorMax = aMax },
                         },
                         pPanel);
+
+                    var title = pr == null
+                        ? $"<size=15><b>Class {idx + 1}</b></size>  —  (empty)"
+                        : $"<size=15><b>Class {idx + 1}</b></size>  —  {StripCuiMarkup(pr.ViewerName ?? "?")}";
+                    var sub = pr == null
+                        ? "No saved profile yet. Spawn a bot; it appears here after the first spawn."
+                        : $"ID {StripCuiMarkup(pr.ViewerId)}   ·   Tier {pr.Tier}   ·   {StripCuiMarkup(pr.Mode)}   ·   {(pr.Alive ? "last: alive" : "last: " + (pr.RemovedAtUtc?.ToString("MM/dd HH:mm") ?? "gone"))}";
+                    AddCuiText(container, prow, title + "\n" + sub, "0.03 0.12", "0.62 0.92", 12, TextAnchor.UpperLeft, "0.95 0.97 1 1");
+
+                    var useCol = rowActive ? _cfg.Gui.AccentColor : "0.22 0.42 0.62 0.95";
                     container.Add(
-                        new CuiLabel
+                        new CuiButton
                         {
-                            Text = { Text = $"Slot {idx + 1}:  {pr.ViewerName}  ({pr.ViewerId})", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" },
-                            RectTransform = { AnchorMin = "0.02 0.52", AnchorMax = "0.66 0.95" },
-                        },
-                        prow);
-                    container.Add(
-                        new CuiLabel
-                        {
-                            Text = { Text = $"Tier {pr.Tier}  |  Mode {pr.Mode}  |  Last: {(pr.Alive ? "Alive" : pr.RemovedAtUtc?.ToString("MM/dd HH:mm") ?? "Dead")}", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = "0.85 0.9 0.98 1" },
-                            RectTransform = { AnchorMin = "0.02 0.08", AnchorMax = "0.66 0.5" },
+                            Button = { Command = $"maxxinvaders.gui profslot {idx}", Color = useCol },
+                            RectTransform = { AnchorMin = "0.64 0.12", AnchorMax = "0.78 0.88" },
+                            Text = { Text = "Use", FontSize = 12, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
                         },
                         prow);
                     container.Add(
                         new CuiButton
                         {
-                            Button = { Command = $"maxxinvaders.gui profileload {pr.ViewerId}", Color = "0.22 0.36 0.52 0.95" },
-                            RectTransform = { AnchorMin = "0.68 0.14", AnchorMax = "0.81 0.88" },
-                            Text = { Text = "Load", FontSize = 10, Color = "1 1 1 1" },
+                            Button =
+                            {
+                                Command = pr != null ? $"maxxinvaders.gui profileload {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
+                                Color = "0.22 0.36 0.52 0.95",
+                            },
+                            RectTransform = { AnchorMin = "0.79 0.12", AnchorMax = "0.89 0.88" },
+                            Text = { Text = "Load", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
                         },
                         prow);
                     container.Add(
                         new CuiButton
                         {
-                            Button = { Command = $"maxxinvaders.gui profilerespawn {pr.ViewerId}", Color = "0.20 0.52 0.36 0.95" },
-                            RectTransform = { AnchorMin = "0.82 0.14", AnchorMax = "0.98 0.88" },
-                            Text = { Text = "Respawn", FontSize = 10, Color = "1 1 1 1" },
+                            Button =
+                            {
+                                Command = pr != null ? $"maxxinvaders.gui profilerespawn {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
+                                Color = "0.18 0.52 0.38 0.95",
+                            },
+                            RectTransform = { AnchorMin = "0.90 0.12", AnchorMax = "0.98 0.88" },
+                            Text = { Text = "Respawn", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
                         },
                         prow);
-                    py -= 0.145f;
-                    idx++;
-                    if (py < 0.12f) break;
                 }
             }
 
