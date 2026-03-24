@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.4.2")]
+    [Info("MaxxInvaders", "RustMaxx", "1.4.3")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -657,8 +657,8 @@ namespace Oxide.Plugins
             }
 
             var fb = _cfg.ScientistFallbackEnabled ? "scientist fallback ON" : "scientist fallback OFF (roaming only)";
-            return $"Roaming bridge: ON  |  Default template: {key}  |  {fb}\n{detail}\n" +
-                   "Per-tier RoamingTemplateKey in MaxxInvaders.json overrides the default for that tier.";
+            return $"Roaming bridge: ON  |  Template: {key}  |  {fb}\n{detail}\n" +
+                   "Tip: per-tier RoamingTemplateKey in MaxxInvaders.json overrides the default.";
         }
 
         private SpawnResult TrySpawn(
@@ -2048,6 +2048,58 @@ namespace Oxide.Plugins
                 });
         }
 
+        /// <summary>
+        /// Input fields alone often render as a flat color block; a dark framed panel behind an inset field reads better.
+        /// </summary>
+        private static void AddCuiInputFieldFramed(
+            CuiElementContainer container,
+            string parent,
+            string command,
+            string initialText,
+            string anchorMin,
+            string anchorMax,
+            int fontSize = 14,
+            int charsLimit = 64)
+        {
+            var wrap = Guid.NewGuid().ToString("N");
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = wrap,
+                    Parent = parent,
+                    Components =
+                    {
+                        new CuiImageComponent
+                        {
+                            Color = "0.10 0.11 0.14 0.98",
+                            Material = "Assets/Content/UI/UI.Background.Tile.psd",
+                        },
+                        new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax },
+                    },
+                });
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Parent = wrap,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = charsLimit,
+                            Command = command,
+                            FontSize = fontSize,
+                            IsPassword = false,
+                            Text = initialText ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0.03 0.10", AnchorMax = "0.97 0.90" },
+                    },
+                });
+        }
+
         private readonly Dictionary<ulong, int> _guiPage = new();
         /// <summary>0 = invaders, 1 = edit MaxxInvaders.json, 2 = RoamingNPCs bot toggles.</summary>
         private readonly Dictionary<ulong, int> _guiMainTab = new();
@@ -2735,22 +2787,30 @@ namespace Oxide.Plugins
                 return;
             }
 
+            var statusStrip = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.06 0.07 0.10 0.94" },
+                    RectTransform = { AnchorMin = "0.02 0.852", AnchorMax = "0.98 0.918" },
+                    CursorEnabled = false,
+                },
+                contentPanel);
             AddCuiText(
                 container,
-                contentPanel,
+                statusStrip,
                 BuildRoamingGuiStatusText(),
-                "0.02 0.88",
-                "0.98 0.99",
-                8,
+                "0.02 0.06",
+                "0.98 0.94",
+                10,
                 TextAnchor.UpperLeft,
-                "0.75 0.78 0.84 1");
+                "0.82 0.88 0.94 1");
 
             AddCuiText(
                 container,
                 contentPanel,
                 "ACTIVE BOTS — click buttons on each card",
-                "0.02 0.825",
-                "0.98 0.865",
+                "0.02 0.798",
+                "0.98 0.832",
                 12,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
@@ -2764,8 +2824,8 @@ namespace Oxide.Plugins
             foreach (var r in slice)
             {
                 var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
-                var top = 0.80f - cardIdx * 0.095f;
-                var bot = top - 0.088f;
+                var top = 0.772f - cardIdx * 0.093f;
+                var bot = top - 0.086f;
                 var aMin = $"0.02 {bot.ToString("F4", CultureInfo.InvariantCulture)}";
                 var aMax = $"0.98 {top.ToString("F4", CultureInfo.InvariantCulture)}";
                 var card = container.Add(
@@ -2840,27 +2900,15 @@ namespace Oxide.Plugins
                     TextAnchor.MiddleLeft,
                     "0.85 0.88 0.95 1");
                 var tmplVal = GetGuiNpcTemplateField(player.userID, r.NpcId, r.RoamingTemplateKey ?? "");
-                AddRawCuiElement(
+                AddCuiInputFieldFramed(
                     container,
-                    new CuiElement
-                    {
-                        Name = Guid.NewGuid().ToString("N"),
-                        Parent = card,
-                        Components =
-                        {
-                            new CuiInputFieldComponent
-                            {
-                                Align = TextAnchor.MiddleLeft,
-                                CharsLimit = 64,
-                                Command = $"maxxinvaders.gui ntmpl {r.NpcId} ",
-                                FontSize = 11,
-                                IsPassword = false,
-                                Text = tmplVal,
-                                NeedsKeyboard = true,
-                            },
-                            new CuiRectTransformComponent { AnchorMin = "0.37 0.08", AnchorMax = "0.76 0.36" },
-                        },
-                    });
+                    card,
+                    $"maxxinvaders.gui ntmpl {r.NpcId} ",
+                    tmplVal,
+                    "0.37 0.08",
+                    "0.76 0.36",
+                    12,
+                    64);
                 AddCuiButtonWithText(
                     container,
                     card,
@@ -2879,8 +2927,8 @@ namespace Oxide.Plugins
                     container,
                     contentPanel,
                     "No active bots on the map.\nUse SPAWN & RENAME below, or TikFinity.",
-                    "0.04 0.58",
-                    "0.96 0.78",
+                    "0.04 0.56",
+                    "0.96 0.76",
                     13,
                     TextAnchor.MiddleLeft,
                     "0.85 0.88 0.95 1");
@@ -2889,8 +2937,8 @@ namespace Oxide.Plugins
                 container,
                 contentPanel,
                 "SPAWN & RENAME (form)",
-                "0.02 0.535",
-                "0.98 0.565",
+                "0.02 0.552",
+                "0.98 0.575",
                 12,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
@@ -2899,7 +2947,7 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.10 0.11 0.14 0.95" },
-                    RectTransform = { AnchorMin = "0.02 0.275", AnchorMax = "0.98 0.53" },
+                    RectTransform = { AnchorMin = "0.02 0.378", AnchorMax = "0.98 0.545" },
                     CursorEnabled = true,
                 },
                 contentPanel);
@@ -2944,20 +2992,13 @@ namespace Oxide.Plugins
                 12,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
-            AddRawCuiElement(container, new CuiElement
-            {
-                Name = Guid.NewGuid().ToString("N"),
-                Parent = formPanel,
-                Components =
-                {
-                    new CuiInputFieldComponent
-                    {
-                        Align = TextAnchor.MiddleLeft, CharsLimit = 64, Command = "maxxinvaders.gui draft viewername",
-                        FontSize = 14, IsPassword = false, Text = draft.ViewerName ?? "DemoViewer", NeedsKeyboard = true,
-                    },
-                    new CuiRectTransformComponent { AnchorMin = "0.02 0.52", AnchorMax = "0.62 0.61" },
-                },
-            });
+            AddCuiInputFieldFramed(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft viewername",
+                draft.ViewerName ?? "DemoViewer",
+                "0.02 0.52",
+                "0.62 0.61");
 
             AddCuiText(
                 container,
@@ -2968,62 +3009,42 @@ namespace Oxide.Plugins
                 12,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
-            AddRawCuiElement(container, new CuiElement
-            {
-                Name = Guid.NewGuid().ToString("N"),
-                Parent = formPanel,
-                Components =
-                {
-                    new CuiInputFieldComponent
-                    {
-                        Align = TextAnchor.MiddleLeft, CharsLimit = 48, Command = "maxxinvaders.gui draft viewerid",
-                        FontSize = 14, IsPassword = false, Text = draft.ViewerId ?? "", NeedsKeyboard = true,
-                    },
-                    new CuiRectTransformComponent { AnchorMin = "0.02 0.33", AnchorMax = "0.30 0.42" },
-                },
-            });
-            AddRawCuiElement(container, new CuiElement
-            {
-                Name = Guid.NewGuid().ToString("N"),
-                Parent = formPanel,
-                Components =
-                {
-                    new CuiInputFieldComponent
-                    {
-                        Align = TextAnchor.MiddleLeft, CharsLimit = 4, Command = "maxxinvaders.gui draft tier",
-                        FontSize = 14, IsPassword = false, Text = draft.TierStr ?? "1", NeedsKeyboard = true,
-                    },
-                    new CuiRectTransformComponent { AnchorMin = "0.32 0.33", AnchorMax = "0.38 0.42" },
-                },
-            });
-            AddRawCuiElement(container, new CuiElement
-            {
-                Name = Guid.NewGuid().ToString("N"),
-                Parent = formPanel,
-                Components =
-                {
-                    new CuiInputFieldComponent
-                    {
-                        Align = TextAnchor.MiddleLeft, CharsLimit = 24, Command = "maxxinvaders.gui draft mode",
-                        FontSize = 14, IsPassword = false, Text = draft.Mode ?? "roaming", NeedsKeyboard = true,
-                    },
-                    new CuiRectTransformComponent { AnchorMin = "0.40 0.33", AnchorMax = "0.50 0.42" },
-                },
-            });
-            AddRawCuiElement(container, new CuiElement
-            {
-                Name = Guid.NewGuid().ToString("N"),
-                Parent = formPanel,
-                Components =
-                {
-                    new CuiInputFieldComponent
-                    {
-                        Align = TextAnchor.MiddleLeft, CharsLimit = 48, Command = "maxxinvaders.gui draft kit",
-                        FontSize = 14, IsPassword = false, Text = draft.Kit ?? "-", NeedsKeyboard = true,
-                    },
-                    new CuiRectTransformComponent { AnchorMin = "0.52 0.33", AnchorMax = "0.62 0.42" },
-                },
-            });
+            AddCuiInputFieldFramed(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft viewerid",
+                draft.ViewerId ?? "",
+                "0.02 0.33",
+                "0.30 0.42",
+                14,
+                48);
+            AddCuiInputFieldFramed(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft tier",
+                draft.TierStr ?? "1",
+                "0.32 0.33",
+                "0.38 0.42",
+                14,
+                4);
+            AddCuiInputFieldFramed(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft mode",
+                draft.Mode ?? "roaming",
+                "0.40 0.33",
+                "0.50 0.42",
+                14,
+                24);
+            AddCuiInputFieldFramed(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft kit",
+                draft.Kit ?? "-",
+                "0.52 0.33",
+                "0.62 0.42",
+                14,
+                48);
             AddCuiButtonWithText(
                 container,
                 formPanel,
@@ -3043,20 +3064,15 @@ namespace Oxide.Plugins
                 11,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
-            AddRawCuiElement(container, new CuiElement
-            {
-                Name = Guid.NewGuid().ToString("N"),
-                Parent = formPanel,
-                Components =
-                {
-                    new CuiInputFieldComponent
-                    {
-                        Align = TextAnchor.MiddleLeft, CharsLimit = 64, Command = "maxxinvaders.gui draft renametarget",
-                        FontSize = 14, IsPassword = false, Text = draft.RenameTarget ?? "", NeedsKeyboard = true,
-                    },
-                    new CuiRectTransformComponent { AnchorMin = "0.66 0.52", AnchorMax = "0.98 0.61" },
-                },
-            });
+            AddCuiInputFieldFramed(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft renametarget",
+                draft.RenameTarget ?? "",
+                "0.66 0.52",
+                "0.98 0.61",
+                14,
+                64);
             AddCuiText(
                 container,
                 formPanel,
@@ -3066,20 +3082,15 @@ namespace Oxide.Plugins
                 12,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
-            AddRawCuiElement(container, new CuiElement
-            {
-                Name = Guid.NewGuid().ToString("N"),
-                Parent = formPanel,
-                Components =
-                {
-                    new CuiInputFieldComponent
-                    {
-                        Align = TextAnchor.MiddleLeft, CharsLimit = 64, Command = "maxxinvaders.gui draft renamename",
-                        FontSize = 14, IsPassword = false, Text = draft.RenameName ?? "", NeedsKeyboard = true,
-                    },
-                    new CuiRectTransformComponent { AnchorMin = "0.66 0.33", AnchorMax = "0.98 0.42" },
-                },
-            });
+            AddCuiInputFieldFramed(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft renamename",
+                draft.RenameName ?? "",
+                "0.66 0.33",
+                "0.98 0.42",
+                14,
+                64);
             AddCuiButtonWithText(
                 container,
                 formPanel,
@@ -3097,8 +3108,8 @@ namespace Oxide.Plugins
                 container,
                 contentPanel,
                 "SAVED CLASSES (profiles) — Use loads spawn form, Respawn spawns from saved data",
-                "0.02 0.248",
-                "0.98 0.268",
+                "0.02 0.322",
+                "0.98 0.348",
                 11,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
@@ -3107,18 +3118,19 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.07 0.09 0.12 0.96" },
-                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.242" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.312" },
                     CursorEnabled = true,
                 },
                 contentPanel);
 
-            const float classRowH = 0.048f;
+            const float profileTopPad = 0.038f;
+            const float profileRowH = 0.056f;
             for (var idx = 0; idx < 4; idx++)
             {
                 var pr = idx < profiles.Count ? profiles[idx] : null;
                 var rowActive = activeSlot == idx;
-                var pyBot = 0.04f + idx * classRowH;
-                var pyTop = pyBot + classRowH - 0.004f;
+                var pyBot = profileTopPad + idx * profileRowH;
+                var pyTop = pyBot + profileRowH - 0.005f;
                 var aMin = $"0.02 {pyBot.ToString("F4", CultureInfo.InvariantCulture)}";
                 var aMax = $"0.98 {pyTop.ToString("F4", CultureInfo.InvariantCulture)}";
 
