@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.4")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.5")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -113,6 +113,7 @@ namespace Oxide.Plugins
             public bool DebugMode { get; set; } = false;
             public int MaxActiveNPCs { get; set; } = 24;
             public bool PreventDuplicateViewerNPCs { get; set; } = true;
+            public float MinimumSpawnRadiusFromAnchor { get; set; } = 20f;
             public float DefaultSpawnRadius { get; set; } = 80f;
             public float MinimumDistanceFromPlayers { get; set; } = 12f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
@@ -921,7 +922,9 @@ namespace Oxide.Plugins
                 var flat = Random.insideUnitSphere;
                 flat.y = 0;
                 flat.Normalize();
-                var tryPos = anchor + flat * Random.Range(_cfg.DefaultSpawnRadius * 0.25f, _cfg.DefaultSpawnRadius);
+                var minRadius = Mathf.Clamp(_cfg.MinimumSpawnRadiusFromAnchor, 0f, _cfg.DefaultSpawnRadius);
+                var maxRadius = Mathf.Max(minRadius + 0.1f, _cfg.DefaultSpawnRadius);
+                var tryPos = anchor + flat * Random.Range(minRadius, maxRadius);
                 tryPos.y = TerrainMeta.HeightMap.GetHeight(tryPos);
 
                 if (_cfg.BlockSpawnInMonuments && InMonumentArea(tryPos)) continue;
@@ -1458,7 +1461,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /migrate-to-skills (Maxx config) | /maxxinvaders ui | maxx | roaming | list | spawn | rename | kill | …");
+                    "Usage: /mi ui | /migrate-to-skills (Maxx config) | /maxxinvaders ui | maxx | roaming | list | spawn | rename | kill | …");
                 return;
             }
 
@@ -1553,6 +1556,21 @@ namespace Oxide.Plugins
                     player.ChatMessage("Unknown subcommand.");
                     break;
             }
+        }
+
+        [ChatCommand("mi")]
+        private void ChatMiAlias(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            if (!CanAdmin(player)) return;
+
+            if (args == null || args.Length == 0 || args[0].Equals("ui", StringComparison.OrdinalIgnoreCase))
+            {
+                OpenGui(player, 0);
+                return;
+            }
+
+            ChatRouter(player, "maxxinvaders", args);
         }
 
         /// <summary>Alias so /maxxinvaders.ui works as a single token on many Oxide builds.</summary>
@@ -1820,6 +1838,16 @@ namespace Oxide.Plugins
                     if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var dr))
                     {
                         _cfg.DefaultSpawnRadius = Mathf.Clamp(dr, 5f, 500f);
+                        if (_cfg.MinimumSpawnRadiusFromAnchor > _cfg.DefaultSpawnRadius)
+                            _cfg.MinimumSpawnRadiusFromAnchor = _cfg.DefaultSpawnRadius;
+                        SaveConfig();
+                    }
+
+                    break;
+                case nameof(InvaderConfig.MinimumSpawnRadiusFromAnchor):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var minr))
+                    {
+                        _cfg.MinimumSpawnRadiusFromAnchor = Mathf.Clamp(minr, 0f, _cfg.DefaultSpawnRadius);
                         SaveConfig();
                     }
 
@@ -1957,6 +1985,8 @@ namespace Oxide.Plugins
             }
 
             RowNum("MaxActiveNPCs", nameof(InvaderConfig.MaxActiveNPCs), _cfg.MaxActiveNPCs.ToString());
+            RowNum("MinimumSpawnRadiusFromAnchor", nameof(InvaderConfig.MinimumSpawnRadiusFromAnchor),
+                _cfg.MinimumSpawnRadiusFromAnchor.ToString(CultureInfo.InvariantCulture));
             RowNum("DefaultSpawnRadius", nameof(InvaderConfig.DefaultSpawnRadius),
                 _cfg.DefaultSpawnRadius.ToString(CultureInfo.InvariantCulture));
             RowNum("MinimumDistanceFromPlayers", nameof(InvaderConfig.MinimumDistanceFromPlayers),

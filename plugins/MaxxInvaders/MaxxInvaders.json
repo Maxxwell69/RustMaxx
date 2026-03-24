@@ -2,6 +2,7 @@
   "EnablePlugin": true,
   "MaxActiveNPCs": 24,
   "PreventDuplicateViewerNPCs": true,
+  "MinimumSpawnRadiusFromAnchor": 20.0,
   "DefaultSpawnRadius": 80.0,
   "MinimumDistanceFromPlayers": 12.0,
   "BlockSpawnInSafeZones": true,
