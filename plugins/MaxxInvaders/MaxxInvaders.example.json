@@ -28,7 +28,7 @@
     "roaming": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
     "defend": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
     "escort": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
-    "attackplayer": "assets/prefabs/npc/scientist/scientist/scientistnpc_roam.prefab"
+    "attackplayer": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab"
   },
   "AllowedBehaviorModes": [
     "friendly",
