@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.8")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.9")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -1510,6 +1510,14 @@ namespace Oxide.Plugins
             [JsonProperty(RU ? "Настройка использования ящика (бот будет складывать предметы в ящик)" : "Box setup (bot will put items in the box)", Order = 1)]
             public BoxSetup Box = new(true, true, 0, 10, 3600f);
 
+            [JsonProperty(RU
+                ? "MaxxInvaders: складывать лут в ящик/шкаф стримера (OwnerID = якорь), без создания нового ящика"
+                : "MaxxInvaders: deposit loot to anchor player's storage (OwnerID match); does not spawn a disposable box")]
+            public bool BridgeUseAnchorOwnedStorage = false;
+
+            [JsonProperty(RU ? "Радиус поиска контейнера от позиции стримера (м)" : "Search radius from anchor for owned storage (m)")]
+            public float BridgeAnchorStorageSearchRadius = 18f;
+
             public void Init()
             {
                 if (Box.Enable && string.IsNullOrEmpty(Box.UsePrefab))
@@ -2989,6 +2997,8 @@ namespace Oxide.Plugins
                 };
                 clone.BattleState ??= new SetupBattle();
                 clone.BattleState._protectBridgeAnchorPlayer = true;
+                clone.FullState.BridgeUseAnchorOwnedStorage = true;
+                clone.FullState.BridgeAnchorStorageSearchRadius = 18f;
                 config.bots[streamerKey] = clone;
                 SaveConfig();
                 PrintWarning(
@@ -2998,6 +3008,48 @@ namespace Oxide.Plugins
             {
                 PrintWarning($"[RoamingNPCs] Could not add streamer_patrol template: {ex.Message}");
             }
+        }
+
+        /// <summary>Nearest non-full <see cref="StorageContainer"/> with same <see cref="BaseEntity.OwnerID"/> as MaxxInvaders anchor.</summary>
+        private bool TryFindAnchorOwnedStorageForBridge(CustomPet pet, out IItemContainerEntity container)
+        {
+            container = null;
+            var data = pet?.Data;
+            var fs = data?.Setup?.FullState;
+            if (fs == null || !fs.BridgeUseAnchorOwnedStorage) return false;
+            if (!data.SpawnedFromMaxxInvadersBridge || data.BridgeProtectAnchorUserId == 0UL) return false;
+
+            var anchor = BasePlayer.FindByID(data.BridgeProtectAnchorUserId);
+            if (anchor == null || !anchor.IsAlive()) return false;
+
+            var radius = Mathf.Clamp(fs.BridgeAnchorStorageSearchRadius, 4f, 80f);
+            var ownerId = data.BridgeProtectAnchorUserId;
+
+            var list = Pool.Get<List<BaseEntity>>();
+            Vis.Entities(anchor.transform.position, radius, list,
+                LayerMask.GetMask("Deployed", "Construction", "Default", "World"),
+                QueryTriggerInteraction.Ignore);
+
+            StorageContainer best = null;
+            var bestDist = float.MaxValue;
+            foreach (var ent in list)
+            {
+                if (ent == null || ent.IsDestroyed) continue;
+                if (ent.OwnerID != ownerId) continue;
+                if (ent is not StorageContainer sc) continue;
+                if (sc.inventory == null || sc.inventory.IsFull()) continue;
+                var d = Vector3.Distance(pet.transform.position, ent.transform.position);
+                if (d < bestDist)
+                {
+                    best = sc;
+                    bestDist = d;
+                }
+            }
+
+            Pool.FreeUnmanaged(ref list);
+            if (best == null) return false;
+            container = best;
+            return true;
         }
 
         private void BridgePatrolTick()
@@ -4806,19 +4858,29 @@ namespace Oxide.Plugins
             public bool CanLootedCorpse(BaseCorpse corpse) => Data.Setup.MinerState.CanLooted(corpse);
             public void DropItemsFromFullContainer(Vector3 position)
             {
-                IItemContainerEntity containerEntity;
-                if (!TryGetContainer(position, out containerEntity))
+                IItemContainerEntity containerEntity = null;
+                var anchorDeposit = instance != null &&
+                                    instance.TryFindAnchorOwnedStorageForBridge(this, out containerEntity);
+
+                if (!anchorDeposit)
                 {
-                    Suicide();
-                    return;
+                    if (!TryGetContainer(position, out containerEntity))
+                    {
+                        Suicide();
+                        return;
+                    }
+
+                    var timerKill = containerEntity is StashContainer
+                        ? Data.Setup.FullState.Stash.TimerKill
+                        : Data.Setup.FullState.Box.TimerKill;
+                    if (!Data.CustomMemory.AddDroppedContainer(containerEntity as BaseCombatEntity, timerKill))
+                    {
+                        (containerEntity as BaseEntity)?.Kill();
+                        Suicide();
+                        return;
+                    }
                 }
-                float timerKill = containerEntity is StashContainer ? Data.Setup.FullState.Stash.TimerKill : Data.Setup.FullState.Box.TimerKill;
-                if (!Data.CustomMemory.AddDroppedContainer(containerEntity as BaseCombatEntity, timerKill))
-                {
-                    (containerEntity as BaseEntity)?.Kill();
-                    Suicide();
-                    return;
-                }
+
                 List<Item> items = Pool.Get<List<Item>>();
                 items.AddRange(inventory.containerMain.itemList);
                 for (int i = 0; i < items.Count && containerEntity != null; i++)
@@ -4829,7 +4891,9 @@ namespace Oxide.Plugins
                         if (!item.MoveToContainer(containerEntity.inventory)) break;
                     }
                 }
-                if (containerEntity is StashContainer stash && Data.Setup.FullState.Stash.CanHideStash) stash.SetHidden(true);
+
+                if (!anchorDeposit && containerEntity is StashContainer stash && Data.Setup.FullState.Stash.CanHideStash)
+                    stash.SetHidden(true);
                 Pool.FreeUnmanaged(ref items);
                 if (inventory.containerMain.IsFull()) Suicide();
             }
