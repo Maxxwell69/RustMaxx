@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.4.1")]
+    [Info("MaxxInvaders", "RustMaxx", "1.4.2")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1995,6 +1995,59 @@ namespace Oxide.Plugins
                 });
         }
 
+        /// <summary>
+        /// Rust client often fails to draw <see cref="CuiButton.Text"/> on nested panels; use a child
+        /// <see cref="CuiTextComponent"/> full-rect on the button element (same pattern as PersonalNPC).
+        /// </summary>
+        private static void AddCuiButtonWithText(
+            CuiElementContainer container,
+            string parent,
+            string command,
+            string bgColor,
+            string text,
+            string anchorMin,
+            string anchorMax,
+            int fontSize = 12,
+            TextAnchor align = TextAnchor.MiddleCenter,
+            string textColor = "1 1 1 1")
+        {
+            var btnName = Guid.NewGuid().ToString("N");
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = btnName,
+                    Parent = parent,
+                    Components =
+                    {
+                        new CuiButtonComponent
+                        {
+                            Color = bgColor,
+                            Command = command,
+                            Material = "Assets/Content/UI/UI.Background.Tile.psd",
+                        },
+                        new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax },
+                    },
+                });
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Parent = btnName,
+                    Components =
+                    {
+                        new CuiTextComponent
+                        {
+                            Text = text,
+                            FontSize = fontSize,
+                            Align = align,
+                            Color = textColor,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    },
+                });
+        }
+
         private readonly Dictionary<ulong, int> _guiPage = new();
         /// <summary>0 = invaders, 1 = edit MaxxInvaders.json, 2 = RoamingNPCs bot toggles.</summary>
         private readonly Dictionary<ulong, int> _guiMainTab = new();
@@ -2217,14 +2270,15 @@ namespace Oxide.Plugins
                         RectTransform = { AnchorMin = $"0.03 {y - 0.032f}", AnchorMax = $"0.72 {y}" },
                     },
                     panel);
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui cfgtoggle {fieldName}", Color = "0.72 0.14 0.10 0.92" },
-                        RectTransform = { AnchorMin = $"0.73 {y - 0.032f}", AnchorMax = $"0.97 {y}" },
-                        Text = { Text = "Toggle", FontSize = 10, Color = "1 1 1 1" },
-                    },
-                    panel);
+                AddCuiButtonWithText(
+                    container,
+                    panel,
+                    $"maxxinvaders.gui cfgtoggle {fieldName}",
+                    "0.72 0.14 0.10 0.92",
+                    "Toggle",
+                    $"0.73 {y - 0.032f}",
+                    $"0.97 {y}",
+                    10);
                 y -= 0.044f;
             }
 
@@ -2438,24 +2492,30 @@ namespace Oxide.Plugins
                 panel);
 
             if (page > 0)
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui roampage {page - 1}", Color = "0.14 0.14 0.16 0.95" },
-                        RectTransform = { AnchorMin = "0.52 0.755", AnchorMax = "0.62 0.795" },
-                        Text = { Text = "Prev keys", FontSize = 9, Color = "0.95 0.97 1 1" },
-                    },
-                    panel);
+                AddCuiButtonWithText(
+                    container,
+                    panel,
+                    $"maxxinvaders.gui roampage {page - 1}",
+                    "0.14 0.14 0.16 0.95",
+                    "Prev keys",
+                    "0.52 0.755",
+                    "0.62 0.795",
+                    9,
+                    TextAnchor.MiddleCenter,
+                    "0.95 0.97 1 1");
 
             if (page < totalPages - 1)
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui roampage {page + 1}", Color = "0.14 0.14 0.16 0.95" },
-                        RectTransform = { AnchorMin = "0.63 0.755", AnchorMax = "0.76 0.795" },
-                        Text = { Text = "Next keys", FontSize = 9, Color = "0.95 0.97 1 1" },
-                    },
-                    panel);
+                AddCuiButtonWithText(
+                    container,
+                    panel,
+                    $"maxxinvaders.gui roampage {page + 1}",
+                    "0.14 0.14 0.16 0.95",
+                    "Next keys",
+                    "0.63 0.755",
+                    "0.76 0.795",
+                    9,
+                    TextAnchor.MiddleCenter,
+                    "0.95 0.97 1 1");
 
             float ry = 0.72f;
             foreach (var key in slice)
@@ -2487,14 +2547,15 @@ namespace Oxide.Plugins
                         RectTransform = { AnchorMin = $"0.56 {ry - 0.036f}", AnchorMax = $"0.72 {ry}" },
                     },
                     panel);
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui roamtoggle {key}", Color = "0.72 0.14 0.10 0.92" },
-                        RectTransform = { AnchorMin = $"0.73 {ry - 0.036f}", AnchorMax = $"0.97 {ry}" },
-                        Text = { Text = "Toggle Enable bot?", FontSize = 8, Color = "1 1 1 1" },
-                    },
-                    panel);
+                AddCuiButtonWithText(
+                    container,
+                    panel,
+                    $"maxxinvaders.gui roamtoggle {key}",
+                    "0.72 0.14 0.10 0.92",
+                    "Toggle Enable bot?",
+                    $"0.73 {ry - 0.036f}",
+                    $"0.97 {ry}",
+                    8);
                 ry -= 0.044f;
             }
 
@@ -2556,24 +2617,30 @@ namespace Oxide.Plugins
                 panel);
 
             if (mainTab == GuiTabInvaders && page > 0)
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui page {page - 1}", Color = uiMuted },
-                        RectTransform = { AnchorMin = "0.52 0.93", AnchorMax = "0.59 0.99" },
-                        Text = { Text = "◀", FontSize = 13, Color = "0.95 0.95 1 1" },
-                    },
-                    panel);
+                AddCuiButtonWithText(
+                    container,
+                    panel,
+                    $"maxxinvaders.gui page {page - 1}",
+                    uiMuted,
+                    "◀",
+                    "0.52 0.93",
+                    "0.59 0.99",
+                    13,
+                    TextAnchor.MiddleCenter,
+                    "0.95 0.95 1 1");
 
             if (mainTab == GuiTabInvaders && page < totalPages - 1)
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui page {page + 1}", Color = uiMuted },
-                        RectTransform = { AnchorMin = "0.60 0.93", AnchorMax = "0.67 0.99" },
-                        Text = { Text = "▶", FontSize = 13, Color = "0.95 0.95 1 1" },
-                    },
-                    panel);
+                AddCuiButtonWithText(
+                    container,
+                    panel,
+                    $"maxxinvaders.gui page {page + 1}",
+                    uiMuted,
+                    "▶",
+                    "0.60 0.93",
+                    "0.67 0.99",
+                    13,
+                    TextAnchor.MiddleCenter,
+                    "0.95 0.95 1 1");
 
             if (mainTab == GuiTabInvaders)
                 AddCuiText(
@@ -2586,23 +2653,27 @@ namespace Oxide.Plugins
                     TextAnchor.MiddleRight,
                     "0.72 0.78 0.88 1");
 
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui action refresh", Color = "0.18 0.35 0.42 0.95" },
-                    RectTransform = { AnchorMin = "0.82 0.93", AnchorMax = "0.90 0.99" },
-                    Text = { Text = "Refresh", FontSize = 11, Color = "0.95 0.97 1 1" },
-                },
-                panel);
+            AddCuiButtonWithText(
+                container,
+                panel,
+                "maxxinvaders.gui action refresh",
+                "0.18 0.35 0.42 0.95",
+                "Refresh",
+                "0.82 0.93",
+                "0.90 0.99",
+                11,
+                TextAnchor.MiddleCenter,
+                "0.95 0.97 1 1");
 
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui action close", Color = uiRustRed },
-                    RectTransform = { AnchorMin = "0.91 0.93", AnchorMax = "0.99 0.99" },
-                    Text = { Text = "CLOSE", FontSize = 11, Color = "1 1 1 1" },
-                },
-                panel);
+            AddCuiButtonWithText(
+                container,
+                panel,
+                "maxxinvaders.gui action close",
+                uiRustRed,
+                "CLOSE",
+                "0.91 0.93",
+                "0.99 0.99",
+                11);
 
             var sidebar = container.Add(
                 new CuiPanel
@@ -2613,30 +2684,33 @@ namespace Oxide.Plugins
                 },
                 panel);
 
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui tab 0", Color = mainTab == GuiTabInvaders ? uiRustRed : uiMuted },
-                    RectTransform = { AnchorMin = "0.06 0.76", AnchorMax = "0.94 0.88" },
-                    Text = { Text = "INVADERS", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                },
-                sidebar);
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui tab 1", Color = mainTab == GuiTabMaxxEdit ? uiRustRed : uiMuted },
-                    RectTransform = { AnchorMin = "0.06 0.62", AnchorMax = "0.94 0.74" },
-                    Text = { Text = "MAXX SETTINGS", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                },
-                sidebar);
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui tab 2", Color = mainTab == GuiTabRoamingEdit ? uiRustRed : uiMuted },
-                    RectTransform = { AnchorMin = "0.06 0.48", AnchorMax = "0.94 0.60" },
-                    Text = { Text = "ROAMING", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                },
-                sidebar);
+            AddCuiButtonWithText(
+                container,
+                sidebar,
+                "maxxinvaders.gui tab 0",
+                mainTab == GuiTabInvaders ? uiRustRed : uiMuted,
+                "INVADERS",
+                "0.06 0.76",
+                "0.94 0.88",
+                11);
+            AddCuiButtonWithText(
+                container,
+                sidebar,
+                "maxxinvaders.gui tab 1",
+                mainTab == GuiTabMaxxEdit ? uiRustRed : uiMuted,
+                "MAXX SETTINGS",
+                "0.06 0.62",
+                "0.94 0.74",
+                10);
+            AddCuiButtonWithText(
+                container,
+                sidebar,
+                "maxxinvaders.gui tab 2",
+                mainTab == GuiTabRoamingEdit ? uiRustRed : uiMuted,
+                "ROAMING",
+                "0.06 0.48",
+                "0.94 0.60",
+                11);
 
             var contentPanel = container.Add(
                 new CuiPanel
@@ -2719,38 +2793,42 @@ namespace Oxide.Plugins
                     TextAnchor.UpperLeft,
                     "1 1 1 1");
 
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui tp {r.NpcId}", Color = _cfg.Gui.AccentColor },
-                        RectTransform = { AnchorMin = "0.61 0.52", AnchorMax = "0.69 0.92" },
-                        Text = { Text = "TP", FontSize = 11, Color = "1 1 1 1" },
-                    },
-                    card);
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui returnrun {r.NpcId}", Color = uiGreen },
-                        RectTransform = { AnchorMin = "0.70 0.52", AnchorMax = "0.82 0.92" },
-                        Text = { Text = "RETURN", FontSize = 9, Color = "1 1 1 1" },
-                    },
-                    card);
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui kill {r.NpcId}", Color = "0.45 0.12 0.12 0.95" },
-                        RectTransform = { AnchorMin = "0.83 0.52", AnchorMax = "0.89 0.92" },
-                        Text = { Text = "KILL", FontSize = 10, Color = "1 1 1 1" },
-                    },
-                    card);
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui despawn {r.NpcId}", Color = "0.35 0.32 0.15 0.95" },
-                        RectTransform = { AnchorMin = "0.90 0.52", AnchorMax = "0.99 0.92" },
-                        Text = { Text = "DESPAWN", FontSize = 8, Color = "1 1 1 1" },
-                    },
-                    card);
+                AddCuiButtonWithText(
+                    container,
+                    card,
+                    $"maxxinvaders.gui tp {r.NpcId}",
+                    _cfg.Gui.AccentColor,
+                    "TP",
+                    "0.61 0.52",
+                    "0.69 0.92",
+                    11);
+                AddCuiButtonWithText(
+                    container,
+                    card,
+                    $"maxxinvaders.gui returnrun {r.NpcId}",
+                    uiGreen,
+                    "RETURN",
+                    "0.70 0.52",
+                    "0.82 0.92",
+                    9);
+                AddCuiButtonWithText(
+                    container,
+                    card,
+                    $"maxxinvaders.gui kill {r.NpcId}",
+                    "0.45 0.12 0.12 0.95",
+                    "KILL",
+                    "0.83 0.52",
+                    "0.89 0.92",
+                    10);
+                AddCuiButtonWithText(
+                    container,
+                    card,
+                    $"maxxinvaders.gui despawn {r.NpcId}",
+                    "0.35 0.32 0.15 0.95",
+                    "DESPAWN",
+                    "0.90 0.52",
+                    "0.99 0.92",
+                    8);
 
                 AddCuiText(
                     container,
@@ -2783,14 +2861,15 @@ namespace Oxide.Plugins
                             new CuiRectTransformComponent { AnchorMin = "0.37 0.08", AnchorMax = "0.76 0.36" },
                         },
                     });
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui applytmpl {r.NpcId}", Color = uiRustRed2 },
-                        RectTransform = { AnchorMin = "0.77 0.08", AnchorMax = "0.98 0.36" },
-                        Text = { Text = "APPLY", FontSize = 9, Color = "1 1 1 1" },
-                    },
-                    card);
+                AddCuiButtonWithText(
+                    container,
+                    card,
+                    $"maxxinvaders.gui applytmpl {r.NpcId}",
+                    uiRustRed2,
+                    "APPLY",
+                    "0.77 0.08",
+                    "0.98 0.36",
+                    9);
 
                 cardIdx++;
             }
@@ -2825,52 +2904,46 @@ namespace Oxide.Plugins
                 },
                 contentPanel);
 
-            container.Add(
-                new CuiLabel
-                {
-                    Text = { Text = "SPAWN", FontSize = 18, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" },
-                    RectTransform = { AnchorMin = "0.02 0.84", AnchorMax = "0.18 0.96" },
-                },
-                formPanel);
+            AddCuiText(container, formPanel, "SPAWN", "0.02 0.84", "0.18 0.96", 18, TextAnchor.MiddleLeft, "1 1 1 1");
+            AddCuiText(container, formPanel, "RENAME", "0.66 0.84", "0.86 0.96", 18, TextAnchor.MiddleLeft, "1 1 1 1");
 
-            container.Add(
-                new CuiLabel
-                {
-                    Text = { Text = "RENAME", FontSize = 18, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" },
-                    RectTransform = { AnchorMin = "0.66 0.84", AnchorMax = "0.86 0.96" },
-                },
-                formPanel);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui quickdemo",
+                "0.20 0.62 0.44 0.98",
+                "Quick Spawn",
+                "0.02 0.72",
+                "0.31 0.82",
+                13);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui spawnfields",
+                "0.22 0.48 0.72 0.98",
+                "Spawn From Form",
+                "0.33 0.72",
+                "0.62 0.82",
+                13);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui applyattrs",
+                "0.55 0.45 0.2 0.98",
+                "Apply Attributes To Active",
+                "0.33 0.62",
+                "0.62 0.70",
+                11);
 
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui quickdemo", Color = "0.20 0.62 0.44 0.98" },
-                    RectTransform = { AnchorMin = "0.02 0.72", AnchorMax = "0.31 0.82" },
-                    Text = { Text = "Quick Spawn", FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                },
-                formPanel);
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui spawnfields", Color = "0.22 0.48 0.72 0.98" },
-                    RectTransform = { AnchorMin = "0.33 0.72", AnchorMax = "0.62 0.82" },
-                    Text = { Text = "Spawn From Form", FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                },
-                formPanel);
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui applyattrs", Color = "0.55 0.45 0.2 0.98" },
-                    RectTransform = { AnchorMin = "0.33 0.62", AnchorMax = "0.62 0.70" },
-                    Text = { Text = "Apply Attributes To Active", FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                },
-                formPanel);
-
-            container.Add(new CuiLabel
-            {
-                Text = { Text = "Viewer Name", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "0.92 0.95 1 1" },
-                RectTransform = { AnchorMin = "0.02 0.62", AnchorMax = "0.2 0.7" },
-            }, formPanel);
+            AddCuiText(
+                container,
+                formPanel,
+                "Viewer Name",
+                "0.02 0.62",
+                "0.2 0.7",
+                12,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
             AddRawCuiElement(container, new CuiElement
             {
                 Name = Guid.NewGuid().ToString("N"),
@@ -2886,11 +2959,15 @@ namespace Oxide.Plugins
                 },
             });
 
-            container.Add(new CuiLabel
-            {
-                Text = { Text = "Viewer ID", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "0.92 0.95 1 1" },
-                RectTransform = { AnchorMin = "0.02 0.43", AnchorMax = "0.2 0.51" },
-            }, formPanel);
+            AddCuiText(
+                container,
+                formPanel,
+                "Viewer ID",
+                "0.02 0.43",
+                "0.2 0.51",
+                12,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
             AddRawCuiElement(container, new CuiElement
             {
                 Name = Guid.NewGuid().ToString("N"),
@@ -2947,20 +3024,25 @@ namespace Oxide.Plugins
                     new CuiRectTransformComponent { AnchorMin = "0.52 0.33", AnchorMax = "0.62 0.42" },
                 },
             });
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui draftreset", Color = "0.30 0.30 0.36 0.98" },
-                    RectTransform = { AnchorMin = "0.02 0.20", AnchorMax = "0.30 0.29" },
-                    Text = { Text = "Reset Form", FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                },
-                formPanel);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui draftreset",
+                "0.30 0.30 0.36 0.98",
+                "Reset Form",
+                "0.02 0.20",
+                "0.30 0.29",
+                12);
 
-            container.Add(new CuiLabel
-            {
-                Text = { Text = "Target (viewerId / viewerName / INV-xxxxx)", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "0.92 0.95 1 1" },
-                RectTransform = { AnchorMin = "0.66 0.62", AnchorMax = "0.98 0.7" },
-            }, formPanel);
+            AddCuiText(
+                container,
+                formPanel,
+                "Target (viewerId / viewerName / INV-xxxxx)",
+                "0.66 0.62",
+                "0.98 0.7",
+                11,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
             AddRawCuiElement(container, new CuiElement
             {
                 Name = Guid.NewGuid().ToString("N"),
@@ -2975,11 +3057,15 @@ namespace Oxide.Plugins
                     new CuiRectTransformComponent { AnchorMin = "0.66 0.52", AnchorMax = "0.98 0.61" },
                 },
             });
-            container.Add(new CuiLabel
-            {
-                Text = { Text = "New Name", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "0.92 0.95 1 1" },
-                RectTransform = { AnchorMin = "0.66 0.43", AnchorMax = "0.9 0.51" },
-            }, formPanel);
+            AddCuiText(
+                container,
+                formPanel,
+                "New Name",
+                "0.66 0.43",
+                "0.9 0.51",
+                12,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
             AddRawCuiElement(container, new CuiElement
             {
                 Name = Guid.NewGuid().ToString("N"),
@@ -2994,14 +3080,15 @@ namespace Oxide.Plugins
                     new CuiRectTransformComponent { AnchorMin = "0.66 0.33", AnchorMax = "0.98 0.42" },
                 },
             });
-            container.Add(
-                new CuiButton
-                {
-                    Button = { Command = "maxxinvaders.gui renameapply", Color = "0.24 0.52 0.72 0.98" },
-                    RectTransform = { AnchorMin = "0.66 0.20", AnchorMax = "0.98 0.29" },
-                    Text = { Text = "Apply Rename", FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                },
-                formPanel);
+            AddCuiButtonWithText(
+                container,
+                formPanel,
+                "maxxinvaders.gui renameapply",
+                "0.24 0.52 0.72 0.98",
+                "Apply Rename",
+                "0.66 0.20",
+                "0.98 0.29",
+                13);
 
             var profiles = GetRecentProfiles(4);
             var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
@@ -3072,38 +3159,33 @@ namespace Oxide.Plugins
                     "0.8 0.85 0.92 1");
 
                 var useCol = rowActive ? _cfg.Gui.AccentColor : "0.22 0.42 0.62 0.95";
-                container.Add(
-                    new CuiButton
-                    {
-                        Button = { Command = $"maxxinvaders.gui profslot {idx}", Color = useCol },
-                        RectTransform = { AnchorMin = "0.64 0.12", AnchorMax = "0.76 0.88" },
-                        Text = { Text = "Use", FontSize = 11, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                    },
-                    prow);
-                container.Add(
-                    new CuiButton
-                    {
-                        Button =
-                        {
-                            Command = pr != null ? $"maxxinvaders.gui profileload {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
-                            Color = "0.22 0.36 0.52 0.95",
-                        },
-                        RectTransform = { AnchorMin = "0.77 0.12", AnchorMax = "0.87 0.88" },
-                        Text = { Text = "Load", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                    },
-                    prow);
-                container.Add(
-                    new CuiButton
-                    {
-                        Button =
-                        {
-                            Command = pr != null ? $"maxxinvaders.gui profilerespawn {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
-                            Color = "0.18 0.52 0.38 0.95",
-                        },
-                        RectTransform = { AnchorMin = "0.88 0.12", AnchorMax = "0.98 0.88" },
-                        Text = { Text = "Respawn", FontSize = 9, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
-                    },
-                    prow);
+                AddCuiButtonWithText(
+                    container,
+                    prow,
+                    $"maxxinvaders.gui profslot {idx}",
+                    useCol,
+                    "Use",
+                    "0.64 0.12",
+                    "0.76 0.88",
+                    11);
+                AddCuiButtonWithText(
+                    container,
+                    prow,
+                    pr != null ? $"maxxinvaders.gui profileload {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
+                    "0.22 0.36 0.52 0.95",
+                    "Load",
+                    "0.77 0.12",
+                    "0.87 0.88",
+                    10);
+                AddCuiButtonWithText(
+                    container,
+                    prow,
+                    pr != null ? $"maxxinvaders.gui profilerespawn {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
+                    "0.18 0.52 0.38 0.95",
+                    "Respawn",
+                    "0.88 0.12",
+                    "0.98 0.88",
+                    9);
             }
 
             CuiHelper.AddUi(player, container);
