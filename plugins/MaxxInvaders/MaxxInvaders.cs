@@ -1,5 +1,5 @@
 // MaxxInvaders — RustMaxx viewer-linked NPC spawns (TikFinity / RCON / relay).
-// Standalone Oxide plugin: does NOT depend on RoamingNPCs or PersonalNPC.
+// Oxide plugin: optional RoamingNPCs bridge for full bot AI; otherwise vanilla scientists.
 // Uses vanilla Scientist NPC prefabs + optional Kits. Behavior modes tune prefab + light tick steering.
 
 using System;
@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.0.5")]
+    [Info("MaxxInvaders", "RustMaxx", "1.1.0")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -46,6 +46,8 @@ namespace Oxide.Plugins
         #region Plugin references
 
         [PluginReference] private Plugin Kits;
+
+        [PluginReference] private Plugin RoamingNPCs;
 
         #endregion
 
@@ -114,6 +116,15 @@ namespace Oxide.Plugins
             public float BehaviorTickSeconds { get; set; } = 1.5f;
             public bool DespawnOnUnload { get; set; } = true;
             public float PersistIntervalSeconds { get; set; } = 60f;
+
+            /// <summary>
+            /// When true and RoamingNPCs is loaded, spawns use that plugin’s bot templates (full gather/hunt/roam AI).
+            /// Falls back to vanilla scientists if the bridge fails or RoamingNPCs is missing.
+            /// </summary>
+            public bool UseRoamingNPCsWhenAvailable { get; set; } = true;
+
+            /// <summary>Template key under RoamingNPCs config "Bots settings" when tier has no RoamingTemplateKey.</summary>
+            public string DefaultRoamingTemplateKey { get; set; } = "bob_resources_farmer";
 
             /// <summary>
             /// Primary prefab; if missing, ScientistPrefabFallbacks is tried in order.
@@ -214,6 +225,9 @@ namespace Oxide.Plugins
             public float LifetimeSeconds { get; set; } = 3600f;
             public int MaxActiveForTier { get; set; } = 4;
             public float AggressionHint { get; set; } = 0.5f;
+
+            /// <summary>RoamingNPCs bot template key; empty uses MaxxInvaders DefaultRoamingTemplateKey.</summary>
+            public string RoamingTemplateKey { get; set; } = "";
         }
 
         private class GuiSettings
@@ -362,7 +376,9 @@ namespace Oxide.Plugins
             public string KitName;
             public string Mode;
             public ulong EntityId;
-            public ScientistNPC Entity;
+            /// <summary>ScientistNPC or RoamingNPCs CustomPet (BasePlayer).</summary>
+            public BasePlayer NpcPlayer;
+            public bool IsRoamingNpc;
             public DateTime SpawnedAtUtc;
             public DateTime? ExpiresAtUtc;
         }
@@ -454,6 +470,15 @@ namespace Oxide.Plugins
         private int CountTierActive(int tier) =>
             _registry.All().Count(r => r.Tier == tier);
 
+        private string ResolveRoamingTemplateKey(TierDefinition tierDef)
+        {
+            if (tierDef != null && !string.IsNullOrWhiteSpace(tierDef.RoamingTemplateKey))
+                return tierDef.RoamingTemplateKey.Trim();
+            if (!string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey))
+                return _cfg.DefaultRoamingTemplateKey.Trim();
+            return "bob_resources_farmer";
+        }
+
         private SpawnResult TrySpawn(
             string viewerName,
             string viewerId,
@@ -501,24 +526,90 @@ namespace Oxide.Plugins
             if (!TryFindSpawnPosition(anchorPlayer, out var pos))
                 return SpawnResult.Fail("spawn_position");
 
-            var prefab = ResolvePrefab(mode);
-            if (!TryCreateScientistNpc(prefab, pos, out var scientist, out var ent))
+            BasePlayer npcPlayer = null;
+            var isRoaming = false;
+            var roamingTemplate = ResolveRoamingTemplateKey(tierDef);
+
+            if (_cfg.UseRoamingNPCsWhenAvailable && RoamingNPCs != null && RoamingNPCs.IsLoaded &&
+                !string.IsNullOrEmpty(roamingTemplate))
             {
-                ent?.Kill();
-                PrintWarning(
-                    $"{LogPrefix} No scientist prefab worked (primary={prefab}). Check ScientistPrefabFallbacks / Rust update.");
-                return SpawnResult.Fail("prefab_invalid");
+                try
+                {
+                    var ro = RoamingNPCs.Call("SpawnFromTemplateForBridge", roamingTemplate, viewerName, viewerId);
+                    npcPlayer = ro as BasePlayer;
+                    if (npcPlayer != null && !npcPlayer.IsDestroyed)
+                    {
+                        isRoaming = true;
+                        try
+                        {
+                            npcPlayer.Teleport(pos);
+                        }
+                        catch
+                        {
+                            /* ignored */
+                        }
+
+                        var captured = npcPlayer;
+                        timer.Once(0.2f, () =>
+                        {
+                            try
+                            {
+                                if (captured != null && !captured.IsDestroyed)
+                                    captured.Teleport(pos);
+                            }
+                            catch
+                            {
+                                /* ignored */
+                            }
+                        });
+                    }
+                    else
+                    {
+                        npcPlayer = null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning($"{LogPrefix} RoamingNPCs SpawnFromTemplateForBridge: {ex.Message}");
+                    npcPlayer = null;
+                }
             }
 
-            scientist.enableSaving = false;
-            scientist.displayName = $"[Invader] {viewerName}";
-            scientist.Spawn();
+            if (npcPlayer == null)
+            {
+                var prefab = ResolvePrefab(mode);
+                if (!TryCreateScientistNpc(prefab, pos, out var scientist, out var ent))
+                {
+                    ent?.Kill();
+                    PrintWarning(
+                        $"{LogPrefix} No scientist prefab worked (primary={prefab}). Check ScientistPrefabFallbacks / Rust update.");
+                    return SpawnResult.Fail("prefab_invalid");
+                }
 
-            var hp = tierDef.Health > 0 ? tierDef.Health : 100f;
-            scientist.InitializeHealth(hp, hp);
+                scientist.enableSaving = false;
+                scientist.displayName = $"[Invader] {viewerName}";
+                scientist.Spawn();
+
+                var hpSci = tierDef.Health > 0 ? tierDef.Health : 100f;
+                scientist.InitializeHealth(hpSci, hpSci);
+                npcPlayer = scientist;
+                isRoaming = false;
+            }
+            else
+            {
+                var hpR = tierDef.Health > 0 ? tierDef.Health : 100f;
+                try
+                {
+                    npcPlayer.InitializeHealth(hpR, hpR);
+                }
+                catch
+                {
+                    /* ignored */
+                }
+            }
 
             var npcId = NextNpcId();
-            var netId = scientist.net.ID.Value;
+            var netId = npcPlayer.net.ID.Value;
 
             var runtime = new InvaderRuntime
             {
@@ -529,7 +620,8 @@ namespace Oxide.Plugins
                 KitName = kitResolved ?? "",
                 Mode = mode.ToLowerInvariant(),
                 EntityId = netId,
-                Entity = scientist,
+                NpcPlayer = npcPlayer,
+                IsRoamingNpc = isRoaming,
                 SpawnedAtUtc = DateTime.UtcNow,
                 ExpiresAtUtc = lifetime > 0 ? DateTime.UtcNow.AddSeconds(lifetime) : null,
             };
@@ -539,7 +631,8 @@ namespace Oxide.Plugins
             if (_cfg.PerViewerCooldownSeconds > 0)
                 _viewerCooldownUntil[viewerId] = DateTime.UtcNow.AddSeconds(_cfg.PerViewerCooldownSeconds);
 
-            ApplyKitIfPossible(scientist, kitResolved, viewerId);
+            if (!isRoaming)
+                ApplyKitIfPossible(npcPlayer, kitResolved, viewerId);
 
             var record = new InvaderRecord
             {
@@ -553,14 +646,14 @@ namespace Oxide.Plugins
                 SpawnedAtUtc = runtime.SpawnedAtUtc,
                 ExpiresAtUtc = runtime.ExpiresAtUtc,
                 Alive = true,
-                LastHealth = scientist.health,
-                LastPosition = scientist.transform.position.ToString(),
+                LastHealth = npcPlayer.health,
+                LastPosition = npcPlayer.transform.position.ToString(),
             };
             _data.History.Add(record);
             TrimHistory();
 
             LogIf(_cfg.Logging.LogSpawn,
-                $"spawned npc={npcId} viewer={viewerName} id={viewerId} tier={tier} mode={mode} kit={kitResolved} src={source}",
+                $"spawned npc={npcId} viewer={viewerName} id={viewerId} tier={tier} mode={mode} roaming={isRoaming} template={roamingTemplate} kit={kitResolved} src={source}",
                 false);
 
             return SpawnResult.Ok(npcId, netId);
@@ -658,7 +751,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private void ApplyKitIfPossible(ScientistNPC npc, string kitName, string viewerIdForLog)
+        private void ApplyKitIfPossible(BasePlayer npc, string kitName, string viewerIdForLog)
         {
             if (string.IsNullOrWhiteSpace(kitName) || Kits == null || !Kits.IsLoaded)
             {
@@ -693,19 +786,15 @@ namespace Oxide.Plugins
             return m == "hostile" || m == "attackplayer";
         }
 
-        /// <summary>Block invader scientist damage to real players when mode is not explicitly hostile.</summary>
+        /// <summary>Block invader NPC damage to real players when mode is not explicitly hostile.</summary>
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null || info == null) return null;
             var victim = entity as BasePlayer;
             if (victim == null || victim.IsNpc) return null;
-            var initiator = info.Initiator;
-            if (initiator == null) return null;
-            var sci = initiator as ScientistNPC;
-            if (sci == null && initiator is BasePlayer bp && bp.IsNpc)
-                sci = bp as ScientistNPC;
-            if (sci == null) return null;
-            if (!_registry.TryGetByEntity(sci.net.ID.Value, out var r)) return null;
+            var attacker = info.Initiator as BasePlayer;
+            if (attacker == null || !attacker.IsNpc) return null;
+            if (!_registry.TryGetByEntity(attacker.net.ID.Value, out var r)) return null;
             if (ModeAllowsDamageToPlayers(r.Mode)) return null;
             return true;
         }
@@ -714,7 +803,7 @@ namespace Oxide.Plugins
         {
             foreach (var r in _registry.All().ToArray())
             {
-                if (r.Entity == null || r.Entity.IsDestroyed)
+                if (r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
                 {
                     HandleDeadOrMissing(r, "entity_gone");
                     continue;
@@ -726,29 +815,34 @@ namespace Oxide.Plugins
                     continue;
                 }
 
-                r.Entity.health = Mathf.Clamp(r.Entity.health, 0f, r.Entity.MaxHealth());
-                var pos = r.Entity.transform.position;
-                UpdateRecordPosition(r.EntityId, pos, r.Entity.health);
+                r.NpcPlayer.health = Mathf.Clamp(r.NpcPlayer.health, 0f, r.NpcPlayer.MaxHealth());
+                var pos = r.NpcPlayer.transform.position;
+                UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
+
+                if (r.IsRoamingNpc)
+                    continue;
+
+                var sci = r.NpcPlayer as ScientistNPC;
+                if (sci == null) continue;
 
                 switch (r.Mode)
                 {
                     case "defend":
-                        TrySetDestination(r.Entity, r.Entity.transform.position);
+                        TrySetDestination(sci, sci.transform.position);
                         break;
                     case "attackplayer":
                     case "hostile":
-                        SteerTowardNearestPlayer(r.Entity, 80f, true);
+                        SteerTowardNearestPlayer(sci, 80f, true);
                         break;
                     case "escort":
-                        SteerTowardNearestAdmin(r.Entity, 12f);
+                        SteerTowardNearestAdmin(sci, 12f);
                         break;
                     case "friendly":
                     case "neutral":
                     case "roaming":
                     default:
-                        // Engine AI still wants to fight; we steer more often + flee players so they wander instead of turret.
-                        SteerAwayFromNearestPlayer(r.Entity, 55f, 22f);
-                        SteerRandomRoam(r.Entity, 36f, 0.42f);
+                        SteerAwayFromNearestPlayer(sci, 55f, 22f);
+                        SteerRandomRoam(sci, 36f, 0.42f);
                         break;
                 }
             }
@@ -859,9 +953,9 @@ namespace Oxide.Plugins
 
         private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
         {
-            var npc = entity as ScientistNPC;
-            if (npc == null) return;
-            if (!_registry.TryGetByEntity(npc.net.ID.Value, out var r)) return;
+            var bp = entity as BasePlayer;
+            if (bp == null || !bp.IsNpc) return;
+            if (!_registry.TryGetByEntity(bp.net.ID.Value, out var r)) return;
 
             var reason = info?.Initiator != null ? "killed" : "death";
             FinalizeRecord(r, false, reason);
@@ -883,8 +977,8 @@ namespace Oxide.Plugins
                 rec.Alive = alive;
                 rec.RemovalReason = reason;
                 rec.RemovedAtUtc = DateTime.UtcNow;
-                if (r.Entity != null && !r.Entity.IsDestroyed)
-                    rec.LastHealth = r.Entity.health;
+                if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+                    rec.LastHealth = r.NpcPlayer.health;
             }
         }
 
@@ -892,8 +986,8 @@ namespace Oxide.Plugins
         {
             try
             {
-                if (r.Entity != null && !r.Entity.IsDestroyed)
-                    r.Entity.Kill();
+                if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+                    r.NpcPlayer.Kill();
             }
             catch
             {
@@ -983,9 +1077,9 @@ namespace Oxide.Plugins
             }
 
             r.Tier = newTier;
-            if (r.Entity != null && !r.Entity.IsDestroyed)
+            if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
             {
-                r.Entity.InitializeHealth(def.Health, def.Health);
+                r.NpcPlayer.InitializeHealth(def.Health, def.Health);
             }
 
             LogIf(true, $"upgrade viewer={r.ViewerId} tier={newTier}", false);
@@ -1196,7 +1290,7 @@ namespace Oxide.Plugins
             {
                 n++;
                 if (n > 15) break;
-                player.ChatMessage($"{r.NpcId} | {r.ViewerName} | tier {r.Tier} | {r.Mode} | hp {r.Entity?.health ?? 0:F0}");
+                player.ChatMessage($"{r.NpcId} | {r.ViewerName} | tier {r.Tier} | {r.Mode} | hp {r.NpcPlayer?.health ?? 0:F0}");
             }
             if (n == 0) player.ChatMessage("No active invaders.");
         }
@@ -1208,8 +1302,8 @@ namespace Oxide.Plugins
                 if (r.NpcId != npcId) continue;
                 if (gentle)
                     DespawnInternal(r, "gui_despawn");
-                else if (r.Entity != null && !r.Entity.IsDestroyed)
-                    r.Entity.Kill();
+                else if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+                    r.NpcPlayer.Kill();
                 return;
             }
         }
@@ -1549,8 +1643,8 @@ namespace Oxide.Plugins
             float y = 0.52f;
             foreach (var r in slice)
             {
-                var hp = r.Entity != null && !r.Entity.IsDestroyed ? r.Entity.health : 0f;
-                var pos = r.Entity != null ? r.Entity.transform.position.ToString() : r.ToString();
+                var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
+                var pos = r.NpcPlayer != null ? r.NpcPlayer.transform.position.ToString() : r.ToString();
                 var age = (DateTime.UtcNow - r.SpawnedAtUtc).TotalMinutes;
 
                 var row = container.Add(
@@ -1713,8 +1807,8 @@ namespace Oxide.Plugins
                 foreach (var r in _registry.All())
                 {
                     if (r.NpcId != id) continue;
-                    if (r.Entity != null && !r.Entity.IsDestroyed)
-                        player.Teleport(r.Entity.transform.position);
+                    if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+                        player.Teleport(r.NpcPlayer.transform.position);
                     break;
                 }
                 LogIf(_cfg.Logging.LogGui, $"gui tp {player.displayName} {id}", false);

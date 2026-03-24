@@ -1,27 +1,27 @@
 # MaxxInvaders (Rust Oxide / uMod)
 
-Viewer-linked Scientist NPCs for TikFinity / RustMaxx relay events. **Standalone** plugin — does not use RoamingNPCs, PersonalNPC, or `RoamingNPCex`.
+Viewer-linked NPCs for TikFinity / RustMaxx relay events. **1.1.0+** can spawn **RoamingNPCs** bot templates (gather, hunt, roam — same AI as your roaming bots) with the viewer’s display name; if RoamingNPCs is missing or the bridge fails, it **falls back** to vanilla **Scientist** prefabs with light NavMesh steering.
 
-## RoamingNPCs: what we learned vs what we did not copy
+## RoamingNPCs integration (recommended for “real” bot behavior)
 
-**Worth learning (ideas only, reimplemented here):**
+1. Install **RoamingNPCs** (`oxide/plugins/RoamingNPCs.cs`) and configure **Bots settings** in `oxide/config/RoamingNPCs.json`. Each template you reference must exist and have **`"Enable bot?": true`** (see RoamingNPCs `config/README.md`).
+2. In **MaxxInvaders** config, set **`UseRoamingNPCsWhenAvailable`** to `true` (default) and **`DefaultRoamingTemplateKey`** to a valid bot key (example: `bob_resources_farmer`). Optionally set **`RoamingTemplateKey`** per tier to use different personalities per gift tier.
+3. MaxxInvaders calls `SpawnFromTemplateForBridge(templateKey, displayName, viewerId)`, then **teleports** the spawned NPC to the same validated spawn position it uses for scientists. RoamingNPCs owns movement and AI after that; MaxxInvaders only tracks lifecycle, GUI, and hooks.
+4. **Kits** are **not** applied to roaming spawns (the template outfits the bot). Kits still apply to scientist fallback spawns.
+5. Set **`UseRoamingNPCsWhenAvailable`** to `false` if you only want vanilla scientists.
 
-- **Spawn validation:** Prefer navmesh-sampled positions, avoid water, keep distance from players, optionally block monument/safe-zone areas (RoamingNPCs uses overlap checks, `HeightMap`, monument lists).
-- **Registry + lifecycle:** Track spawned entities by stable keys, remove on death/unload, clear invalid references in tick loops.
-- **Separation of concerns:** Config tiers, logging, and entity cleanup are easier to reason about when kept in dedicated helpers (this plugin uses regions + small services).
-- **Combat / AI reality:** Deep NPC personality and custom brains (RoamingNPCs `CustomPet`, state machines, Gen2 AI hooks) are powerful but heavy; MaxxInvaders uses **vanilla Scientist** prefabs and **light NavMesh steering** so behavior stays maintainable.
+## Ideas borrowed from RoamingNPCs (when using scientist fallback)
 
-**Not carried into MaxxInvaders:**
-
-- FrankensteinPet / player prefab hybrid, `CustomPet`, `RoamingNPCex`, bot personality states, mining/hunter/researcher substates, stash systems, or RoamingNPCs’ data file formats.
-- Any dependency on RoamingNPCs hooks or templates.
+- **Spawn validation:** Navmesh-sampled positions, distance from players, optional monument / safe-zone blocks.
+- **Registry + lifecycle:** Stable viewer keys, cleanup on death/unload.
 
 ## Install
 
 1. Copy `plugins/MaxxInvaders/MaxxInvaders.cs` to `oxide/plugins/`.
 2. **Config:** Copy the **full** file [MaxxInvaders.json](./MaxxInvaders.json) to `oxide/config/MaxxInvaders.json` on the server (or let the plugin generate defaults on first load). You do not need to merge partial keys if you use that file as-is.
 3. Grant permissions: `maxxinvaders.admin`, `maxxinvaders.use`, `maxxinvaders.debug`.
-4. Install **Kits** if you use kit names; otherwise leave kits empty and rely on tier defaults.
+4. Install **Kits** if you use kit names on **scientist** spawns; roaming spawns use the RoamingNPCs template loadout.
+5. For RoamingNPCs-driven viewers, install and configure **RoamingNPCs** (see above).
 
 ## RustMaxx relay / API — how to trigger
 
@@ -67,11 +67,15 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 **Fix:** Use **MaxxInvaders 1.0.4+**, or edit `oxide/config/MaxxInvaders.json`: set `DefaultScientistPrefab` to `assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab` and keep `ScientistPrefabFallbacks` (the plugin tries fallbacks automatically). If you still see errors, run `PrefabSniffer` or `debug.lookingat` on a scientist in-game and paste that path into config.
 
-## Behavior modes — limitations (honest)
+## Behavior modes — scientist vs roaming
 
-Rust **Scientist** AI is engine-driven. MaxxInvaders maps modes to **optional prefabs per mode** and **NavMesh destinations** (roam, move toward nearest player, follow admin). It does **not** fully reimplement RoamingNPCs-style combat personalities. For “true” hostile tuning, prefer **prefab variants** (if your build exposes different scientist prefabs) and tier **health** — see `PrefabByBehaviorMode` in config.
+**RoamingNPCs spawns:** Behavior is defined by the **RoamingNPCs bot template** (personality, combat, gathering). MaxxInvaders does not steer or retarget these NPCs.
 
-**Player damage (v1.0.5+):** Only modes **`hostile`** and **`attackplayer`** are allowed to **deal damage to real players**. Other modes (`roaming`, `friendly`, `neutral`, `defend`, `escort`, etc.) have **damage to players cancelled** in a hook — they may still *aim* or play animations, but hits should not hurt you. For killers, use **`hostile`** or **`attackplayer`**. Passive modes also get **stronger wander + steer-away** from nearby players so they move more instead of standing in one spot.
+**Scientist fallback:** Rust **Scientist** AI is engine-driven. MaxxInvaders maps modes to **optional prefabs per mode** and **NavMesh destinations** (roam, move toward nearest player, follow admin).
+
+**Player damage (v1.0.5+ on scientists):** Only modes **`hostile`** and **`attackplayer`** are allowed to **deal damage to real players**. Other modes have **damage to players cancelled** in a hook. RoamingNPCs templates follow their own plugin rules for targeting.
+
+**Passive scientist modes** get stronger wander + steer-away from nearby players so they move more instead of standing in one spot.
 
 ## Data files
 
@@ -86,3 +90,7 @@ Rust **Scientist** AI is engine-driven. MaxxInvaders maps modes to **optional pr
 - [ ] Overlay / RustMaxx web push when spawn fails (cooldown, cap).
 - [ ] Stronger Kits integration (skin args) if your Kits plugin exposes them.
 - [ ] Localization for GUI labels.
+
+## Changelog (high level)
+
+- **1.1.0:** Optional **RoamingNPCs** bridge (`UseRoamingNPCsWhenAvailable`, `DefaultRoamingTemplateKey`, per-tier `RoamingTemplateKey`). Viewer bots use full roaming AI when the bridge succeeds.

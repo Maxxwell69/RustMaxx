@@ -13,6 +13,8 @@
   "BehaviorTickSeconds": 1.5,
   "DespawnOnUnload": true,
   "PersistIntervalSeconds": 60.0,
+  "UseRoamingNPCsWhenAvailable": true,
+  "DefaultRoamingTemplateKey": "bob_resources_farmer",
   "DefaultScientistPrefab": "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
   "ScientistPrefabFallbacks": [
     "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
@@ -51,6 +53,7 @@
     },
     "2": {
       "DisplayName": "Raider",
+      "RoamingTemplateKey": "",
       "Health": 150.0,
       "DefaultKit": "",
       "DefaultBehaviorMode": "hostile",
@@ -69,6 +72,7 @@
     },
     "4": {
       "DisplayName": "Elite",
+      "RoamingTemplateKey": "",
       "Health": 275.0,
       "DefaultKit": "",
       "DefaultBehaviorMode": "attackplayer",
@@ -78,6 +82,7 @@
     },
     "5": {
       "DisplayName": "Boss",
+      "RoamingTemplateKey": "",
       "Health": 400.0,
       "DefaultKit": "",
       "DefaultBehaviorMode": "hostile",
