@@ -1,0 +1,95 @@
+{
+  "EnablePlugin": true,
+  "DebugMode": false,
+  "MaxActiveNPCs": 24,
+  "PreventDuplicateViewerNPCs": true,
+  "DefaultSpawnRadius": 80.0,
+  "MinimumDistanceFromPlayers": 12.0,
+  "BlockSpawnInSafeZones": true,
+  "BlockSpawnInMonuments": true,
+  "DefaultLifetimeSeconds": 3600.0,
+  "PerViewerCooldownSeconds": 30.0,
+  "SpawnAttempts": 36,
+  "BehaviorTickSeconds": 1.5,
+  "DespawnOnUnload": true,
+  "PersistIntervalSeconds": 60.0,
+  "DefaultScientistPrefab": "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
+  "PrefabByBehaviorMode": {
+    "friendly": "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
+    "hostile": "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
+    "neutral": "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
+    "roaming": "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
+    "defend": "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
+    "escort": "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
+    "attackplayer": "assets/prefabs/npc/scientist/scientist/scientistnpc_roam.prefab"
+  },
+  "AllowedBehaviorModes": [
+    "friendly",
+    "hostile",
+    "neutral",
+    "roaming",
+    "defend",
+    "escort",
+    "attackplayer"
+  ],
+  "TierDefinitions": {
+    "1": {
+      "DisplayName": "Scout",
+      "Health": 100.0,
+      "DefaultKit": "",
+      "DefaultBehaviorMode": "roaming",
+      "LifetimeSeconds": 1800.0,
+      "MaxActiveForTier": 8,
+      "AggressionHint": 0.2
+    },
+    "2": {
+      "DisplayName": "Raider",
+      "Health": 150.0,
+      "DefaultKit": "",
+      "DefaultBehaviorMode": "hostile",
+      "LifetimeSeconds": 2400.0,
+      "MaxActiveForTier": 6,
+      "AggressionHint": 0.5
+    },
+    "3": {
+      "DisplayName": "Veteran",
+      "Health": 200.0,
+      "DefaultKit": "",
+      "DefaultBehaviorMode": "attackplayer",
+      "LifetimeSeconds": 3000.0,
+      "MaxActiveForTier": 4,
+      "AggressionHint": 0.75
+    },
+    "4": {
+      "DisplayName": "Elite",
+      "Health": 275.0,
+      "DefaultKit": "",
+      "DefaultBehaviorMode": "attackplayer",
+      "LifetimeSeconds": 3600.0,
+      "MaxActiveForTier": 3,
+      "AggressionHint": 0.9
+    },
+    "5": {
+      "DisplayName": "Boss",
+      "Health": 400.0,
+      "DefaultKit": "",
+      "DefaultBehaviorMode": "hostile",
+      "LifetimeSeconds": 7200.0,
+      "MaxActiveForTier": 2,
+      "AggressionHint": 1.0
+    }
+  },
+  "Gui": {
+    "RowsPerPage": 8,
+    "PanelColor": "0.1 0.1 0.12 0.95",
+    "AccentColor": "0.2 0.75 0.85 0.9"
+  },
+  "Logging": {
+    "LogSpawn": true,
+    "LogCooldown": true,
+    "LogDuplicate": true,
+    "LogKit": true,
+    "LogDeath": true,
+    "LogGui": true
+  }
+}
