@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.4.5")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.4.6")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -9369,5 +9369,6 @@ namespace Oxide.Plugins.RoamingNPCex
         }
     }
 
-    public class OnBotCreatedEvent : UnityEvent<RoamingNPCs.CustomPet> { }
-}  
+    /// <summary>Uses <see cref="FrankensteinPet"/> (not nested <c>RoamingNPCs.CustomPet</c>) so Oxide/uMod resolves the generic for UnityEvent.</summary>
+    public class OnBotCreatedEvent : UnityEvent<FrankensteinPet> { }
+}
