@@ -33,7 +33,7 @@ namespace Oxide.Plugins
         private const string UiName = "MaxxInvaders.AdminUI";
 
         /// <summary>Explicit font avoids missing default text on some Rust CUI builds.</summary>
-        private const string UiFont = "RobotoCondensed-Bold.ttf";
+        private const string UiFont = "robotocondensed-bold.ttf";
 
         private static readonly string[] BuiltinScientistPrefabFallbacks =
         {
