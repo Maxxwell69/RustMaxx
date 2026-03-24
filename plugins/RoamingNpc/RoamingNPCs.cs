@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.4.8")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.4.9")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3325,7 +3325,7 @@ namespace Oxide.Plugins
 
                 bool noWater = !WaterLevel.Test(position, true, true) && Physics.OverlapSphere(position, 10f, LayerMask.GetMask("Water")).Length == 0;
                 bool noMonuments = Physics.OverlapSphere(position, 50f, LayerMask.GetMask("Prevent Building")).Length == 0;
-                bool noCupboards = Physics.OverlapSphere(position, 50f, LayerMask.GetMask("Default", "Construction", "Deployed")).Where((x) => x.ToBaseEntity() is BuildingPrivlidge).Count == 0;
+                bool noCupboards = System.Linq.Enumerable.Count(System.Linq.Enumerable.Where(Physics.OverlapSphere(position, 50f, LayerMask.GetMask("Default", "Construction", "Deployed")), (x) => x.ToBaseEntity() is BuildingPrivlidge)) == 0;
                 bool noPlayers = Physics.OverlapSphere(position, 50f, LayerMask.GetMask("Player (Server)", "Player Movement")).Length == 0;
 
                 bool noIceAndCliffs = true;
@@ -3459,7 +3459,7 @@ namespace Oxide.Plugins
                     case "checkpos":
                         bool noWater = !WaterLevel.Test(admin.transform.position, true, true) && Physics.OverlapSphere(admin.transform.position, 10f, LayerMask.GetMask("Water")).Length == 0;
                         bool noMonuments = Physics.OverlapSphere(admin.transform.position, 50f, LayerMask.GetMask("Prevent Building")).Length == 0;
-                        bool noCupboards = Physics.OverlapSphere(admin.transform.position, 50f, LayerMask.GetMask("Default", "Construction", "Deployed")).Where((x) => x.ToBaseEntity() is BuildingPrivlidge).Count == 0;
+                        bool noCupboards = System.Linq.Enumerable.Count(System.Linq.Enumerable.Where(Physics.OverlapSphere(admin.transform.position, 50f, LayerMask.GetMask("Default", "Construction", "Deployed")), (x) => x.ToBaseEntity() is BuildingPrivlidge)) == 0;
                         bool noPlayers = Physics.OverlapSphere(admin.transform.position, 50f, LayerMask.GetMask("Player (Server)", "Player Movement")).Length == 0;
 
                         admin.ChatMessage($"No Water: {noWater}");
@@ -3857,9 +3857,9 @@ namespace Oxide.Plugins
                         var item = allItems[i];
                         if(item != null)
                         {
-                            var found = Data.Setup.itemsGiveBot.Where(
+                            var found = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(Data.Setup.itemsGiveBot,
                                 (x) => x.ItemConfig.SkinID == item.skin && (x.ItemConfig.shortNameOrId == item.info.shortname || x.ItemConfig.shortNameOrId == item.info.itemid.ToString())
-                            );
+                            ));
                             if (found.Count > 0)
                             {
                                 if(found[0].ItemConfig.enableDropChance && Random.Range(0, 100) >= found[0].ItemConfig.dropChance)
@@ -3882,9 +3882,9 @@ namespace Oxide.Plugins
                                 var item = allItems[i];
                                 if(item != null)
                                 {
-                                    if (Data.DeathItemsBlacklist.Where(
+                                    if (System.Linq.Enumerable.Count(System.Linq.Enumerable.Where(Data.DeathItemsBlacklist,
                                         (x) => x.SkinID == item.skin && (x.shortNameOrId == item.info.shortname || x.shortNameOrId == item.info.itemid.ToString())
-                                    ).Count > 0)
+                                    )) > 0)
                                     {
                                         item.RemoveFromContainer();
                                     }
@@ -7372,7 +7372,7 @@ namespace Oxide.Plugins
                         if(noMonuments)
                         {
                             var ents = Physics.OverlapSphere(positionStash, 10f, BuildingCheckLayers);
-                            noCupboards = ents.Where((x) => x?.ToBaseEntity() is BuildingPrivlidge).Count == 0;
+                            noCupboards = System.Linq.Enumerable.Count(System.Linq.Enumerable.Where(ents, (x) => x?.ToBaseEntity() is BuildingPrivlidge)) == 0;
 
                             if(noCupboards)
                             {
@@ -8029,7 +8029,7 @@ namespace Oxide.Plugins
             public Monuments()
             {
                 if (TerrainMeta.Path.Monuments?.Count > 0) allMonuments.AddRange(TerrainMeta.Path.Monuments);
-                var list = allMonuments.Where(x => x.GetComponentsInChildren<Collider>()?.Exists(y => y.IsOnLayer(Layer.Prevent_Building)) == true);
+                var list = System.Linq.Enumerable.Where(allMonuments, x => x.GetComponentsInChildren<Collider>()?.Exists(y => y.IsOnLayer(Layer.Prevent_Building)) == true);
                 foreach (var monument in list)
                 {
                     foreach (var collider in monument.GetComponentsInChildren<Collider>())
