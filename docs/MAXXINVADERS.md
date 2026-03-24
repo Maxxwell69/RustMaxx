@@ -61,6 +61,12 @@ Interface.Call("RemoveInvader", viewerId);
 
 In the **GUI**, use **Quick: spawn 1 demo NPC** for an instant test, or fill **viewer name**, **viewer id** (unique), **tier**, **mode**, **kit**, then **Spawn using fields below**. After editing a field, press **Enter** or click outside so Rust sends the value. **Reset form** gives a new random demo id.
 
+## “Couldn’t find prefab … scientistnpc_roam”
+
+Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/humannpc/scientist/`. The old path `assets/prefabs/npc/scientist/scientistnpc_roam.prefab` often **does not exist** on current builds.
+
+**Fix:** Use **MaxxInvaders 1.0.4+**, or edit `oxide/config/MaxxInvaders.json`: set `DefaultScientistPrefab` to `assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab` and keep `ScientistPrefabFallbacks` (the plugin tries fallbacks automatically). If you still see errors, run `PrefabSniffer` or `debug.lookingat` on a scientist in-game and paste that path into config.
+
 ## Behavior modes — limitations (honest)
 
 Rust **Scientist** AI is engine-driven. MaxxInvaders maps modes to **optional prefabs per mode** and **NavMesh destinations** (roam, move toward nearest player, follow admin). It does **not** fully reimplement RoamingNPCs-style combat personalities. For “true” hostile tuning, prefer **prefab variants** (if your build exposes different scientist prefabs) and tier **health** — see `PrefabByBehaviorMode` in config.

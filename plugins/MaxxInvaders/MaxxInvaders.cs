@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.0.3")]
+    [Info("MaxxInvaders", "RustMaxx", "1.0.4")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -31,6 +31,15 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[MaxxInvaders]";
         private const string DataFile = "MaxxInvaders/MaxxInvadersData";
         private const string UiName = "MaxxInvaders.AdminUI";
+
+        private static readonly string[] BuiltinScientistPrefabFallbacks =
+        {
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+            "assets/prefabs/npc/scientist/scientist.prefab",
+            "assets/content/npc/scientist/scientist.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
+        };
 
         #endregion
 
@@ -105,18 +114,31 @@ namespace Oxide.Plugins
             public bool DespawnOnUnload { get; set; } = true;
             public float PersistIntervalSeconds { get; set; } = 60f;
 
+            /// <summary>
+            /// Primary prefab; if missing, ScientistPrefabFallbacks is tried in order.
+            /// Old path assets/prefabs/npc/scientist/scientistnpc_roam.prefab — Facepunch moved scientists under rust.ai.
+            /// </summary>
             public string DefaultScientistPrefab { get; set; } =
-                "assets/prefabs/npc/scientist/scientistnpc_roam.prefab";
+                "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab";
+
+            public List<string> ScientistPrefabFallbacks { get; set; } = new()
+            {
+                "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+                "assets/prefabs/npc/scientist/scientist.prefab",
+                "assets/content/npc/scientist/scientist.prefab",
+                "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
+                "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
+            };
 
             public Dictionary<string, string> PrefabByBehaviorMode { get; set; } = new()
             {
-                ["friendly"] = "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
-                ["hostile"] = "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
-                ["neutral"] = "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
-                ["roaming"] = "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
-                ["defend"] = "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
-                ["escort"] = "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
-                ["attackplayer"] = "assets/prefabs/npc/scientist/scientistnpc_roam.prefab",
+                ["friendly"] = "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+                ["hostile"] = "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+                ["neutral"] = "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+                ["roaming"] = "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+                ["defend"] = "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+                ["escort"] = "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+                ["attackplayer"] = "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
             };
 
             public List<string> AllowedBehaviorModes { get; set; } = new()
@@ -368,6 +390,53 @@ namespace Oxide.Plugins
             return _cfg.DefaultScientistPrefab;
         }
 
+        /// <summary>Tries primary prefab then ScientistPrefabFallbacks until CreateEntity returns a ScientistNPC.</summary>
+        private bool TryCreateScientistNpc(
+            string primaryPrefab,
+            Vector3 pos,
+            out ScientistNPC scientist,
+            out BaseEntity createdEnt)
+        {
+            scientist = null;
+            createdEnt = null;
+            var paths = new List<string>();
+            if (!string.IsNullOrWhiteSpace(primaryPrefab))
+                paths.Add(primaryPrefab.Trim());
+            var extra = _cfg.ScientistPrefabFallbacks;
+            if (extra == null || extra.Count == 0)
+                extra = new List<string>(BuiltinScientistPrefabFallbacks);
+            foreach (var fb in extra)
+            {
+                if (string.IsNullOrWhiteSpace(fb)) continue;
+                var t = fb.Trim();
+                if (!paths.Contains(t)) paths.Add(t);
+            }
+
+            foreach (var path in paths)
+            {
+                var ent = GameManager.server.CreateEntity(path, pos, Quaternion.identity, true);
+                if (ent == null) continue;
+                var sci = ent as ScientistNPC;
+                if (sci != null)
+                {
+                    scientist = sci;
+                    createdEnt = ent;
+                    if (_debugRuntime && path != primaryPrefab)
+                        Puts($"{LogPrefix} Used fallback prefab: {path}");
+                    return true;
+                }
+                try
+                {
+                    ent.Kill();
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            }
+            return false;
+        }
+
         private bool IsBehaviorAllowed(string mode)
         {
             if (string.IsNullOrEmpty(mode)) return false;
@@ -432,11 +501,11 @@ namespace Oxide.Plugins
                 return SpawnResult.Fail("spawn_position");
 
             var prefab = ResolvePrefab(mode);
-            var ent = GameManager.server.CreateEntity(prefab, pos, Quaternion.identity, true);
-            var scientist = ent as ScientistNPC;
-            if (scientist == null)
+            if (!TryCreateScientistNpc(prefab, pos, out var scientist, out var ent))
             {
                 ent?.Kill();
+                PrintWarning(
+                    $"{LogPrefix} No scientist prefab worked (primary={prefab}). Check ScientistPrefabFallbacks / Rust update.");
                 return SpawnResult.Fail("prefab_invalid");
             }
 
