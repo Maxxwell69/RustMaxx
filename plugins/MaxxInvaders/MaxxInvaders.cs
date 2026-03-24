@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.7")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.8")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1867,6 +1867,9 @@ namespace Oxide.Plugins
 
         private readonly Dictionary<ulong, int> _guiRoamingKeyPage = new();
 
+        /// <summary>Selected profile slot (0–3) for the spawn form; set via GUI slot buttons or Load.</summary>
+        private readonly Dictionary<ulong, int> _guiActiveProfileSlot = new();
+
         private readonly Dictionary<ulong, SpawnDraft> _spawnDrafts = new();
 
         private const int GuiTabInvaders = 0;
@@ -1897,6 +1900,28 @@ namespace Oxide.Plugins
                 _spawnDrafts[userId] = d;
             }
             return d;
+        }
+
+        /// <summary>Which of the four profile rows is active for the spawn form (-1 = none).</summary>
+        private int ResolveActiveProfileSlot(ulong userId, List<InvaderRecord> profiles, SpawnDraft draft)
+        {
+            if (profiles == null || profiles.Count == 0) return -1;
+            if (_guiActiveProfileSlot.TryGetValue(userId, out var saved))
+            {
+                if (saved < 0) return -1;
+                return saved >= profiles.Count ? profiles.Count - 1 : saved;
+            }
+
+            if (draft != null && !string.IsNullOrWhiteSpace(draft.ViewerId))
+            {
+                for (var i = 0; i < profiles.Count; i++)
+                {
+                    if (string.Equals(profiles[i].ViewerId, draft.ViewerId, StringComparison.OrdinalIgnoreCase))
+                        return i;
+                }
+            }
+
+            return -1;
         }
 
         private int GetGuiPage(ulong userId) =>
@@ -2753,36 +2778,74 @@ namespace Oxide.Plugins
             var profiles = GetRecentProfiles(4);
             if (profiles.Count > 0)
             {
+                var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
                 var pPanel = container.Add(
                     new CuiPanel
                     {
                         Image = { Color = "0.08 0.10 0.14 0.92" },
-                        RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.22" },
+                        RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.26" },
                         CursorEnabled = true,
                     },
                     panel);
                 container.Add(
                     new CuiLabel
                     {
-                        Text = { Text = "Profiles (persistent): load or respawn even after death", FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "0.95 0.98 1 1" },
-                        RectTransform = { AnchorMin = "0.02 0.84", AnchorMax = "0.98 0.98" },
+                        Text = { Text = "Profiles (persistent): pick a slot to fill the spawn form", FontSize = 13, Align = TextAnchor.MiddleLeft, Color = "0.95 0.98 1 1" },
+                        RectTransform = { AnchorMin = "0.02 0.88", AnchorMax = "0.98 0.98" },
                     },
                     pPanel);
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text = { Text = "Active slot (spawn form above)", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = "0.78 0.84 0.92 1" },
+                        RectTransform = { AnchorMin = "0.02 0.805", AnchorMax = "0.55 0.87" },
+                    },
+                    pPanel);
+                for (var si = 0; si < 4; si++)
+                {
+                    var hasSlot = si < profiles.Count;
+                    var isActive = activeSlot == si;
+                    var btnCol = isActive
+                        ? _cfg.Gui.AccentColor
+                        : hasSlot
+                            ? "0.18 0.22 0.30 0.95"
+                            : "0.12 0.12 0.14 0.75";
+                    var label = hasSlot ? $"{si + 1}" : $"{si + 1} —";
+                    var ax1 = (0.02 + si * 0.235).ToString("F4", CultureInfo.InvariantCulture);
+                    var ax2 = (0.02 + si * 0.235 + 0.22).ToString("F4", CultureInfo.InvariantCulture);
+                    container.Add(
+                        new CuiButton
+                        {
+                            Button = { Command = $"maxxinvaders.gui profslot {si}", Color = btnCol },
+                            RectTransform =
+                            {
+                                AnchorMin = $"{ax1} 0.68",
+                                AnchorMax = $"{ax2} 0.795",
+                            },
+                            Text = { Text = label, FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                        },
+                        pPanel);
+                }
 
-                float py = 0.80f;
+                float py = 0.66f;
+                var idx = 0;
                 foreach (var pr in profiles)
                 {
+                    var rowActive = activeSlot == idx;
                     var prow = container.Add(
                         new CuiPanel
                         {
-                            Image = { Color = "0.14 0.18 0.24 0.92" },
-                            RectTransform = { AnchorMin = $"0.02 {py - 0.16f}", AnchorMax = $"0.98 {py}" },
+                            Image =
+                            {
+                                Color = rowActive ? "0.18 0.32 0.48 0.95" : "0.14 0.18 0.24 0.92",
+                            },
+                            RectTransform = { AnchorMin = $"0.02 {py - 0.13f}", AnchorMax = $"0.98 {py}" },
                         },
                         pPanel);
                     container.Add(
                         new CuiLabel
                         {
-                            Text = { Text = $"{pr.ViewerName}  ({pr.ViewerId})", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" },
+                            Text = { Text = $"Slot {idx + 1}:  {pr.ViewerName}  ({pr.ViewerId})", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "1 1 1 1" },
                             RectTransform = { AnchorMin = "0.02 0.52", AnchorMax = "0.66 0.95" },
                         },
                         prow);
@@ -2809,8 +2872,9 @@ namespace Oxide.Plugins
                             Text = { Text = "Respawn", FontSize = 10, Color = "1 1 1 1" },
                         },
                         prow);
-                    py -= 0.19f;
-                    if (py < 0.18f) break;
+                    py -= 0.145f;
+                    idx++;
+                    if (py < 0.12f) break;
                 }
             }
 
@@ -2890,6 +2954,29 @@ namespace Oxide.Plugins
             if (args[0] == "draftreset")
             {
                 _spawnDrafts[player.userID] = new SpawnDraft();
+                _guiActiveProfileSlot.Remove(player.userID);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "profslot" && args.Length > 1 &&
+                int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var profSlot))
+            {
+                profSlot = Mathf.Clamp(profSlot, 0, 3);
+                var profs = GetRecentProfiles(4);
+                if (profSlot >= profs.Count)
+                {
+                    player.ChatMessage(
+                        $"[MaxxInvaders] No profile in slot {profSlot + 1} yet (only {profs.Count} saved).");
+                    OpenGui(player, GetGuiPage(player.userID));
+                    return;
+                }
+
+                _guiActiveProfileSlot[player.userID] = profSlot;
+                var dProf = GetSpawnDraft(player.userID);
+                LoadProfileToDraft(dProf, profs[profSlot]);
+                player.ChatMessage(
+                    $"[MaxxInvaders] Spawn form uses slot {profSlot + 1}: {profs[profSlot].ViewerName}");
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
@@ -3037,6 +3124,15 @@ namespace Oxide.Plugins
                 {
                     var d = GetSpawnDraft(player.userID);
                     LoadProfileToDraft(d, rec);
+                    var profs = GetRecentProfiles(4);
+                    for (var pi = 0; pi < profs.Count; pi++)
+                    {
+                        if (!string.Equals(profs[pi].ViewerId, rec.ViewerId, StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        _guiActiveProfileSlot[player.userID] = pi;
+                        break;
+                    }
+
                     player.ChatMessage($"[MaxxInvaders] Loaded profile for {rec.ViewerName}.");
                 }
                 else
@@ -3058,6 +3154,15 @@ namespace Oxide.Plugins
                 var kit = rec.KitName ?? "";
                 var mode = string.IsNullOrWhiteSpace(rec.Mode) ? "roaming" : rec.Mode.Trim().ToLowerInvariant();
                 var res = TrySpawn(rec.ViewerName, rec.ViewerId, rec.Tier, kit, mode, player, "profile_respawn");
+                var profsR = GetRecentProfiles(4);
+                for (var pi = 0; pi < profsR.Count; pi++)
+                {
+                    if (!string.Equals(profsR[pi].ViewerId, rec.ViewerId, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    _guiActiveProfileSlot[player.userID] = pi;
+                    break;
+                }
+
                 player.ChatMessage(res.Success
                     ? $"[MaxxInvaders] Respawned {rec.ViewerName} ({res.NpcId})"
                     : $"[MaxxInvaders] Respawn failed: {res.Error}");
