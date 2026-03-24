@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.0")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.1")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2341,6 +2341,7 @@ namespace Oxide.Plugins
                         Text = "<b>Spawn Viewer NPC</b>",
                         FontSize = 16,
                         Align = TextAnchor.MiddleLeft,
+                        Color = "0.95 0.97 1 1",
                     },
                     RectTransform = { AnchorMin = "0.03 0.90", AnchorMax = "0.97 0.98" },
                 },
@@ -2365,7 +2366,7 @@ namespace Oxide.Plugins
                 {
                     Button = { Command = "maxxinvaders.gui quickdemo", Color = "0.18 0.55 0.40 0.95" },
                     RectTransform = { AnchorMin = "0.03 0.74", AnchorMax = "0.48 0.82" },
-                    Text = { Text = "Quick Spawn", FontSize = 13 },
+                    Text = { Text = "Quick Spawn", FontSize = 13, Color = "0.95 0.97 1 1" },
                 },
                 spawnCard);
 
@@ -2374,14 +2375,14 @@ namespace Oxide.Plugins
                 {
                     Button = { Command = "maxxinvaders.gui spawnfields", Color = "0.22 0.42 0.62 0.95" },
                     RectTransform = { AnchorMin = "0.52 0.74", AnchorMax = "0.97 0.82" },
-                    Text = { Text = "Spawn From Form", FontSize = 13 },
+                    Text = { Text = "Spawn From Form", FontSize = 13, Color = "0.95 0.97 1 1" },
                 },
                 spawnCard);
 
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Viewer Name", FontSize = 12, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Viewer Name", FontSize = 12, Align = TextAnchor.LowerLeft, Color = "0.9 0.93 0.98 1" },
                     RectTransform = { AnchorMin = "0.03 0.66", AnchorMax = "0.45 0.72" },
                 },
                 spawnCard);
@@ -2411,7 +2412,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Viewer ID (unique)", FontSize = 12, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Viewer ID (unique)", FontSize = 12, Align = TextAnchor.LowerLeft, Color = "0.9 0.93 0.98 1" },
                     RectTransform = { AnchorMin = "0.03 0.48", AnchorMax = "0.45 0.54" },
                 },
                 spawnCard);
@@ -2441,7 +2442,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Tier", FontSize = 12, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Tier", FontSize = 12, Align = TextAnchor.LowerLeft, Color = "0.9 0.93 0.98 1" },
                     RectTransform = { AnchorMin = "0.03 0.30", AnchorMax = "0.14 0.36" },
                 },
                 spawnCard);
@@ -2471,7 +2472,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Mode", FontSize = 12, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Mode", FontSize = 12, Align = TextAnchor.LowerLeft, Color = "0.9 0.93 0.98 1" },
                     RectTransform = { AnchorMin = "0.17 0.30", AnchorMax = "0.42 0.36" },
                 },
                 spawnCard);
@@ -2501,7 +2502,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Kit (optional)", FontSize = 12, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Kit (optional)", FontSize = 12, Align = TextAnchor.LowerLeft, Color = "0.9 0.93 0.98 1" },
                     RectTransform = { AnchorMin = "0.45 0.30", AnchorMax = "0.97 0.36" },
                 },
                 spawnCard);
@@ -2533,14 +2534,14 @@ namespace Oxide.Plugins
                 {
                     Button = { Command = "maxxinvaders.gui draftreset", Color = "0.28 0.28 0.33 0.95" },
                     RectTransform = { AnchorMin = "0.03 0.08", AnchorMax = "0.42 0.16" },
-                    Text = { Text = "Reset Form", FontSize = 12 },
+                    Text = { Text = "Reset Form", FontSize = 12, Color = "0.95 0.97 1 1" },
                 },
                 spawnCard);
 
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "<b>Rename Active NPC</b>", FontSize = 16, Align = TextAnchor.MiddleLeft },
+                    Text = { Text = "<b>Rename Active NPC</b>", FontSize = 16, Align = TextAnchor.MiddleLeft, Color = "0.95 0.97 1 1" },
                     RectTransform = { AnchorMin = "0.05 0.90", AnchorMax = "0.95 0.98" },
                 },
                 renameCard);
@@ -2562,7 +2563,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "Target", FontSize = 12, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "Target", FontSize = 12, Align = TextAnchor.LowerLeft, Color = "0.9 0.93 0.98 1" },
                     RectTransform = { AnchorMin = "0.05 0.70", AnchorMax = "0.4 0.76" },
                 },
                 renameCard);
@@ -2592,7 +2593,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "New Name", FontSize = 12, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "New Name", FontSize = 12, Align = TextAnchor.LowerLeft, Color = "0.9 0.93 0.98 1" },
                     RectTransform = { AnchorMin = "0.05 0.46", AnchorMax = "0.4 0.52" },
                 },
                 renameCard);
@@ -2624,7 +2625,7 @@ namespace Oxide.Plugins
                 {
                     Button = { Command = "maxxinvaders.gui renameapply", Color = "0.24 0.45 0.62 0.95" },
                     RectTransform = { AnchorMin = "0.05 0.22", AnchorMax = "0.95 0.30" },
-                    Text = { Text = "Apply Rename", FontSize = 13 },
+                    Text = { Text = "Apply Rename", FontSize = 13, Color = "0.95 0.97 1 1" },
                 },
                 renameCard);
 
@@ -2652,6 +2653,7 @@ namespace Oxide.Plugins
                                 $"{r.NpcId}  {r.ViewerName}  ({r.ViewerId})  T{r.Tier}  {(r.IsRoamingNpc ? "RoamingNPCs" : "Scientist")}  {r.Mode}  HP:{hp:F0}  {age:F1}m",
                             FontSize = 11,
                             Align = TextAnchor.MiddleLeft,
+                            Color = "0.92 0.95 1 1",
                         },
                         RectTransform = { AnchorMin = "0.02 0", AnchorMax = "0.72 1" },
                     },
@@ -2662,7 +2664,7 @@ namespace Oxide.Plugins
                     {
                         Button = { Command = $"maxxinvaders.gui tp {r.NpcId}", Color = _cfg.Gui.AccentColor },
                         RectTransform = { AnchorMin = "0.69 0.15", AnchorMax = "0.75 0.85" },
-                        Text = { Text = "TP", FontSize = 10 },
+                        Text = { Text = "TP", FontSize = 10, Color = "0.95 0.97 1 1" },
                     },
                     row);
 
@@ -2671,7 +2673,7 @@ namespace Oxide.Plugins
                     {
                         Button = { Command = $"maxxinvaders.gui renametarget {r.NpcId}", Color = "0.25 0.45 0.55 0.95" },
                         RectTransform = { AnchorMin = "0.76 0.15", AnchorMax = "0.84 0.85" },
-                        Text = { Text = "Use", FontSize = 9 },
+                        Text = { Text = "Use", FontSize = 9, Color = "0.95 0.97 1 1" },
                     },
                     row);
 
@@ -2680,7 +2682,7 @@ namespace Oxide.Plugins
                     {
                         Button = { Command = $"maxxinvaders.gui renamename {r.NpcId}", Color = "0.22 0.35 0.5 0.95" },
                         RectTransform = { AnchorMin = "0.85 0.15", AnchorMax = "0.92 0.85" },
-                        Text = { Text = "Name", FontSize = 8 },
+                        Text = { Text = "Name", FontSize = 8, Color = "0.95 0.97 1 1" },
                     },
                     row);
 
