@@ -115,6 +115,7 @@ namespace Oxide.Plugins
             public bool PreventDuplicateViewerNPCs { get; set; } = true;
             public float MinimumSpawnRadiusFromAnchor { get; set; } = 20f;
             public float DefaultSpawnRadius { get; set; } = 80f;
+            public float MaxDistanceFromAnchor { get; set; } = 140f;
             public float MinimumDistanceFromPlayers { get; set; } = 12f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
             public bool BlockSpawnInMonuments { get; set; } = true;
@@ -421,6 +422,7 @@ namespace Oxide.Plugins
             /// <summary>ScientistNPC or RoamingNPCs CustomPet (BasePlayer).</summary>
             public BasePlayer NpcPlayer;
             public bool IsRoamingNpc;
+            public Vector3 AnchorPosition;
             public DateTime SpawnedAtUtc;
             public DateTime? ExpiresAtUtc;
         }
@@ -823,6 +825,7 @@ namespace Oxide.Plugins
                 EntityId = netId,
                 NpcPlayer = npcPlayer,
                 IsRoamingNpc = isRoaming,
+                AnchorPosition = pos,
                 SpawnedAtUtc = DateTime.UtcNow,
                 ExpiresAtUtc = lifetime > 0 ? DateTime.UtcNow.AddSeconds(lifetime) : null,
             };
@@ -1043,6 +1046,29 @@ namespace Oxide.Plugins
                 r.NpcPlayer.health = Mathf.Clamp(r.NpcPlayer.health, 0f, r.NpcPlayer.MaxHealth());
                 var pos = r.NpcPlayer.transform.position;
                 UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
+
+                // Keep NPCs inside streamer-centered radius (anchor set at spawn point).
+                if (_cfg.MaxDistanceFromAnchor > 5f)
+                {
+                    var anchor = r.AnchorPosition;
+                    if (anchor != Vector3.zero && Vector3.Distance(pos, anchor) > _cfg.MaxDistanceFromAnchor)
+                    {
+                        var back = anchor + Random.insideUnitSphere.Flatten() * Mathf.Min(12f, _cfg.MaxDistanceFromAnchor * 0.2f);
+                        back.y = TerrainMeta.HeightMap.GetHeight(back);
+                        if (ResolveNavMeshPosition(back, out var onMesh))
+                            back = onMesh;
+                        try
+                        {
+                            r.NpcPlayer.Teleport(back);
+                        }
+                        catch
+                        {
+                            /* ignored */
+                        }
+                        pos = r.NpcPlayer.transform.position;
+                        UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
+                    }
+                }
 
                 if (r.IsRoamingNpc)
                     continue;
@@ -1844,6 +1870,14 @@ namespace Oxide.Plugins
                     }
 
                     break;
+                case nameof(InvaderConfig.MaxDistanceFromAnchor):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var leash))
+                    {
+                        _cfg.MaxDistanceFromAnchor = Mathf.Clamp(leash, 0f, 1000f);
+                        SaveConfig();
+                    }
+
+                    break;
                 case nameof(InvaderConfig.MinimumSpawnRadiusFromAnchor):
                     if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var minr))
                     {
@@ -1879,7 +1913,7 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiLabel
                     {
-                        Text = { Text = text, FontSize = 8, Align = TextAnchor.MiddleLeft },
+                        Text = { Text = text, FontSize = 10, Align = TextAnchor.MiddleLeft },
                         RectTransform = { AnchorMin = $"0.03 {y - h}", AnchorMax = $"0.97 {y}" },
                     },
                     panel);
@@ -1892,7 +1926,7 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiLabel
                     {
-                        Text = { Text = $"{label}: <b>{on}</b>", FontSize = 8, Align = TextAnchor.MiddleLeft },
+                        Text = { Text = $"{label}: <b>{on}</b>", FontSize = 10, Align = TextAnchor.MiddleLeft },
                         RectTransform = { AnchorMin = $"0.03 {y - 0.032f}", AnchorMax = $"0.72 {y}" },
                     },
                     panel);
@@ -1901,19 +1935,15 @@ namespace Oxide.Plugins
                     {
                         Button = { Command = $"maxxinvaders.gui cfgtoggle {fieldName}", Color = "0.2 0.45 0.35 0.95" },
                         RectTransform = { AnchorMin = $"0.73 {y - 0.032f}", AnchorMax = $"0.97 {y}" },
-                        Text = { Text = "Toggle", FontSize = 8 },
+                        Text = { Text = "Toggle", FontSize = 10 },
                     },
                     panel);
                 y -= 0.044f;
             }
 
             RowLabel("<b>MaxxInvaders</b> — changes write oxide/config/MaxxInvaders.json", 0.038f);
-            RowToggle("EnablePlugin", _cfg.EnablePlugin, nameof(InvaderConfig.EnablePlugin));
-            RowToggle("DebugMode", _cfg.DebugMode, nameof(InvaderConfig.DebugMode));
             RowToggle("UseRoamingNPCsWhenAvailable", _cfg.UseRoamingNPCsWhenAvailable,
                 nameof(InvaderConfig.UseRoamingNPCsWhenAvailable));
-            RowToggle("ScientistFallbackEnabled", _cfg.ScientistFallbackEnabled,
-                nameof(InvaderConfig.ScientistFallbackEnabled));
             RowToggle("PreventDuplicateViewerNPCs", _cfg.PreventDuplicateViewerNPCs,
                 nameof(InvaderConfig.PreventDuplicateViewerNPCs));
             RowToggle("BlockSpawnInSafeZones", _cfg.BlockSpawnInSafeZones, nameof(InvaderConfig.BlockSpawnInSafeZones));
@@ -1924,7 +1954,7 @@ namespace Oxide.Plugins
             container.Add(
                 new CuiLabel
                 {
-                    Text = { Text = "DefaultRoamingTemplateKey", FontSize = 7, Align = TextAnchor.LowerLeft },
+                    Text = { Text = "DefaultRoamingTemplateKey", FontSize = 9, Align = TextAnchor.LowerLeft },
                     RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
                 },
                 panel);
@@ -1941,7 +1971,7 @@ namespace Oxide.Plugins
                             Align = TextAnchor.MiddleLeft,
                             CharsLimit = 64,
                             Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultRoamingTemplateKey)} ",
-                            FontSize = 10,
+                            FontSize = 12,
                             IsPassword = false,
                             Text = _cfg.DefaultRoamingTemplateKey ?? "",
                             NeedsKeyboard = true,
@@ -1956,7 +1986,7 @@ namespace Oxide.Plugins
                 container.Add(
                     new CuiLabel
                     {
-                        Text = { Text = label, FontSize = 7, Align = TextAnchor.LowerLeft },
+                        Text = { Text = label, FontSize = 9, Align = TextAnchor.LowerLeft },
                         RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
                     },
                     panel);
@@ -1973,7 +2003,7 @@ namespace Oxide.Plugins
                                 Align = TextAnchor.MiddleLeft,
                                 CharsLimit = 16,
                                 Command = $"maxxinvaders.gui cfgnum {field} ",
-                                FontSize = 10,
+                                FontSize = 12,
                                 IsPassword = false,
                                 Text = display,
                                 NeedsKeyboard = true,
@@ -1989,6 +2019,8 @@ namespace Oxide.Plugins
                 _cfg.MinimumSpawnRadiusFromAnchor.ToString(CultureInfo.InvariantCulture));
             RowNum("DefaultSpawnRadius", nameof(InvaderConfig.DefaultSpawnRadius),
                 _cfg.DefaultSpawnRadius.ToString(CultureInfo.InvariantCulture));
+            RowNum("MaxDistanceFromAnchor", nameof(InvaderConfig.MaxDistanceFromAnchor),
+                _cfg.MaxDistanceFromAnchor.ToString(CultureInfo.InvariantCulture));
             RowNum("MinimumDistanceFromPlayers", nameof(InvaderConfig.MinimumDistanceFromPlayers),
                 _cfg.MinimumDistanceFromPlayers.ToString(CultureInfo.InvariantCulture));
             RowNum("SpawnAttempts", nameof(InvaderConfig.SpawnAttempts), _cfg.SpawnAttempts.ToString());

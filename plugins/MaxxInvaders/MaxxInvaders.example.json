@@ -6,6 +6,7 @@
   "DefaultRoamingTemplateKey": "bob_resources_farmer",
   "MinimumSpawnRadiusFromAnchor": 20.0,
   "DefaultSpawnRadius": 80.0,
+  "MaxDistanceFromAnchor": 140.0,
   "PerViewerCooldownSeconds": 30.0,
   "AllowedBehaviorModes": [
     "roaming",
