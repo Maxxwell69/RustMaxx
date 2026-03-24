@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.4")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.5")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -144,6 +144,15 @@ namespace Oxide.Plugins
 
             /// <summary>Template key under RoamingNPCs config "Bots settings" when tier has no RoamingTemplateKey.</summary>
             public string DefaultRoamingTemplateKey { get; set; } = "bob_resources_farmer";
+
+            /// <summary>
+            /// When set, RoamingNPCs bot key for viewer-driven spawns (TikFinity/API, RCON <c>maxxinvaders.spawn</c>, chat,
+            /// profile respawn). Empty falls back to per-tier <see cref="TierDefinition.RoamingTemplateKey"/> and
+            /// <see cref="DefaultRoamingTemplateKey"/>. GUI spawns use <see cref="GuiSettings.SpawnRoamingTemplateKeys"/> slots.
+            /// </summary>
+            public string ViewerRoamingTemplateKey { get; set; } = "";
+
+            public bool ShouldSerializeViewerRoamingTemplateKey() => !string.IsNullOrWhiteSpace(ViewerRoamingTemplateKey);
 
             /// <summary>
             /// Primary prefab; if missing, ScientistPrefabFallbacks is tried in order.
@@ -548,6 +557,22 @@ namespace Oxide.Plugins
             return "bob_resources_farmer";
         }
 
+        /// <summary>Viewer/API/RCON/chat/profile use ViewerRoamingTemplateKey when set; GUI passes an explicit override.</summary>
+        private static bool IsViewerPipelineSpawnSource(string source)
+        {
+            if (string.IsNullOrEmpty(source)) return false;
+            return source is "api" or "console" or "chat" or "profile_respawn";
+        }
+
+        private string ResolveRoamingTemplateForSpawn(string roamingTemplateOverride, TierDefinition tierDef, string source)
+        {
+            if (!string.IsNullOrWhiteSpace(roamingTemplateOverride))
+                return roamingTemplateOverride.Trim();
+            if (!string.IsNullOrWhiteSpace(_cfg.ViewerRoamingTemplateKey) && IsViewerPipelineSpawnSource(source))
+                return _cfg.ViewerRoamingTemplateKey.Trim();
+            return ResolveRoamingTemplateKey(tierDef);
+        }
+
         /// <summary>Normalize return from RoamingNPCs.Call (not always a string reference from uMod).</summary>
         private static string NormalizeBridgeCallResult(object raw)
         {
@@ -666,9 +691,7 @@ namespace Oxide.Plugins
 
             BasePlayer npcPlayer = null;
             var isRoaming = false;
-            var roamingTemplate = string.IsNullOrWhiteSpace(roamingTemplateOverride)
-                ? ResolveRoamingTemplateKey(tierDef)
-                : roamingTemplateOverride.Trim();
+            var roamingTemplate = ResolveRoamingTemplateForSpawn(roamingTemplateOverride, tierDef, source);
 
             if (_cfg.UseRoamingNPCsWhenAvailable && RoamingNPCs != null && RoamingNPCs.IsLoaded &&
                 !string.IsNullOrEmpty(roamingTemplate))
@@ -2167,6 +2190,11 @@ namespace Oxide.Plugins
                 _cfg.DefaultRoamingTemplateKey = value;
                 SaveConfig();
             }
+            else if (field == nameof(InvaderConfig.ViewerRoamingTemplateKey))
+            {
+                _cfg.ViewerRoamingTemplateKey = value;
+                SaveConfig();
+            }
         }
 
         private void ApplyGuiCfgNum(string field, string valueRaw)
@@ -2316,6 +2344,41 @@ namespace Oxide.Plugins
                             FontSize = 12,
                             IsPassword = false,
                             Text = _cfg.DefaultRoamingTemplateKey ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
+                    },
+                });
+            y -= 0.048f;
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = "ViewerRoamingTemplateKey (API/RCON/chat; empty = tier + default)",
+                        FontSize = 9,
+                        Align = TextAnchor.LowerLeft,
+                    },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
+                },
+                panel);
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = panel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 64,
+                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.ViewerRoamingTemplateKey)} ",
+                            FontSize = 12,
+                            IsPassword = false,
+                            Text = _cfg.ViewerRoamingTemplateKey ?? "",
                             NeedsKeyboard = true,
                         },
                         new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
