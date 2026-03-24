@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.4.9")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.0")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2964,7 +2964,7 @@ namespace Oxide.Plugins
         }
 
         public List<CustomPet> GetBotsInRadius(Vector3 position, float radius) =>
-            System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(listNpcPlayers.Values, x => x != null ? (!x.IsDestroyed && Vector3.Distance(x.transform.position, position) <= radius) : false));
+            listNpcPlayers.Values.Where(x => x != null ? (!x.IsDestroyed && Vector3.Distance(x.transform.position, position) <= radius) : false).ToList();
 
         public void KillBotsUnload()
         {
@@ -3325,7 +3325,7 @@ namespace Oxide.Plugins
 
                 bool noWater = !WaterLevel.Test(position, true, true) && Physics.OverlapSphere(position, 10f, LayerMask.GetMask("Water")).Length == 0;
                 bool noMonuments = Physics.OverlapSphere(position, 50f, LayerMask.GetMask("Prevent Building")).Length == 0;
-                bool noCupboards = System.Linq.Enumerable.Count(System.Linq.Enumerable.Where(Physics.OverlapSphere(position, 50f, LayerMask.GetMask("Default", "Construction", "Deployed")), (x) => x.ToBaseEntity() is BuildingPrivlidge)) == 0;
+                bool noCupboards = Physics.OverlapSphere(position, 50f, LayerMask.GetMask("Default", "Construction", "Deployed")).Where((x) => x.ToBaseEntity() is BuildingPrivlidge).Count() == 0;
                 bool noPlayers = Physics.OverlapSphere(position, 50f, LayerMask.GetMask("Player (Server)", "Player Movement")).Length == 0;
 
                 bool noIceAndCliffs = true;
@@ -3459,7 +3459,7 @@ namespace Oxide.Plugins
                     case "checkpos":
                         bool noWater = !WaterLevel.Test(admin.transform.position, true, true) && Physics.OverlapSphere(admin.transform.position, 10f, LayerMask.GetMask("Water")).Length == 0;
                         bool noMonuments = Physics.OverlapSphere(admin.transform.position, 50f, LayerMask.GetMask("Prevent Building")).Length == 0;
-                        bool noCupboards = System.Linq.Enumerable.Count(System.Linq.Enumerable.Where(Physics.OverlapSphere(admin.transform.position, 50f, LayerMask.GetMask("Default", "Construction", "Deployed")), (x) => x.ToBaseEntity() is BuildingPrivlidge)) == 0;
+                        bool noCupboards = Physics.OverlapSphere(admin.transform.position, 50f, LayerMask.GetMask("Default", "Construction", "Deployed")).Where((x) => x.ToBaseEntity() is BuildingPrivlidge).Count() == 0;
                         bool noPlayers = Physics.OverlapSphere(admin.transform.position, 50f, LayerMask.GetMask("Player (Server)", "Player Movement")).Length == 0;
 
                         admin.ChatMessage($"No Water: {noWater}");
@@ -3857,9 +3857,9 @@ namespace Oxide.Plugins
                         var item = allItems[i];
                         if(item != null)
                         {
-                            var found = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(Data.Setup.itemsGiveBot,
+                            var found = Data.Setup.itemsGiveBot.Where(
                                 (x) => x.ItemConfig.SkinID == item.skin && (x.ItemConfig.shortNameOrId == item.info.shortname || x.ItemConfig.shortNameOrId == item.info.itemid.ToString())
-                            ));
+                            ).ToList();
                             if (found.Count > 0)
                             {
                                 if(found[0].ItemConfig.enableDropChance && Random.Range(0, 100) >= found[0].ItemConfig.dropChance)
@@ -3882,9 +3882,9 @@ namespace Oxide.Plugins
                                 var item = allItems[i];
                                 if(item != null)
                                 {
-                                    if (System.Linq.Enumerable.Count(System.Linq.Enumerable.Where(Data.DeathItemsBlacklist,
+                                    if (Data.DeathItemsBlacklist.Where(
                                         (x) => x.SkinID == item.skin && (x.shortNameOrId == item.info.shortname || x.shortNameOrId == item.info.itemid.ToString())
-                                    )) > 0)
+                                    ).Count() > 0)
                                     {
                                         item.RemoveFromContainer();
                                     }
@@ -7372,7 +7372,7 @@ namespace Oxide.Plugins
                         if(noMonuments)
                         {
                             var ents = Physics.OverlapSphere(positionStash, 10f, BuildingCheckLayers);
-                            noCupboards = System.Linq.Enumerable.Count(System.Linq.Enumerable.Where(ents, (x) => x?.ToBaseEntity() is BuildingPrivlidge)) == 0;
+                            noCupboards = ents.Where((x) => x?.ToBaseEntity() is BuildingPrivlidge).Count() == 0;
 
                             if(noCupboards)
                             {
@@ -8029,7 +8029,7 @@ namespace Oxide.Plugins
             public Monuments()
             {
                 if (TerrainMeta.Path.Monuments?.Count > 0) allMonuments.AddRange(TerrainMeta.Path.Monuments);
-                var list = System.Linq.Enumerable.Where(allMonuments, x => x.GetComponentsInChildren<Collider>()?.Exists(y => y.IsOnLayer(Layer.Prevent_Building)) == true);
+                var list = allMonuments.Where(x => x.GetComponentsInChildren<Collider>()?.Exists(y => y.IsOnLayer(Layer.Prevent_Building)) == true);
                 foreach (var monument in list)
                 {
                     foreach (var collider in monument.GetComponentsInChildren<Collider>())
@@ -9093,28 +9093,7 @@ namespace Oxide.Plugins.RoamingNPCex
             ;
             return result;
         }
-        public static List<TSource> Where<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
-        {
-            List<TSource> result = new List<TSource>();
-            using (var enumerator = source.GetEnumerator()) while (enumerator.MoveNext()) if (predicate(enumerator.Current)) result.Add(enumerator.Current);
-            return result;
-        }
-        public static int Count<TSource>(this IEnumerable<TSource> source)
-        {
-            if (source == null)
-            {
-                throw Error.ArgumentNull("source");
-            }
-
-            int num = 0;
-            using IEnumerator<TSource> enumerator = source.GetEnumerator();
-            while (enumerator.MoveNext())
-            {
-                num = checked(num + 1);
-            }
-
-            return num;
-        }
+        // Where/Count removed: they duplicated System.Linq.Enumerable and confused the Oxide compiler (ambiguous calls).
         public static IEnumerable<TResult> OfType<TResult>(this IEnumerable source)
         {
             if (source == null)
