@@ -14,11 +14,12 @@ using Oxide.Game.Rust.Cui;
 using Rust;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.UI;
 using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.4.8")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.0")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -258,6 +259,15 @@ namespace Oxide.Plugins
             public int RowsPerPage { get; set; } = 8;
             public string PanelColor { get; set; } = "0.1 0.1 0.12 0.95";
             public string AccentColor { get; set; } = "0.2 0.75 0.85 0.9";
+
+            /// <summary>Four RoamingNPCs.json bot keys for the Invaders spawn form selector (slots 1–4).</summary>
+            public List<string> SpawnRoamingTemplateKeys { get; set; } = new()
+            {
+                "bob_resources_farmer",
+                "john_looter",
+                "alfred_hunter",
+                "austin_fighter",
+            };
         }
 
         private class LoggingSettings
@@ -310,6 +320,13 @@ namespace Oxide.Plugins
                 _cfg.ScientistPrefabFallbacks = new List<string>(d.ScientistPrefabFallbacks);
             if (_cfg.PrefabByBehaviorMode == null || _cfg.PrefabByBehaviorMode.Count == 0)
                 _cfg.PrefabByBehaviorMode = new Dictionary<string, string>(d.PrefabByBehaviorMode);
+            if (_cfg.Gui.SpawnRoamingTemplateKeys == null || _cfg.Gui.SpawnRoamingTemplateKeys.Count == 0)
+                _cfg.Gui.SpawnRoamingTemplateKeys = new List<string>(d.Gui.SpawnRoamingTemplateKeys);
+            while (_cfg.Gui.SpawnRoamingTemplateKeys.Count < 4)
+                _cfg.Gui.SpawnRoamingTemplateKeys.Add(
+                    string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey)
+                        ? "bob_resources_farmer"
+                        : _cfg.DefaultRoamingTemplateKey.Trim());
         }
 
         private void SaveConfig() => Config.WriteObject(_cfg, true);
@@ -2038,6 +2055,9 @@ namespace Oxide.Plugins
 
         private sealed class SpawnDraft
         {
+            /// <summary>In-game bot display name for spawn; empty uses <see cref="ViewerName"/>.</summary>
+            public string BotName = "";
+
             public string ViewerName = "DemoViewer";
             public string ViewerId;
             public string TierStr = "1";
@@ -2045,6 +2065,9 @@ namespace Oxide.Plugins
             public string Mode = "roaming";
             public string RenameTarget = "";
             public string RenameName = "";
+
+            /// <summary>0–3: index into <see cref="GuiSettings.SpawnRoamingTemplateKeys"/>.</summary>
+            public int RoamingTemplateSlot;
 
             public SpawnDraft()
             {
@@ -2543,6 +2566,179 @@ namespace Oxide.Plugins
                 panel);
         }
 
+        private string ResolveSpawnTemplateKeyFromDraft(SpawnDraft d)
+        {
+            var fallback = string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey)
+                ? "bob_resources_farmer"
+                : _cfg.DefaultRoamingTemplateKey.Trim();
+            var keys = _cfg.Gui?.SpawnRoamingTemplateKeys;
+            if (keys == null || keys.Count == 0)
+                return fallback;
+            var i = Mathf.Clamp(d?.RoamingTemplateSlot ?? 0, 0, 3);
+            while (keys.Count <= i)
+                keys.Add(fallback);
+            var k = keys[i]?.Trim();
+            return string.IsNullOrEmpty(k) ? fallback : k;
+        }
+
+        private static string ShortTemplateKeyLabel(string key, int maxLen = 11)
+        {
+            if (string.IsNullOrEmpty(key)) return "?";
+            key = key.Trim();
+            return key.Length <= maxLen ? key : key.Substring(0, maxLen);
+        }
+
+        private void AddScrollableInvadersBotList(
+            CuiElementContainer container,
+            string scrollHostParent,
+            IReadOnlyList<InvaderRuntime> bots)
+        {
+            const int rowH = 44;
+            const string uiCard = "0.12 0.12 0.15 0.94";
+            const string uiGreen = "0.18 0.48 0.28 0.95";
+            var n = bots.Count;
+            var contentH = Mathf.Max(rowH * Mathf.Max(n, 1) + 8, rowH + 8);
+            var panelSize = -contentH;
+
+            var scrollerName = Guid.NewGuid().ToString("N");
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = scrollerName,
+                    Parent = scrollHostParent,
+                    Components =
+                    {
+                        new CuiNeedsCursorComponent(),
+                        new CuiImageComponent
+                        {
+                            Color = "0.08 0.08 0.11 0.95",
+                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                            ImageType = Image.Type.Tiled,
+                        },
+                        new CuiScrollViewComponent
+                        {
+                            ContentTransform = new CuiRectTransform
+                            {
+                                AnchorMin = "0 0.98",
+                                AnchorMax = "1 0.98",
+                                OffsetMin = $"0 {panelSize}",
+                                OffsetMax = "0 0",
+                            },
+                            Vertical = true,
+                            Horizontal = false,
+                            MovementType = ScrollRect.MovementType.Clamped,
+                            Elasticity = 0.25f,
+                            Inertia = true,
+                            DecelerationRate = 0.3f,
+                            ScrollSensitivity = 24f,
+                            VerticalScrollbar = new CuiScrollbar { AutoHide = true, Size = 20 },
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    },
+                });
+
+            if (n == 0)
+            {
+                AddCuiText(
+                    container,
+                    scrollerName,
+                    "No active bots.\nUse Spawn from form below or TikFinity.",
+                    "0.05 0.45",
+                    "0.95 0.92",
+                    14,
+                    TextAnchor.MiddleCenter,
+                    "0.8 0.85 0.92 1");
+                return;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var r = bots[i];
+                var offsetMin = -i * rowH - rowH;
+                var offsetMax = -i * rowH;
+                var rowName = Guid.NewGuid().ToString("N");
+                AddRawCuiElement(
+                    container,
+                    new CuiElement
+                    {
+                        Name = rowName,
+                        Parent = scrollerName,
+                        Components =
+                        {
+                            new CuiImageComponent
+                            {
+                                Color = uiCard,
+                                Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                                ImageType = Image.Type.Tiled,
+                            },
+                            new CuiRectTransformComponent
+                            {
+                                AnchorMin = "0 0.998",
+                                AnchorMax = "1 0.998",
+                                OffsetMin = $"0 {offsetMin}",
+                                OffsetMax = $"0 {offsetMax}",
+                            },
+                        },
+                    });
+
+                var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
+                var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(r.ViewerName) ? "?" : r.ViewerName.Trim());
+                var tmpl = r.IsRoamingNpc
+                    ? StripCuiMarkup(r.RoamingTemplateKey ?? _cfg.DefaultRoamingTemplateKey ?? "")
+                    : "(scientist)";
+                var line1 = $"{nm}  {StripCuiMarkup(r.NpcId)}";
+                var line2 =
+                    $"T{r.Tier}  {r.Mode}  HP {hp:F0}  {(r.IsRoamingNpc ? "Roam" : "Sci")}  {tmpl}";
+                AddCuiText(
+                    container,
+                    rowName,
+                    line1 + "\n" + line2,
+                    "0.02 0.18",
+                    "0.55 0.92",
+                    11,
+                    TextAnchor.UpperLeft,
+                    "1 1 1 1");
+
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui tp {r.NpcId}",
+                    _cfg.Gui.AccentColor,
+                    "TP",
+                    "0.56 0.15",
+                    "0.66 0.88",
+                    10);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui returnrun {r.NpcId}",
+                    uiGreen,
+                    "RET",
+                    "0.665 0.15",
+                    "0.76 0.88",
+                    9);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui kill {r.NpcId}",
+                    "0.45 0.12 0.12 0.95",
+                    "KILL",
+                    "0.77 0.15",
+                    "0.855 0.88",
+                    9);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui despawn {r.NpcId}",
+                    "0.35 0.32 0.15 0.95",
+                    "DESPAWN",
+                    "0.86 0.15",
+                    "0.99 0.88",
+                    7);
+            }
+        }
+
         private void OpenGui(BasePlayer player, int page)
         {
             if (player == null) return;
@@ -2550,11 +2746,7 @@ namespace Oxide.Plugins
             _guiPage[player.userID] = page;
             if (!_guiMainTab.TryGetValue(player.userID, out var mainTab)) mainTab = 0;
 
-            var rows = mainTab == GuiTabInvaders ? Mathf.Min(_cfg.Gui.RowsPerPage, 5) : _cfg.Gui.RowsPerPage;
             var list = _registry.All().ToList();
-            var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (float)rows));
-            page = Mathf.Clamp(page, 0, totalPages - 1);
-            var slice = list.Skip(page * rows).Take(rows).ToList();
 
             var container = new CuiElementContainer();
             var panel = container.Add(
@@ -2585,38 +2777,12 @@ namespace Oxide.Plugins
                 },
                 panel);
 
-            if (mainTab == GuiTabInvaders && page > 0)
-                AddCuiButtonWithText(
-                    container,
-                    panel,
-                    $"maxxinvaders.gui page {page - 1}",
-                    uiMuted,
-                    "◀",
-                    "0.52 0.93",
-                    "0.59 0.99",
-                    13,
-                    TextAnchor.MiddleCenter,
-                    "0.95 0.95 1 1");
-
-            if (mainTab == GuiTabInvaders && page < totalPages - 1)
-                AddCuiButtonWithText(
-                    container,
-                    panel,
-                    $"maxxinvaders.gui page {page + 1}",
-                    uiMuted,
-                    "▶",
-                    "0.60 0.93",
-                    "0.67 0.99",
-                    13,
-                    TextAnchor.MiddleCenter,
-                    "0.95 0.95 1 1");
-
             if (mainTab == GuiTabInvaders)
                 AddCuiText(
                     container,
                     panel,
-                    $"Page {page + 1}/{totalPages}  ·  On map: {list.Count}",
-                    "0.68 0.93",
+                    $"On map: {list.Count}  ·  scroll bot list",
+                    "0.52 0.93",
                     "0.81 0.99",
                     11,
                     TextAnchor.MiddleRight,
@@ -2704,216 +2870,93 @@ namespace Oxide.Plugins
                 return;
             }
 
-            AddCuiText(
-                container,
-                contentPanel,
-                "ACTIVE BOTS — TP / RETURN / KILL / DESPAWN (template: F1 console or Roaming tab)",
-                "0.02 0.888",
-                "0.98 0.908",
-                12,
-                TextAnchor.MiddleLeft,
-                "0.95 0.97 1 1");
-
-            if (mainTab == GuiTabInvaders && totalPages > 1)
-            {
-                if (page > 0)
-                    AddCuiButtonWithText(
-                        container,
-                        contentPanel,
-                        $"maxxinvaders.gui page {page - 1}",
-                        uiMuted,
-                        "◀ Previous page",
-                        "0.02 0.912",
-                        "0.48 0.932",
-                        12,
-                        TextAnchor.MiddleCenter,
-                        "0.95 0.97 1 1");
-                if (page < totalPages - 1)
-                    AddCuiButtonWithText(
-                        container,
-                        contentPanel,
-                        $"maxxinvaders.gui page {page + 1}",
-                        uiMuted,
-                        "Next page ▶",
-                        "0.52 0.912",
-                        "0.98 0.932",
-                        12,
-                        TextAnchor.MiddleCenter,
-                        "0.95 0.97 1 1");
-            }
-
             var draft = GetSpawnDraft(player.userID);
-            var profiles = GetRecentProfiles(4);
-            var activeSlot = ResolveActiveProfileSlot(player.userID, profiles, draft);
-            const string uiCard = "0.12 0.12 0.15 0.94";
-            const string uiGreen = "0.18 0.48 0.28 0.95";
-
-            if (slice.Count == 0)
-                AddCuiText(
-                    container,
-                    contentPanel,
-                    "No active bots on the map.\nUse SPAWN & RENAME below, or TikFinity.",
-                    "0.04 0.72",
-                    "0.96 0.878",
-                    16,
-                    TextAnchor.MiddleLeft,
-                    "0.85 0.88 0.95 1");
-
-            AddCuiText(
-                container,
-                contentPanel,
-                "SPAWN & RENAME (form)",
-                "0.02 0.698",
-                "0.98 0.722",
-                14,
-                TextAnchor.MiddleLeft,
-                "0.95 0.97 1 1");
-
-            AddCuiText(
-                container,
-                contentPanel,
-                "SAVED CLASSES (profiles) — Use loads spawn form, Respawn spawns from saved data",
-                "0.02 0.348",
-                "0.98 0.375",
-                14,
-                TextAnchor.MiddleLeft,
-                "0.95 0.97 1 1");
-
-            var pPanel = container.Add(
-                new CuiPanel
+            var tmplKeys = _cfg.Gui?.SpawnRoamingTemplateKeys;
+            if (tmplKeys == null || tmplKeys.Count == 0)
+                tmplKeys = new List<string>
                 {
-                    Image = { Color = "0.07 0.09 0.12 0.96" },
-                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.338" },
-                    CursorEnabled = true,
-                },
-                contentPanel);
-
-            const float profileTopPad = 0.02f;
-            const float profileGap = 0.01f;
-            const int profileSlots = 4;
-            var profileRowH = (1f - profileTopPad - 0.02f - profileGap * (profileSlots - 1)) / profileSlots;
-            for (var idx = 0; idx < profileSlots; idx++)
-            {
-                var pr = idx < profiles.Count ? profiles[idx] : null;
-                var rowActive = activeSlot == idx;
-                var pyBot = profileTopPad + idx * (profileRowH + profileGap);
-                var pyTop = pyBot + profileRowH;
-                var aMin = $"0.02 {pyBot.ToString("F4", CultureInfo.InvariantCulture)}";
-                var aMax = $"0.98 {pyTop.ToString("F4", CultureInfo.InvariantCulture)}";
-
-                var prow = container.Add(
-                    new CuiPanel
-                    {
-                        Image =
-                        {
-                            Color = rowActive ? "0.22 0.35 0.48 0.96" : "0.11 0.14 0.18 0.96",
-                        },
-                        RectTransform = { AnchorMin = aMin, AnchorMax = aMax },
-                    },
-                    pPanel);
-
-                var useCol = rowActive ? _cfg.Gui.AccentColor : "0.22 0.42 0.62 0.95";
-                AddCuiButtonWithText(
-                    container,
-                    prow,
-                    $"maxxinvaders.gui profslot {idx}",
-                    useCol,
-                    "Use",
-                    "0.64 0.10",
-                    "0.76 0.90",
-                    12);
-                AddCuiButtonWithText(
-                    container,
-                    prow,
-                    pr != null ? $"maxxinvaders.gui profileload {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
-                    "0.22 0.36 0.52 0.95",
-                    "Load",
-                    "0.77 0.10",
-                    "0.87 0.90",
-                    12);
-                AddCuiButtonWithText(
-                    container,
-                    prow,
-                    pr != null ? $"maxxinvaders.gui profilerespawn {pr.ViewerId}" : $"maxxinvaders.gui profslot {idx}",
-                    "0.18 0.52 0.38 0.95",
-                    "Respawn",
-                    "0.88 0.10",
-                    "0.98 0.90",
-                    11);
-
-                var titlePlain = pr == null
-                    ? $"Class {idx + 1} — (empty slot)"
-                    : $"Class {idx + 1} — {StripCuiMarkup(pr.ViewerName ?? "?")}";
-                var subPlain = pr == null
-                    ? "Spawn a bot once to fill this slot."
-                    : $"ID {StripCuiMarkup(pr.ViewerId)} | T{pr.Tier} | {StripCuiMarkup(pr.Mode)} | {(pr.Alive ? "alive" : "dead")}";
-                AddCuiText(
-                    container,
-                    prow,
-                    titlePlain,
-                    "0.02 0.38",
-                    "0.62 0.98",
-                    14,
-                    TextAnchor.MiddleLeft,
-                    "1 1 1 1");
-                AddCuiText(
-                    container,
-                    prow,
-                    subPlain,
-                    "0.02 0.06",
-                    "0.62 0.36",
-                    12,
-                    TextAnchor.MiddleLeft,
-                    "0.8 0.85 0.92 1");
-            }
+                    "bob_resources_farmer",
+                    "john_looter",
+                    "alfred_hunter",
+                    "austin_fighter",
+                };
 
             var formPanel = container.Add(
                 new CuiPanel
                 {
                     Image = { Color = "0.10 0.11 0.14 0.95" },
-                    RectTransform = { AnchorMin = "0.02 0.382", AnchorMax = "0.98 0.692" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.42" },
                     CursorEnabled = true,
                 },
                 contentPanel);
 
-            AddCuiText(container, formPanel, "SPAWN", "0.02 0.88", "0.22 0.98", 20, TextAnchor.MiddleLeft, "1 1 1 1");
-            AddCuiText(container, formPanel, "RENAME", "0.64 0.88", "0.88 0.98", 20, TextAnchor.MiddleLeft, "1 1 1 1");
+            AddCuiText(container, formPanel, "SPAWN", "0.02 0.90", "0.22 0.99", 18, TextAnchor.MiddleLeft, "1 1 1 1");
+            AddCuiText(container, formPanel, "RENAME", "0.58 0.90", "0.82 0.99", 18, TextAnchor.MiddleLeft, "1 1 1 1");
 
-            AddCuiButtonWithText(
-                container,
-                formPanel,
-                "maxxinvaders.gui quickdemo",
-                "0.20 0.62 0.44 0.98",
-                "Quick Spawn",
-                "0.02 0.72",
-                "0.32 0.90",
-                15);
             AddCuiButtonWithText(
                 container,
                 formPanel,
                 "maxxinvaders.gui spawnfields",
                 "0.22 0.48 0.72 0.98",
                 "Spawn From Form",
-                "0.34 0.72",
-                "0.64 0.90",
+                "0.08 0.78",
+                "0.92 0.88",
                 15);
-            AddCuiButtonWithText(
-                container,
-                formPanel,
-                "maxxinvaders.gui applyattrs",
-                "0.55 0.45 0.2 0.98",
-                "Apply Attributes To Active",
-                "0.66 0.72",
-                "0.98 0.90",
-                13);
 
             AddCuiText(
                 container,
                 formPanel,
-                "Viewer Name",
+                "Bot name (in-world display; empty = Viewer name)",
+                "0.02 0.68",
+                "0.52 0.76",
+                12,
+                TextAnchor.MiddleLeft,
+                "0.92 0.95 1 1");
+            AddCuiInputFieldPlain(
+                container,
+                formPanel,
+                "maxxinvaders.gui draft botname",
+                draft.BotName ?? "",
                 "0.02 0.58",
-                "0.22 0.68",
-                14,
+                "0.52 0.66",
+                15,
+                64);
+
+            AddCuiText(
+                container,
+                formPanel,
+                "Roaming template (keys in MaxxInvaders.json → Gui.SpawnRoamingTemplateKeys)",
+                "0.02 0.50",
+                "0.96 0.56",
+                11,
+                TextAnchor.MiddleLeft,
+                "0.75 0.8 0.9 1");
+
+            for (var si = 0; si < 4; si++)
+            {
+                var k = si < tmplKeys.Count ? tmplKeys[si] : _cfg.DefaultRoamingTemplateKey;
+                var sel = Mathf.Clamp(draft.RoamingTemplateSlot, 0, 3) == si;
+                var x0 = 0.02f + si * 0.245f;
+                var x1 = x0 + 0.235f;
+                var col = sel ? _cfg.Gui.AccentColor : "0.18 0.22 0.28 0.95";
+                AddCuiButtonWithText(
+                    container,
+                    formPanel,
+                    $"maxxinvaders.gui tmplslot {si}",
+                    col,
+                    $"{si + 1}: {ShortTemplateKeyLabel(k ?? "?")}",
+                    $"{x0.ToString("F3", CultureInfo.InvariantCulture)} 0.38",
+                    $"{x1.ToString("F3", CultureInfo.InvariantCulture)} 0.48",
+                    9);
+            }
+
+            AddCuiText(
+                container,
+                formPanel,
+                "Viewer Name (TikFinity / id)",
+                "0.02 0.30",
+                "0.28 0.36",
+                12,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -2921,18 +2964,18 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft viewername",
                 draft.ViewerName ?? "DemoViewer",
-                "0.02 0.44",
-                "0.62 0.56",
-                16,
+                "0.02 0.20",
+                "0.52 0.28",
+                14,
                 64);
 
             AddCuiText(
                 container,
                 formPanel,
                 "Viewer ID",
-                "0.02 0.36",
-                "0.22 0.42",
-                14,
+                "0.02 0.12",
+                "0.16 0.18",
+                11,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -2940,54 +2983,55 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft viewerid",
                 draft.ViewerId ?? "",
-                "0.02 0.22",
-                "0.28 0.34",
-                16,
+                "0.02 0.02",
+                "0.22 0.10",
+                13,
                 48);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft tier",
                 draft.TierStr ?? "1",
-                "0.30 0.22",
-                "0.38 0.34",
-                16,
+                "0.24 0.02",
+                "0.32 0.10",
+                13,
                 4);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft mode",
                 draft.Mode ?? "roaming",
-                "0.40 0.22",
-                "0.52 0.34",
-                16,
+                "0.34 0.02",
+                "0.46 0.10",
+                13,
                 24);
             AddCuiInputFieldPlain(
                 container,
                 formPanel,
                 "maxxinvaders.gui draft kit",
                 draft.Kit ?? "-",
-                "0.54 0.22",
-                "0.64 0.34",
-                16,
+                "0.48 0.02",
+                "0.58 0.10",
+                13,
                 48);
+
             AddCuiButtonWithText(
                 container,
                 formPanel,
                 "maxxinvaders.gui draftreset",
                 "0.30 0.30 0.36 0.98",
                 "Reset Form",
-                "0.02 0.06",
-                "0.32 0.18",
-                14);
+                "0.60 0.02",
+                "0.82 0.10",
+                12);
 
             AddCuiText(
                 container,
                 formPanel,
                 "Target (viewerId / viewerName / INV-xxxxx)",
-                "0.66 0.58",
-                "0.98 0.68",
-                13,
+                "0.58 0.72",
+                "0.98 0.78",
+                11,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -2995,17 +3039,17 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft renametarget",
                 draft.RenameTarget ?? "",
-                "0.66 0.44",
-                "0.98 0.56",
-                16,
+                "0.58 0.58",
+                "0.98 0.70",
+                13,
                 64);
             AddCuiText(
                 container,
                 formPanel,
                 "New Name",
-                "0.66 0.36",
-                "0.92 0.42",
-                14,
+                "0.58 0.48",
+                "0.82 0.54",
+                12,
                 TextAnchor.MiddleLeft,
                 "0.92 0.95 1 1");
             AddCuiInputFieldPlain(
@@ -3013,9 +3057,9 @@ namespace Oxide.Plugins
                 formPanel,
                 "maxxinvaders.gui draft renamename",
                 draft.RenameName ?? "",
-                "0.66 0.22",
-                "0.98 0.34",
-                16,
+                "0.58 0.36",
+                "0.98 0.46",
+                13,
                 64);
             AddCuiButtonWithText(
                 container,
@@ -3023,94 +3067,39 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui renameapply",
                 "0.24 0.52 0.72 0.98",
                 "Apply Rename",
-                "0.66 0.06",
-                "0.98 0.18",
-                15);
+                "0.58 0.22",
+                "0.98 0.32",
+                13);
 
-            const float cardZoneTop = 0.882f;
-            const float cardZoneBot = 0.728f;
-            const float cardGap = 0.003f;
-            var invSliceCount = slice.Count;
-            var slotH = invSliceCount > 0
-                ? Mathf.Max(0.042f, (cardZoneTop - cardZoneBot - cardGap * (invSliceCount - 1)) / invSliceCount)
-                : 0.074f;
-            var cardIdx = 0;
-            foreach (var r in slice)
-            {
-                var top = cardZoneTop - cardIdx * (slotH + cardGap);
-                var bot = top - slotH;
-                if (bot < cardZoneBot - 0.001f)
-                    break;
+            var botsOuter = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.07 0.09 0.12 0.94" },
+                    RectTransform = { AnchorMin = "0.02 0.435", AnchorMax = "0.98 0.92" },
+                    CursorEnabled = true,
+                },
+                contentPanel);
 
-                var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
-                var aMin = $"0.02 {bot.ToString("F4", CultureInfo.InvariantCulture)}";
-                var aMax = $"0.98 {top.ToString("F4", CultureInfo.InvariantCulture)}";
-                var card = container.Add(
-                    new CuiPanel
-                    {
-                        Image = { Color = uiCard },
-                        RectTransform = { AnchorMin = aMin, AnchorMax = aMax },
-                    },
-                    contentPanel);
+            var scrollHost = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.08 0.08 0.10 0.01" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.86" },
+                    CursorEnabled = true,
+                },
+                botsOuter);
 
-                var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(r.ViewerName) ? "?" : r.ViewerName.Trim());
-                var tmpl = r.IsRoamingNpc
-                    ? StripCuiMarkup(r.RoamingTemplateKey ?? _cfg.DefaultRoamingTemplateKey ?? "")
-                    : "(scientist)";
-                var line1 = $"{nm}  {StripCuiMarkup(r.NpcId)}";
-                var line2 =
-                    $"T{r.Tier}  {r.Mode}  HP {hp:F0}  {(r.IsRoamingNpc ? "Roam" : "Sci")}  {tmpl}";
-                var infoText = slotH < 0.038f ? $"{line1}  |  {line2}" : line1 + "\n" + line2;
-                var fs = slotH < 0.034f ? 9 : slotH < 0.042f ? 10 : 11;
-                AddCuiText(
-                    container,
-                    card,
-                    infoText,
-                    "0.03 0.22",
-                    "0.58 0.95",
-                    fs,
-                    TextAnchor.UpperLeft,
-                    "1 1 1 1");
+            AddScrollableInvadersBotList(container, scrollHost, list);
 
-                AddCuiButtonWithText(
-                    container,
-                    card,
-                    $"maxxinvaders.gui tp {r.NpcId}",
-                    _cfg.Gui.AccentColor,
-                    "TP",
-                    "0.59 0.18",
-                    "0.68 0.92",
-                    10);
-                AddCuiButtonWithText(
-                    container,
-                    card,
-                    $"maxxinvaders.gui returnrun {r.NpcId}",
-                    uiGreen,
-                    "RET",
-                    "0.685 0.18",
-                    "0.785 0.92",
-                    9);
-                AddCuiButtonWithText(
-                    container,
-                    card,
-                    $"maxxinvaders.gui kill {r.NpcId}",
-                    "0.45 0.12 0.12 0.95",
-                    "KILL",
-                    "0.79 0.18",
-                    "0.875 0.92",
-                    9);
-                AddCuiButtonWithText(
-                    container,
-                    card,
-                    $"maxxinvaders.gui despawn {r.NpcId}",
-                    "0.35 0.32 0.15 0.95",
-                    "DESPAWN",
-                    "0.88 0.18",
-                    "0.99 0.92",
-                    7);
-
-                cardIdx++;
-            }
+            AddCuiText(
+                container,
+                botsOuter,
+                $"ACTIVE BOTS — scroll with mouse wheel  ·  On map: {list.Count}",
+                "0.02 0.87",
+                "0.98 0.98",
+                13,
+                TextAnchor.MiddleLeft,
+                "0.95 0.97 1 1");
 
             CuiHelper.AddUi(player, container);
         }
@@ -3261,13 +3250,11 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (args[0] == "quickdemo")
+            if (args[0] == "tmplslot" && args.Length > 1 &&
+                int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var tmplSlot))
             {
-                var vid = "demo_" + Random.Range(100000, 999999);
-                var res = TrySpawn("DemoViewer", vid, 1, "", "roaming", player, "gui_quick");
-                player.ChatMessage(res.Success
-                    ? $"[MaxxInvaders] Spawned {res.NpcId}"
-                    : $"[MaxxInvaders] Failed: {res.Error}");
+                var dSlot = GetSpawnDraft(player.userID);
+                dSlot.RoamingTemplateSlot = Mathf.Clamp(tmplSlot, 0, 3);
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
@@ -3280,26 +3267,17 @@ namespace Oxide.Plugins
                     tier = 1;
                 var kit = d.Kit == "-" || string.IsNullOrWhiteSpace(d.Kit) ? "" : d.Kit.Trim();
                 var mode = string.IsNullOrWhiteSpace(d.Mode) ? "roaming" : d.Mode.Trim().ToLowerInvariant();
-                var name = string.IsNullOrWhiteSpace(d.ViewerName) ? "DemoViewer" : d.ViewerName.Trim();
+                var name = !string.IsNullOrWhiteSpace(d.BotName)
+                    ? d.BotName.Trim()
+                    : (string.IsNullOrWhiteSpace(d.ViewerName) ? "DemoViewer" : d.ViewerName.Trim());
                 var vid = string.IsNullOrWhiteSpace(d.ViewerId)
                     ? "demo_" + Random.Range(100000, 999999)
                     : d.ViewerId.Trim();
-                var res = TrySpawn(name, vid, tier, kit, mode, player, "gui");
+                var tmplKey = ResolveSpawnTemplateKeyFromDraft(d);
+                var res = TrySpawn(name, vid, tier, kit, mode, player, "gui", tmplKey);
                 player.ChatMessage(res.Success
-                    ? $"[MaxxInvaders] Spawned {res.NpcId}"
+                    ? $"[MaxxInvaders] Spawned {res.NpcId} (template {tmplKey})"
                     : $"[MaxxInvaders] Failed: {res.Error}");
-                OpenGui(player, GetGuiPage(player.userID));
-                return;
-            }
-
-            if (args[0] == "applyattrs")
-            {
-                var d = GetSpawnDraft(player.userID);
-                var key = d.RenameTarget?.Trim() ?? "";
-                if (ApplyAttributesToActiveInternal(key, d, out var aerr))
-                    player.ChatMessage("[MaxxInvaders] Applied attributes to active NPC.");
-                else
-                    player.ChatMessage($"[MaxxInvaders] Apply failed: {aerr}");
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
@@ -3324,6 +3302,9 @@ namespace Oxide.Plugins
                 var d = GetSpawnDraft(player.userID);
                 switch (field)
                 {
+                    case "botname":
+                        d.BotName = value ?? "";
+                        break;
                     case "viewername":
                         d.ViewerName = string.IsNullOrEmpty(value) ? "DemoViewer" : value;
                         break;
