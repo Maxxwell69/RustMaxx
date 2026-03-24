@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.5")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.6")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1709,6 +1709,120 @@ namespace Oxide.Plugins
             return true;
         }
 
+        private bool ApplyAttributesToActiveInternal(string viewerOrNpcId, SpawnDraft draft, out string error)
+        {
+            error = null;
+            if (draft == null)
+            {
+                error = "missing_draft";
+                return false;
+            }
+
+            var key = viewerOrNpcId?.Trim() ?? "";
+            if (!TryFindInvader(key, out var r))
+            {
+                var all = _registry.All().Where(x => x != null).ToList();
+                if (all.Count == 1)
+                    r = all[0];
+                else
+                {
+                    error = "not_found (target viewerId/viewerName/INV-xxxxx)";
+                    return false;
+                }
+            }
+
+            if (!int.TryParse(draft.TierStr?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var tier))
+                tier = r.Tier;
+            if (!TryGetTier(tier, out var tierDef))
+            {
+                error = "invalid_tier";
+                return false;
+            }
+
+            var mode = string.IsNullOrWhiteSpace(draft.Mode) ? r.Mode : draft.Mode.Trim().ToLowerInvariant();
+            if (!IsBehaviorAllowed(mode))
+            {
+                error = "invalid_mode";
+                return false;
+            }
+
+            var name = NormalizeViewerName(draft.ViewerName) ?? r.ViewerName;
+            var kit = draft.Kit == "-" || string.IsNullOrWhiteSpace(draft.Kit) ? "" : draft.Kit.Trim();
+
+            r.ViewerName = name;
+            r.Tier = tier;
+            r.Mode = mode;
+            r.KitName = kit;
+            if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+            {
+                r.NpcPlayer.displayName = name;
+                var hp = tierDef.Health > 0 ? tierDef.Health : 100f;
+                r.NpcPlayer.InitializeHealth(hp, hp);
+            }
+
+            var rec = _data?.History?.LastOrDefault(x => x.NpcId == r.NpcId);
+            if (rec != null)
+            {
+                rec.ViewerName = r.ViewerName;
+                rec.Tier = r.Tier;
+                rec.Mode = r.Mode;
+                rec.KitName = r.KitName;
+                if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+                    rec.LastHealth = r.NpcPlayer.health;
+            }
+            SaveDataFile();
+            return true;
+        }
+
+        private List<InvaderRecord> GetRecentProfiles(int max = 8)
+        {
+            if (_data?.History == null || _data.History.Count == 0) return new List<InvaderRecord>();
+            return _data.History
+                .Where(x => !string.IsNullOrWhiteSpace(x.ViewerId) && !string.IsNullOrWhiteSpace(x.ViewerName))
+                .OrderByDescending(x => x.SpawnedAtUtc)
+                .GroupBy(x => x.ViewerId, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .Take(Mathf.Clamp(max, 1, 50))
+                .ToList();
+        }
+
+        private bool TryGetProfile(string token, out InvaderRecord rec)
+        {
+            rec = null;
+            if (_data?.History == null || string.IsNullOrWhiteSpace(token)) return false;
+            token = token.Trim();
+
+            rec = _data.History
+                .Where(x => string.Equals(x.ViewerId, token, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.SpawnedAtUtc)
+                .FirstOrDefault();
+            if (rec != null) return true;
+
+            rec = _data.History
+                .Where(x => string.Equals(x.NpcId, token, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.SpawnedAtUtc)
+                .FirstOrDefault();
+            if (rec != null) return true;
+
+            rec = _data.History
+                .Where(x => string.Equals(x.ViewerName, token, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.SpawnedAtUtc)
+                .FirstOrDefault();
+            return rec != null;
+        }
+
+        private void LoadProfileToDraft(SpawnDraft d, InvaderRecord rec)
+        {
+            if (d == null || rec == null) return;
+            d.ViewerName = rec.ViewerName ?? "DemoViewer";
+            d.ViewerId = rec.ViewerId ?? d.ViewerId;
+            d.TierStr = rec.Tier > 0 ? rec.Tier.ToString(CultureInfo.InvariantCulture) : "1";
+            d.Mode = string.IsNullOrWhiteSpace(rec.Mode) ? "roaming" : rec.Mode;
+            d.Kit = string.IsNullOrWhiteSpace(rec.KitName) ? "-" : rec.KitName;
+            d.RenameTarget = rec.ViewerId ?? rec.NpcId ?? "";
+            d.RenameName = rec.ViewerName ?? "";
+        }
+
         private void ChatList(BasePlayer player)
         {
             var n = 0;
@@ -2412,6 +2526,14 @@ namespace Oxide.Plugins
                     Text = { Text = "Spawn From Form", FontSize = 15, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
                 },
                 formPanel);
+            container.Add(
+                new CuiButton
+                {
+                    Button = { Command = "maxxinvaders.gui applyattrs", Color = "0.55 0.45 0.2 0.98" },
+                    RectTransform = { AnchorMin = "0.33 0.62", AnchorMax = "0.62 0.70" },
+                    Text = { Text = "Apply Attributes To Active", FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                },
+                formPanel);
 
             container.Add(new CuiLabel
             {
@@ -2628,6 +2750,56 @@ namespace Oxide.Plugins
                 y -= 0.09f;
             }
 
+            var profiles = GetRecentProfiles(6);
+            if (profiles.Count > 0)
+            {
+                var pPanel = container.Add(
+                    new CuiPanel
+                    {
+                        Image = { Color = "0.08 0.10 0.14 0.92" },
+                        RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.17" },
+                        CursorEnabled = true,
+                    },
+                    panel);
+                container.Add(
+                    new CuiLabel
+                    {
+                        Text = { Text = "Profiles (persistent): load or respawn even after death", FontSize = 11, Align = TextAnchor.MiddleLeft, Color = "0.9 0.95 1 1" },
+                        RectTransform = { AnchorMin = "0.02 0.78", AnchorMax = "0.98 0.98" },
+                    },
+                    pPanel);
+
+                float py = 0.72f;
+                foreach (var pr in profiles)
+                {
+                    container.Add(
+                        new CuiLabel
+                        {
+                            Text = { Text = $"{pr.ViewerName} ({pr.ViewerId})  T{pr.Tier}  {pr.Mode}", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = "0.88 0.92 0.98 1" },
+                            RectTransform = { AnchorMin = $"0.02 {py - 0.11f}", AnchorMax = $"0.72 {py}" },
+                        },
+                        pPanel);
+                    container.Add(
+                        new CuiButton
+                        {
+                            Button = { Command = $"maxxinvaders.gui profileload {pr.ViewerId}", Color = "0.22 0.36 0.52 0.95" },
+                            RectTransform = { AnchorMin = $"0.74 {py - 0.11f}", AnchorMax = $"0.85 {py}" },
+                            Text = { Text = "Load", FontSize = 9, Color = "1 1 1 1" },
+                        },
+                        pPanel);
+                    container.Add(
+                        new CuiButton
+                        {
+                            Button = { Command = $"maxxinvaders.gui profilerespawn {pr.ViewerId}", Color = "0.20 0.52 0.36 0.95" },
+                            RectTransform = { AnchorMin = $"0.86 {py - 0.11f}", AnchorMax = $"0.98 {py}" },
+                            Text = { Text = "Respawn", FontSize = 9, Color = "1 1 1 1" },
+                        },
+                        pPanel);
+                    py -= 0.125f;
+                    if (py < 0.08f) break;
+                }
+            }
+
             CuiHelper.AddUi(player, container);
         }
 
@@ -2739,6 +2911,18 @@ namespace Oxide.Plugins
                 return;
             }
 
+            if (args[0] == "applyattrs")
+            {
+                var d = GetSpawnDraft(player.userID);
+                var key = d.RenameTarget?.Trim() ?? "";
+                if (ApplyAttributesToActiveInternal(key, d, out var aerr))
+                    player.ChatMessage("[MaxxInvaders] Applied attributes to active NPC.");
+                else
+                    player.ChatMessage($"[MaxxInvaders] Apply failed: {aerr}");
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
             if (args[0] == "renameapply")
             {
                 var d = GetSpawnDraft(player.userID);
@@ -2828,6 +3012,41 @@ namespace Oxide.Plugins
                 var id = args[1];
                 var d = GetSpawnDraft(player.userID);
                 d.RenameTarget = id;
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "profileload" && args.Length > 1)
+            {
+                var token = string.Join(" ", args.Skip(1).ToArray()).Trim();
+                if (TryGetProfile(token, out var rec))
+                {
+                    var d = GetSpawnDraft(player.userID);
+                    LoadProfileToDraft(d, rec);
+                    player.ChatMessage($"[MaxxInvaders] Loaded profile for {rec.ViewerName}.");
+                }
+                else
+                    player.ChatMessage("[MaxxInvaders] Profile not found.");
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "profilerespawn" && args.Length > 1)
+            {
+                var token = string.Join(" ", args.Skip(1).ToArray()).Trim();
+                if (!TryGetProfile(token, out var rec))
+                {
+                    player.ChatMessage("[MaxxInvaders] Profile not found.");
+                    OpenGui(player, GetGuiPage(player.userID));
+                    return;
+                }
+
+                var kit = rec.KitName ?? "";
+                var mode = string.IsNullOrWhiteSpace(rec.Mode) ? "roaming" : rec.Mode.Trim().ToLowerInvariant();
+                var res = TrySpawn(rec.ViewerName, rec.ViewerId, rec.Tier, kit, mode, player, "profile_respawn");
+                player.ChatMessage(res.Success
+                    ? $"[MaxxInvaders] Respawned {rec.ViewerName} ({res.NpcId})"
+                    : $"[MaxxInvaders] Respawn failed: {res.Error}");
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
