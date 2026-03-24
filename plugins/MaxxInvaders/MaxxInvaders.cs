@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.3.1")]
+    [Info("MaxxInvaders", "RustMaxx", "1.3.2")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2369,6 +2369,13 @@ namespace Oxide.Plugins
                     Text = { Text = "Quick Spawn", FontSize = 13, Color = "0.95 0.97 1 1" },
                 },
                 spawnCard);
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "QUICK SPAWN", FontSize = 14, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                    RectTransform = { AnchorMin = "0.03 0.74", AnchorMax = "0.48 0.82" },
+                },
+                spawnCard);
 
             container.Add(
                 new CuiButton
@@ -2376,6 +2383,13 @@ namespace Oxide.Plugins
                     Button = { Command = "maxxinvaders.gui spawnfields", Color = "0.22 0.42 0.62 0.95" },
                     RectTransform = { AnchorMin = "0.52 0.74", AnchorMax = "0.97 0.82" },
                     Text = { Text = "Spawn From Form", FontSize = 13, Color = "0.95 0.97 1 1" },
+                },
+                spawnCard);
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "SPAWN FROM FORM", FontSize = 14, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                    RectTransform = { AnchorMin = "0.52 0.74", AnchorMax = "0.97 0.82" },
                 },
                 spawnCard);
 
@@ -2537,6 +2551,13 @@ namespace Oxide.Plugins
                     Text = { Text = "Reset Form", FontSize = 12, Color = "0.95 0.97 1 1" },
                 },
                 spawnCard);
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "RESET FORM", FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                    RectTransform = { AnchorMin = "0.03 0.08", AnchorMax = "0.42 0.16" },
+                },
+                spawnCard);
 
             container.Add(
                 new CuiLabel
@@ -2628,6 +2649,13 @@ namespace Oxide.Plugins
                     Text = { Text = "Apply Rename", FontSize = 13, Color = "0.95 0.97 1 1" },
                 },
                 renameCard);
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "APPLY RENAME", FontSize = 14, Align = TextAnchor.MiddleCenter, Color = "1 1 1 1" },
+                    RectTransform = { AnchorMin = "0.05 0.22", AnchorMax = "0.95 0.30" },
+                },
+                renameCard);
 
             float y = 0.52f;
             foreach (var r in slice)
@@ -2651,7 +2679,7 @@ namespace Oxide.Plugins
                         {
                             Text =
                                 $"{r.NpcId}  {r.ViewerName}  ({r.ViewerId})  T{r.Tier}  {(r.IsRoamingNpc ? "RoamingNPCs" : "Scientist")}  {r.Mode}  HP:{hp:F0}  {age:F1}m",
-                            FontSize = 11,
+                            FontSize = 13,
                             Align = TextAnchor.MiddleLeft,
                             Color = "0.92 0.95 1 1",
                         },
