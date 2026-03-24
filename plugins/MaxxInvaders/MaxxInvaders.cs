@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.0.1")]
+    [Info("MaxxInvaders", "RustMaxx", "1.0.2")]
     [Description("Viewer-linked Scientist NPCs for stream events, admin GUI, tiers, Kits, and RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1263,8 +1263,7 @@ namespace Oxide.Plugins
                         },
                         new CuiRectTransformComponent { AnchorMin = "0.03 0.56", AnchorMax = "0.97 0.65" },
                     },
-                },
-                spawnPanel);
+                });
 
             container.Add(
                 new CuiLabel
@@ -1293,8 +1292,7 @@ namespace Oxide.Plugins
                         },
                         new CuiRectTransformComponent { AnchorMin = "0.03 0.38", AnchorMax = "0.97 0.47" },
                     },
-                },
-                spawnPanel);
+                });
 
             container.Add(
                 new CuiLabel
@@ -1323,8 +1321,7 @@ namespace Oxide.Plugins
                         },
                         new CuiRectTransformComponent { AnchorMin = "0.03 0.22", AnchorMax = "0.12 0.29" },
                     },
-                },
-                spawnPanel);
+                });
 
             container.Add(
                 new CuiLabel
@@ -1353,8 +1350,7 @@ namespace Oxide.Plugins
                         },
                         new CuiRectTransformComponent { AnchorMin = "0.14 0.22", AnchorMax = "0.45 0.29" },
                     },
-                },
-                spawnPanel);
+                });
 
             container.Add(
                 new CuiLabel
@@ -1383,8 +1379,7 @@ namespace Oxide.Plugins
                         },
                         new CuiRectTransformComponent { AnchorMin = "0.47 0.22", AnchorMax = "0.97 0.29" },
                     },
-                },
-                spawnPanel);
+                });
 
             container.Add(
                 new CuiButton
