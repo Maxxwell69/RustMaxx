@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.7")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.8")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -37,6 +37,7 @@ namespace Oxide.Plugins
         public const string PrefabPlayer = "assets/prefabs/player/player.prefab";
         public static RoamingNPCs instance;
         private Timer _timer;
+        private Timer _bridgePatrolTimer;
         public Configuration config;
         public DataBots Data;
         public List<string> NicknamesData;
@@ -1221,6 +1222,11 @@ namespace Oxide.Plugins
             [JsonProperty(RU ? "Настройка боя с НПС и игроками" : "Fights with NPCs and players")]
             public SetupBattle BattleState = new();
 
+            [JsonProperty(RU
+                ? "MaxxInvaders: патруль вокруг стримера (отдельный шаблон, напр. streamer_patrol)"
+                : "MaxxInvaders: patrol near streamer anchor (use dedicated bot key e.g. streamer_patrol)")]
+            public SetupBridgePatrol BridgePatrol = new();
+
             [JsonProperty(RU ? "Настройка охоты на животных" : "Animal hunting")]
             public SetupHunting HunterState = new();
 
@@ -1650,6 +1656,23 @@ namespace Oxide.Plugins
             [JsonIgnore] public float RadiusWeaponAttacked => Mathf.Max(5, _radiusWeaponAttacked);
             [JsonIgnore] public float RadiusMeleeAttacked => Mathf.Max(2, _radiusMeleeAttacked);
         }
+
+        /// <summary>MaxxInvaders bridge: roam within a radius of the anchor player; use a dedicated <c>Bots</c> key (e.g. streamer_patrol).</summary>
+        public class SetupBridgePatrol
+        {
+            [JsonProperty(RU ? "Патруль вокруг якоря (стримера)" : "Patrol around anchor streamer")]
+            public bool Enable = false;
+
+            [JsonProperty(RU ? "Радиус патруля от якоря (м)" : "Patrol radius from anchor (m)")]
+            public float RadiusMeters = 24f;
+
+            [JsonProperty(RU ? "Мин. секунд между сменами точки" : "Min seconds between patrol moves")]
+            public float MinMoveIntervalSeconds = 5f;
+
+            [JsonProperty(RU ? "Макс. секунд между сменами точки" : "Max seconds between patrol moves")]
+            public float MaxMoveIntervalSeconds = 11f;
+        }
+
         public class SetupMining
         {
             [JsonProperty(RU ? "Разрешить добывать дерево?" : "Allow to gather wood?", Order = 10)]
@@ -2296,6 +2319,7 @@ namespace Oxide.Plugins
             /// <summary>Player to pursue after they damaged the protected anchor.</summary>
             [JsonIgnore] public ulong BridgeRetaliationTargetUserId;
             [JsonIgnore] public float BridgeRetaliationExpireTime;
+            [JsonIgnore] public float BridgePatrolNextMoveAt;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -2782,10 +2806,13 @@ namespace Oxide.Plugins
             if (!permission.PermissionExists(AdminPermission, this)) permission.RegisterPermission(AdminPermission, this);
             CollectibleHelper.InitPlugin();
             monuments = new();
+            EnsureStreamerPatrolTemplate();
             foreach (var bot in config.bots)
             {
                 bot.Value.Init();
             }
+            if (_bridgePatrolTimer != null && !_bridgePatrolTimer.Destroyed) _bridgePatrolTimer.Destroy();
+            _bridgePatrolTimer = timer.Every(2.5f, BridgePatrolTick);
             timer.Once(1f, () =>
             {
                 InitializationBots(false);
@@ -2800,6 +2827,7 @@ namespace Oxide.Plugins
         private void Unload()
         {
             if (_timer != null && !_timer.Destroyed) _timer.Destroy();
+            if (_bridgePatrolTimer != null && !_bridgePatrolTimer.Destroyed) _bridgePatrolTimer.Destroy();
             visibleAdmins.Clear();
             visibleAdminsStash.Clear();
             SaveBots();
@@ -2925,9 +2953,10 @@ namespace Oxide.Plugins
 
             foreach (var pet in listNpcPlayers.Values)
             {
-                if (pet == null || pet.IsDestroyed || pet.Data?.Setup?.BattleState == null)
+                if (pet == null || pet.IsDestroyed || pet.Data?.Setup == null)
                     continue;
-                if (!pet.Data.Setup.BattleState._protectBridgeAnchorPlayer)
+                var bp = pet.Data.Setup.BridgePatrol;
+                if (!pet.Data.Setup.BattleState._protectBridgeAnchorPlayer && !(bp?.Enable ?? false))
                     continue;
                 if (pet.Data.BridgeProtectAnchorUserId == 0UL ||
                     pet.Data.BridgeProtectAnchorUserId != victim.userID)
@@ -2937,6 +2966,99 @@ namespace Oxide.Plugins
                 pet.Data.BridgeRetaliationExpireTime = UnityEngine.Time.realtimeSinceStartup + 120f;
             }
         }
+
+        /// <summary>Creates <c>streamer_patrol</c> bot template once (clone of alfred_hunter) if missing from config.</summary>
+        private void EnsureStreamerPatrolTemplate()
+        {
+            if (config?.bots == null) return;
+            const string streamerKey = "streamer_patrol";
+            if (config.bots.ContainsKey(streamerKey)) return;
+            if (!config.bots.TryGetValue("alfred_hunter", out var src) || src == null) return;
+            try
+            {
+                var json = JsonConvert.SerializeObject(src, settingsSerializer);
+                var clone = JsonConvert.DeserializeObject<BotSetup>(json, settingsSerializer);
+                if (clone == null) return;
+                clone.Name = "Patrol";
+                clone.BridgePatrol = new SetupBridgePatrol
+                {
+                    Enable = true,
+                    RadiusMeters = 24f,
+                    MinMoveIntervalSeconds = 5f,
+                    MaxMoveIntervalSeconds = 11f,
+                };
+                clone.BattleState ??= new SetupBattle();
+                clone.BattleState._protectBridgeAnchorPlayer = true;
+                config.bots[streamerKey] = clone;
+                SaveConfig();
+                PrintWarning(
+                    "[RoamingNPCs] Added default bot template 'streamer_patrol' (clone of alfred_hunter). Set MaxxInvaders ViewerRoamingTemplateKey to streamer_patrol for viewer spawns.");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[RoamingNPCs] Could not add streamer_patrol template: {ex.Message}");
+            }
+        }
+
+        private void BridgePatrolTick()
+        {
+            if (listNpcPlayers == null || listNpcPlayers.Count == 0) return;
+            foreach (var pet in listNpcPlayers.Values)
+                TryBridgePatrolMoveForPet(pet);
+        }
+
+        private void TryBridgePatrolMoveForPet(CustomPet pet)
+        {
+            var setup = pet?.Data?.Setup;
+            if (setup?.BridgePatrol == null || !setup.BridgePatrol.Enable) return;
+            if (pet.Data == null || !pet.Data.SpawnedFromMaxxInvadersBridge) return;
+            if (pet.Data.BridgeProtectAnchorUserId == 0UL) return;
+            if (IsBotInCombat(pet)) return;
+            if (pet.MoveController?.Navigator == null) return;
+            if (UnityEngine.Time.realtimeSinceStartup < pet.Data.BridgePatrolNextMoveAt) return;
+
+            var anchor = BasePlayer.FindByID(pet.Data.BridgeProtectAnchorUserId);
+            if (anchor == null || !anchor.IsAlive()) return;
+
+            float radius = Mathf.Clamp(setup.BridgePatrol.RadiusMeters, 8f, 80f);
+            float minI = Mathf.Max(2f, setup.BridgePatrol.MinMoveIntervalSeconds);
+            float maxI = Mathf.Max(minI + 0.5f, setup.BridgePatrol.MaxMoveIntervalSeconds);
+
+            var anchorPos = anchor.transform.position;
+            var petPos = pet.transform.position;
+            petPos.y = anchorPos.y;
+            float dist = Vector3.Distance(petPos, anchorPos);
+
+            Vector3 targetXZ;
+            if (dist > radius * 0.97f)
+            {
+                var dir = petPos - anchorPos;
+                dir.y = 0f;
+                if (dir.sqrMagnitude < 0.01f)
+                    dir = new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f));
+                dir.Normalize();
+                targetXZ = anchorPos + dir * (radius * 0.78f);
+            }
+            else
+            {
+                targetXZ = SamplePatrolPointAroundAnchor(anchorPos, radius);
+            }
+
+            targetXZ.y = anchorPos.y;
+            if (pet.MoveController.Navigator.GetNearestNavmeshPosition(targetXZ, out var nav, 3f))
+                targetXZ = nav;
+
+            pet.MoveController.SetDestination(targetXZ, _ => { }, false);
+            pet.Data.BridgePatrolNextMoveAt = UnityEngine.Time.realtimeSinceStartup + Random.Range(minI, maxI);
+        }
+
+        private static Vector3 SamplePatrolPointAroundAnchor(Vector3 anchorPos, float radiusMeters)
+        {
+            var ang = Random.Range(0f, Mathf.PI * 2f);
+            var dist = Random.Range(radiusMeters * 0.22f, radiusMeters * 0.9f);
+            return anchorPos + new Vector3(Mathf.Cos(ang) * dist, 0f, Mathf.Sin(ang) * dist);
+        }
+
         private void OnCollectiblePickedup(CollectibleEntity collectible, CustomPet customPet, Item item)
         {
             if (customPet) customPet.CustomBrain.OnCollectiblePickedup(item);
@@ -8586,7 +8708,8 @@ namespace Oxide.Plugins
             var data = new DataBot(uniqueKey, setup);
             data.DisplayName = safe;
             data.SpawnedFromMaxxInvadersBridge = true;
-            if (anchorSteamIdToProtect != 0UL && setup.BattleState._protectBridgeAnchorPlayer)
+            if (anchorSteamIdToProtect != 0UL &&
+                (setup.BattleState._protectBridgeAnchorPlayer || (setup.BridgePatrol?.Enable ?? false)))
                 data.BridgeProtectAnchorUserId = anchorSteamIdToProtect;
 
             try

@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.5")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.6")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -147,8 +147,9 @@ namespace Oxide.Plugins
 
             /// <summary>
             /// When set, RoamingNPCs bot key for viewer-driven spawns (TikFinity/API, RCON <c>maxxinvaders.spawn</c>, chat,
-            /// profile respawn). Empty falls back to per-tier <see cref="TierDefinition.RoamingTemplateKey"/> and
-            /// <see cref="DefaultRoamingTemplateKey"/>. GUI spawns use <see cref="GuiSettings.SpawnRoamingTemplateKeys"/> slots.
+            /// profile respawn). Use the dedicated <c>streamer_patrol</c> template for anchor patrol + protection (RoamingNPCs 0.5.8+).
+            /// Empty falls back to per-tier <see cref="TierDefinition.RoamingTemplateKey"/> and <see cref="DefaultRoamingTemplateKey"/>.
+            /// GUI spawns use <see cref="GuiSettings.SpawnRoamingTemplateKeys"/> slots.
             /// </summary>
             public string ViewerRoamingTemplateKey { get; set; } = "";
 
@@ -2356,7 +2357,7 @@ namespace Oxide.Plugins
                 {
                     Text =
                     {
-                        Text = "ViewerRoamingTemplateKey (API/RCON/chat; empty = tier + default)",
+                        Text = "ViewerRoamingTemplateKey (e.g. streamer_patrol; empty = tier + default)",
                         FontSize = 9,
                         Align = TextAnchor.LowerLeft,
                     },
