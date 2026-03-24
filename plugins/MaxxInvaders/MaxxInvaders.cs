@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.6")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.7")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -275,10 +275,10 @@ namespace Oxide.Plugins
             /// <summary>Four RoamingNPCs.json bot keys for the Invaders spawn form selector (slots 1–4).</summary>
             public List<string> SpawnRoamingTemplateKeys { get; set; } = new()
             {
+                "streamer_patrol",
                 "bob_resources_farmer",
                 "john_looter",
                 "alfred_hunter",
-                "austin_fighter",
             };
         }
 
@@ -339,6 +339,47 @@ namespace Oxide.Plugins
                     string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey)
                         ? "bob_resources_farmer"
                         : _cfg.DefaultRoamingTemplateKey.Trim());
+
+            MigrateGuiSpawnRoamingTemplateKeys(new InvaderConfig());
+        }
+
+        /// <summary>Ensure streamer_patrol appears in the Invaders GUI slot list (defaults + one-time migration).</summary>
+        private void MigrateGuiSpawnRoamingTemplateKeys(InvaderConfig defaults)
+        {
+            var keys = _cfg.Gui?.SpawnRoamingTemplateKeys;
+            if (keys == null || keys.Count == 0) return;
+
+            var d = defaults.Gui?.SpawnRoamingTemplateKeys;
+            if (d == null || d.Count < 4) return;
+
+            bool SeqEqual(List<string> a, List<string> b)
+            {
+                if (a.Count != b.Count) return false;
+                for (var i = 0; i < a.Count; i++)
+                    if (!string.Equals(a[i]?.Trim(), b[i]?.Trim(), StringComparison.OrdinalIgnoreCase))
+                        return false;
+                return true;
+            }
+
+            var legacy = new List<string>
+            {
+                "bob_resources_farmer",
+                "john_looter",
+                "alfred_hunter",
+                "austin_fighter",
+            };
+            if (SeqEqual(keys, legacy))
+            {
+                _cfg.Gui.SpawnRoamingTemplateKeys = new List<string>(d);
+                return;
+            }
+
+            if (keys.Any(k => string.Equals(k?.Trim(), "streamer_patrol", StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            keys.Insert(0, "streamer_patrol");
+            while (keys.Count > 4)
+                keys.RemoveAt(keys.Count - 1);
         }
 
         private void SaveConfig() => Config.WriteObject(_cfg, true);
