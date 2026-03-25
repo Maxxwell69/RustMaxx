@@ -366,6 +366,14 @@ export default function AdminStreamerInteractionsPage() {
               Optional: <code className="rounded bg-zinc-800 px-1">?template=other_bot_key</code>,{" "}
               <code className="rounded bg-zinc-800 px-1">tier</code>, <code className="rounded bg-zinc-800 px-1">uniqueId</code> when crew gate is on.
             </p>
+            {data.tikfinityFeatures?.npcmaxxRequireCrewRegistry && (
+              <p className="mt-2 rounded border border-amber-800/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-100/95">
+                <strong>Crew gate is on</strong> (<code className="rounded bg-zinc-900 px-1">NPCMAXX_REQUIRE_CREW_REGISTRY</code>
+                ): MaxxInvaders webhooks only run if the payload includes TikTok <code className="rounded bg-zinc-900 px-1">userId</code> /{" "}
+                <code className="rounded bg-zinc-900 px-1">uniqueId</code> and that viewer is already in the crew registry (join URL first). Otherwise the API returns{" "}
+                <code className="rounded bg-zinc-900 px-1">skipped</code> — not an RCON failure.
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
                 {`${webhookUrl}?action=maxxinvaders`}

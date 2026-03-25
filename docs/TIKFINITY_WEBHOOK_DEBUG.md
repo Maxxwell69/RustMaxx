@@ -82,6 +82,16 @@ curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=maxxinvaders&vie
 
 With **`NPCMAXX_REQUIRE_CREW_REGISTRY`** on, include TikTok **`uniqueId`** or **`userId`** and register the viewer like npcmaxx. Connection event names **`maxxinvaders`**, **`invaders`**, and **`invader`** map to this action.
 
+**If Streamer Patrol “used to work” and stopped:** read the JSON response body from one trigger.
+
+| Response | Likely cause |
+|----------|----------------|
+| `ok: false`, `skipped`, `missing_tiktok_unique_id` | Crew gate on but TikFinity no longer sends `userId` / `uniqueId` — fix payload mapping or disable crew gate. |
+| `ok: false`, `skipped`, `not_in_crew_registry` | Viewer not in crew table — they must use `?event=join` first, or relax the gate. |
+| `ok: false`, `502`, `step: rcon_connect` | RustMaxx cannot reach RCON — host/port/password / firewall / WebRCON port. |
+| `ok: false`, `502`, `rconResponse` with `Error:` | Game/plugin rejected spawn — check **`streamer_patrol`** exists, **Enable bot?** true, MaxxInvaders + RoamingNPCs loaded. |
+| `ok: true` but wrong bot / not patrol | A TikFinity **connection** row may set a different **Roaming template** for that event, or you added **`?template=`** pointing at another bot. Remove override or set template to `streamer_patrol`. |
+
 Webhook spawns have **no in-game streamer anchor**; patrol/bodyguard tied to the streamer’s Steam ID need an in-game spawn path.
 
 ---
