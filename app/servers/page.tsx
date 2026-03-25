@@ -115,7 +115,7 @@ export default function ServersPage() {
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="mb-4 text-lg font-medium text-zinc-300">Add server</h2>
         <p className="mb-4 text-sm text-zinc-500">
-          Use the server <strong>IP only</strong> in Host (e.g. 51.79.46.205). Port: use your host’s <strong>WebRCON/RCON</strong> port (e.g. Shockbyte RCON = <strong>21717</strong>). Not the game port (21715), Query (21716), or RUSTPLUS (21782).
+          Use the server <strong>IP only</strong> in Host (e.g. 51.79.46.205). Port: use your host’s <strong>WebRCON/RCON</strong> port (e.g. Shockbyte RCON = <strong>21717</strong>). Not the game port (21715), Query (21716), or RUSTPLUS (21782). To change host, port, or password later, open the server → <strong>RCON host, port &amp; password</strong> (owner/admin).
         </p>
         <form onSubmit={handleAdd} className="grid gap-4 sm:grid-cols-2">
           <div>

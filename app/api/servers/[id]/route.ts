@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { disconnect } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
 import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
-import { getServerWithRole, getServerIfAccessible, canEditServer, canDeleteServer } from "@/lib/server-access";
+import { getServerWithRole, canEditServer, canDeleteServer } from "@/lib/server-access";
 import type { ServerRow } from "@/lib/db";
 
 export async function GET(
@@ -41,6 +41,11 @@ export async function PATCH(
     location?: string | null;
     logo_url?: string | null;
     map_preview_url?: string | null;
+    /** WebRCON host (IP or hostname, no scheme). */
+    rcon_host?: string;
+    rcon_port?: number;
+    /** Omit or leave empty to keep existing password; send non-empty to replace. */
+    rcon_password?: string;
   };
   try {
     body = await request.json();
@@ -86,16 +91,52 @@ export async function PATCH(
       typeof body.map_preview_url === "string" ? body.map_preview_url.trim() || null : null
     );
   }
-  if (updates.length === 0) {
-    return NextResponse.json(existing);
+
+  let rconCredentialsChanged = false;
+  if (body.rcon_host !== undefined) {
+    const h = typeof body.rcon_host === "string" ? body.rcon_host.trim() : "";
+    if (!h) {
+      return NextResponse.json({ error: "rcon_host cannot be empty" }, { status: 400 });
+    }
+    updates.push(`rcon_host = $${idx++}`);
+    values.push(h);
+    rconCredentialsChanged = true;
   }
+  if (body.rcon_port !== undefined) {
+    const p = typeof body.rcon_port === "number" ? body.rcon_port : Number(body.rcon_port);
+    if (!Number.isInteger(p) || p < 1 || p > 65535) {
+      return NextResponse.json({ error: "rcon_port must be 1–65535" }, { status: 400 });
+    }
+    updates.push(`rcon_port = $${idx++}`);
+    values.push(p);
+    rconCredentialsChanged = true;
+  }
+  if (
+    body.rcon_password !== undefined &&
+    typeof body.rcon_password === "string" &&
+    body.rcon_password.trim() !== ""
+  ) {
+    updates.push(`rcon_password = $${idx++}`);
+    values.push(body.rcon_password.trim());
+    rconCredentialsChanged = true;
+  }
+
+  if (updates.length === 0) {
+    const { rcon_password: _sec, ...safeExisting } = existing as Record<string, unknown>;
+    return NextResponse.json({ ...safeExisting, myRole: result.serverRole });
+  }
+  if (rconCredentialsChanged) disconnect(serverId);
   values.push(serverId);
   const { rows } = await query<ServerRow>(
     `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at`,
     values
   );
-  await audit(session.userId, "server.update", { serverId, fields: Object.keys(body) });
-  return NextResponse.json(rows[0]);
+  const auditFields = Object.keys(body).filter((k) => k !== "rcon_password");
+  if (body.rcon_password !== undefined && String(body.rcon_password).trim() !== "") {
+    auditFields.push("rcon_password_set");
+  }
+  await audit(session.userId, "server.update", { serverId, fields: auditFields });
+  return NextResponse.json({ ...rows[0], myRole: result.serverRole });
 }
 
 export async function DELETE(

@@ -28,6 +28,8 @@ export default function ServerDetailPage() {
   const [server, setServer] = useState<{
     name: string;
     myRole?: "owner" | "admin" | "moderator";
+    rcon_host?: string;
+    rcon_port?: number;
     listed?: boolean;
     listing_name?: string | null;
     listing_description?: string | null;
@@ -56,6 +58,9 @@ export default function ServerDetailPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [playersLoading, setPlayersLoading] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [rconForm, setRconForm] = useState({ host: "", port: "", password: "" });
+  const [rconSaving, setRconSaving] = useState(false);
+  const [rconFeedback, setRconFeedback] = useState<string | null>(null);
   const [profiledPlayers, setProfiledPlayers] = useState<ProfiledPlayer[]>([]);
   const [inactiveLoading, setInactiveLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -82,6 +87,11 @@ export default function ServerDetailPage() {
             game_port: s.game_port != null ? String(s.game_port) : "",
             location: s.location ?? "",
             logo_url: s.logo_url ?? "",
+          });
+          setRconForm({
+            host: typeof s.rcon_host === "string" ? s.rcon_host : "",
+            port: s.rcon_port != null ? String(s.rcon_port) : "",
+            password: "",
           });
         }
       })
@@ -264,6 +274,46 @@ export default function ServerDetailPage() {
     }
   }
 
+  async function saveRcon() {
+    setRconFeedback(null);
+    const host = rconForm.host.trim();
+    const port = parseInt(rconForm.port, 10);
+    if (!host || !Number.isFinite(port) || port < 1 || port > 65535) {
+      setRconFeedback("Enter a valid host and RCON port (1–65535).");
+      return;
+    }
+    setRconSaving(true);
+    try {
+      const payload: Record<string, unknown> = { rcon_host: host, rcon_port: port };
+      if (rconForm.password.trim()) payload.rcon_password = rconForm.password.trim();
+      const res = await fetch(`/api/servers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRconFeedback(typeof data.error === "string" ? data.error : "Save failed");
+        return;
+      }
+      setServer((prev) => (prev ? { ...prev, ...data } : null));
+      setRconForm((f) => ({ ...f, password: "" }));
+      setRconFeedback("Saved. Click Connect again (previous session was cleared).");
+      setConnected(false);
+      setConnectError(null);
+      try {
+        sessionStorage.removeItem(`rcon_${id}`);
+      } catch {
+        //
+      }
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+    } finally {
+      setRconSaving(false);
+    }
+  }
+
   async function sendCommand(cmd: string) {
     const c = (cmd || command).trim();
     if (!c) return;
@@ -364,6 +414,65 @@ export default function ServerDetailPage() {
       <p className="text-sm text-zinc-500">
         Uses <strong>WebRCON</strong> (WebSocket). If you get timeout on Railway, run RustMaxx locally (<code>npm run dev</code>) so the connection comes from your PC.
       </p>
+
+      {(server.myRole === "owner" || server.myRole === "admin") && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <h2 className="text-sm font-medium text-zinc-300">RCON host, port &amp; password</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            The password is stored in RustMaxx but never shown again after save. Use your host&apos;s{" "}
+            <strong className="text-zinc-400">WebRCON</strong> port (e.g. Shockbyte &quot;RCON&quot; in Ports — not game or query).
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Host (IP only)</label>
+              <input
+                type="text"
+                value={rconForm.host}
+                onChange={(e) => setRconForm((f) => ({ ...f, host: e.target.value }))}
+                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                placeholder="e.g. 51.79.46.205"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">RCON port</label>
+              <input
+                type="number"
+                value={rconForm.port}
+                onChange={(e) => setRconForm((f) => ({ ...f, port: e.target.value }))}
+                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                placeholder="e.g. 28016"
+                min={1}
+                max={65535}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-zinc-400">New RCON password (optional)</label>
+              <input
+                type="password"
+                value={rconForm.password}
+                onChange={(e) => setRconForm((f) => ({ ...f, password: e.target.value }))}
+                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                placeholder="Leave blank to keep current password"
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+          {rconFeedback && (
+            <p className={`mt-2 text-xs ${rconFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}>
+              {rconFeedback}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void saveRcon()}
+            disabled={rconSaving}
+            className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
+          >
+            {rconSaving ? "Saving…" : "Save RCON settings"}
+          </button>
+        </div>
+      )}
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm text-zinc-400">
