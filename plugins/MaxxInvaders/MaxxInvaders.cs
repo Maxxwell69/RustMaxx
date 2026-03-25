@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.0")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.1")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -116,10 +116,10 @@ namespace Oxide.Plugins
             public bool DebugMode { get; set; } = false;
             public int MaxActiveNPCs { get; set; } = 24;
             public bool PreventDuplicateViewerNPCs { get; set; } = true;
-            public float MinimumSpawnRadiusFromAnchor { get; set; } = 20f;
-            public float DefaultSpawnRadius { get; set; } = 80f;
+            public float MinimumSpawnRadiusFromAnchor { get; set; } = 5f;
+            public float DefaultSpawnRadius { get; set; } = 22f;
             public float MaxDistanceFromAnchor { get; set; } = 140f;
-            public float MinimumDistanceFromPlayers { get; set; } = 12f;
+            public float MinimumDistanceFromPlayers { get; set; } = 8f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
             public bool BlockSpawnInMonuments { get; set; } = true;
             public float DefaultLifetimeSeconds { get; set; } = 3600f;
@@ -1053,12 +1053,14 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private static bool TooCloseToPlayers(Vector3 pos, float minDist)
+        /// <param name="excludeUserId">Anchor streamer — ignored so viewer bots can spawn a few meters from you.</param>
+        private static bool TooCloseToPlayers(Vector3 pos, float minDist, ulong excludeUserId = 0UL)
         {
             var sq = minDist * minDist;
             foreach (var pl in BasePlayer.activePlayerList)
             {
                 if (pl == null || !pl.IsValid() || pl.IsNpc) continue;
+                if (excludeUserId != 0UL && pl.userID == excludeUserId) continue;
                 if ((pl.transform.position - pos).sqrMagnitude < sq) return true;
             }
             return false;
