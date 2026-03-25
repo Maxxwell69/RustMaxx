@@ -302,6 +302,12 @@ namespace Oxide.Plugins
             public string PanelColor { get; set; } = "0.1 0.1 0.12 0.95";
             public string AccentColor { get; set; } = "0.2 0.75 0.85 0.9";
 
+            /// <summary>MAXX INVADERS header font-size markup used in the main GUI.</summary>
+            public int InvadersTitleSize { get; set; } = 18;
+
+            /// <summary>Version text (<c>v{Version}</c>) font-size markup used in the main GUI.</summary>
+            public int InvadersVersionSize { get; set; } = 11;
+
             /// <summary>Four RoamingNPCs.json bot keys for the Invaders spawn form selector (slots 1–4).</summary>
             public List<string> SpawnRoamingTemplateKeys { get; set; } = new()
             {
@@ -394,6 +400,13 @@ namespace Oxide.Plugins
 
                 _cfg.GuiSchemaVersion = GuiSchemaCurrent;
             }
+
+            // Font sizes: if user edits config manually and leaves 0/negative, restore defaults.
+            if (_cfg.Gui.InvadersTitleSize <= 0) _cfg.Gui.InvadersTitleSize = d.Gui.InvadersTitleSize;
+            if (_cfg.Gui.InvadersVersionSize <= 0) _cfg.Gui.InvadersVersionSize = d.Gui.InvadersVersionSize;
+
+            _cfg.Gui.InvadersTitleSize = Mathf.Clamp(_cfg.Gui.InvadersTitleSize, 8, 40);
+            _cfg.Gui.InvadersVersionSize = Mathf.Clamp(_cfg.Gui.InvadersVersionSize, 6, 28);
         }
 
         /// <summary>Ensure streamer_patrol appears in the Invaders GUI slot list (defaults + one-time migration).</summary>
@@ -3655,7 +3668,7 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text =
-                            $"<size=18><color=#dddddd>MAXX</color> <color=#d62828>INVADERS</color></size>  <size=11><color=#8899aa>v{Version}</color></size>",
+                            $"<size={_cfg.Gui.InvadersTitleSize}><color=#dddddd>MAXX</color> <color=#d62828>INVADERS</color></size>  <size={_cfg.Gui.InvadersVersionSize}><color=#8899aa>v{Version}</color></size>",
                         FontSize = 14,
                         Align = TextAnchor.MiddleLeft,
                     },

@@ -3486,7 +3486,8 @@ namespace Oxide.Plugins
         public void SetInfoBot(CustomPet npc, BasePlayer player, ref string text)
         {
             text = "<size=16>";
-            text += npc.GetResolvedDisplayName() + $"[{npc.UserIDString}] ({npc.GetPersonality()})";
+            // Hide bot name and long user-id digits in admin marker text (player still sees health/state).
+            text += $"({npc.GetPersonality()})";
             text += $"\nDistance[{npc.Distance(player):0.0 m}]";
             text += $"   Health: {npc.Health() / npc.MaxHealth():0%}";
             text += $"\nState: {DescribeBrainStateForDebug(npc)}";

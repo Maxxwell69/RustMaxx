@@ -53,5 +53,9 @@
       "LifetimeSeconds": 7200.0,
       "MaxActiveForTier": 2
     }
+  },
+  "Gui": {
+    "InvadersTitleSize": 18,
+    "InvadersVersionSize": 11
   }
 }

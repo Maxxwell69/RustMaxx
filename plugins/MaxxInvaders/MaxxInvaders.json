@@ -68,6 +68,8 @@
     "RowsPerPage": 8,
     "PanelColor": "0.1 0.1 0.12 0.95",
     "AccentColor": "0.2 0.75 0.85 0.9",
+    "InvadersTitleSize": 18,
+    "InvadersVersionSize": 11,
     "ShowInvaderWorldTags": true,
     "ShowInvaderHudList": true,
     "InvaderWorldTagMaxDistance": 150.0
