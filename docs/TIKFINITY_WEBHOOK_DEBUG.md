@@ -74,6 +74,8 @@ Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot 
 
 **Stay near streamer / base (easiest):** in RustMaxx go to **Servers → [TIKFINITY_SERVER_ID server] → TikFinity patrol anchor** and save your **Steam64** once — no `?anchorSteam=` in the TikFinity URL. Resolution order: JSON **`anchorSteam`** → **`?anchorSteam=`** → **server dashboard field** → env **`TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID`**. That Steam account must be **online or sleeping** on the server. Tune **`MaxDistanceFromAnchor`** in `MaxxInvaders.json` to tighten the patrol area. **MaxxInvaders 1.5.9+** refreshes the patrol center from the anchor player’s **current** position each tick while they are online (so the leash follows you; older builds only used the position at spawn time).
 
+**Same anchor without RustMaxx URL fields:** set **`DefaultAnchorSteamId`** in **`oxide/config/MaxxInvaders.json`** (or **MAXX SETTINGS** in-game, **1.6.5+**) to your **Steam64**. Then RCON `maxxinvaders.spawn` **without** the 7th argument still uses you as spawn ring + RoamingNPCs bridge anchor — matching **GUI** spawns (GUI always uses the admin as anchor).
+
 **RoamingNPCs 0.5.10+ (RustMaxx `RoamingNPCs.cs`):** bridge spawns with a non-zero anchor Steam id **always** set `BridgeProtectAnchorUserId` and turn on **Bridge patrol** + **protect anchor** when the template omitted those flags — otherwise the bot kept **full roam AI** and looked like it was “running away” from you.
 
 **0.5.11+:** **Friendly** personality bots **flee players** (`RunAwayCoroutine`) — that fights patrol and causes **flee + leash zip** loops. For MaxxInvaders bridge spawns with an anchor, that flee path is **skipped** (target cleared / no run-away) so **BridgePatrol** can drive movement instead.

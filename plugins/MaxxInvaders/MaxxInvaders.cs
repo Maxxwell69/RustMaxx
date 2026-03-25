@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.4")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.5")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -147,6 +147,14 @@ namespace Oxide.Plugins
             public float BehaviorTickSeconds { get; set; } = 1.5f;
             public bool DespawnOnUnload { get; set; } = true;
             public float PersistIntervalSeconds { get; set; } = 60f;
+
+            /// <summary>
+            /// When TikFinity/RCON omits the 7th <c>maxxinvaders.spawn</c> arg, use this Steam64 (online or sleeping) for
+            /// spawn ring + RoamingNPCs bridge anchor — same effect as GUI spawn (admin = anchor). Matches RustMaxx "TikFinity patrol anchor" when set to the same id.
+            /// </summary>
+            public string DefaultAnchorSteamId { get; set; } = "";
+
+            public bool ShouldSerializeDefaultAnchorSteamId() => !string.IsNullOrWhiteSpace(DefaultAnchorSteamId);
 
             /// <summary>
             /// When true and RoamingNPCs is loaded, spawns use that plugin’s bot templates (full gather/hunt/roam AI).
@@ -351,6 +359,7 @@ namespace Oxide.Plugins
         private void EnsureConfigDefaults()
         {
             var d = new InvaderConfig();
+            if (_cfg.DefaultAnchorSteamId == null) _cfg.DefaultAnchorSteamId = "";
             _cfg.Gui ??= d.Gui ?? new GuiSettings();
             _cfg.Logging ??= d.Logging ?? new LoggingSettings();
             if (_cfg.AllowedBehaviorModes == null || _cfg.AllowedBehaviorModes.Count == 0)
@@ -774,6 +783,8 @@ namespace Oxide.Plugins
             var kitResolved = string.IsNullOrWhiteSpace(kitName) ? tierDef.DefaultKit : kitName;
             var lifetime = tierDef.LifetimeSeconds > 0 ? tierDef.LifetimeSeconds : _cfg.DefaultLifetimeSeconds;
 
+            anchorPlayer = ResolveAnchorForSpawn(anchorPlayer);
+
             if (!TryFindSpawnPosition(anchorPlayer, out var pos))
                 return SpawnResult.Fail("spawn_position");
 
@@ -1046,6 +1057,18 @@ namespace Oxide.Plugins
             }
 
             return moved;
+        }
+
+        /// <summary>GUI passes the admin as anchor; RCON/webhook often omit the 7th arg — optional <see cref="InvaderConfig.DefaultAnchorSteamId"/>.</summary>
+        private BasePlayer ResolveAnchorForSpawn(BasePlayer explicitAnchor)
+        {
+            if (explicitAnchor != null && explicitAnchor.IsValid())
+                return explicitAnchor;
+            if (string.IsNullOrWhiteSpace(_cfg.DefaultAnchorSteamId)) return null;
+            if (!ulong.TryParse(_cfg.DefaultAnchorSteamId.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out var steam) || steam < 10000UL)
+                return null;
+            return FindPlayerOrSleeperByUserId(steam);
         }
 
         private bool TryFindSpawnPosition(BasePlayer anchorPlayer, out Vector3 pos)
@@ -2523,6 +2546,22 @@ namespace Oxide.Plugins
                 _cfg.ViewerRoamingTemplateKey = value;
                 SaveConfig();
             }
+            else if (field == nameof(InvaderConfig.DefaultAnchorSteamId))
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    _cfg.DefaultAnchorSteamId = "";
+                    SaveConfig();
+                    return;
+                }
+
+                if (ulong.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var steam) &&
+                    steam >= 10000UL)
+                {
+                    _cfg.DefaultAnchorSteamId = value.Trim();
+                    SaveConfig();
+                }
+            }
         }
 
         private void ApplyGuiCfgNum(string field, string valueRaw)
@@ -2774,6 +2813,42 @@ namespace Oxide.Plugins
             RowNum("SpawnAttempts", nameof(InvaderConfig.SpawnAttempts), _cfg.SpawnAttempts.ToString());
             RowNum("PerViewerCooldownSeconds", nameof(InvaderConfig.PerViewerCooldownSeconds),
                 _cfg.PerViewerCooldownSeconds.ToString(CultureInfo.InvariantCulture));
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text =
+                            "DefaultAnchorSteamId (optional; webhook/RCON when 7th arg omitted — your Steam64)",
+                        FontSize = 8,
+                        Align = TextAnchor.LowerLeft,
+                    },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
+                },
+                panel);
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = panel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 20,
+                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultAnchorSteamId)} ",
+                            FontSize = 11,
+                            IsPassword = false,
+                            Text = _cfg.DefaultAnchorSteamId ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
+                    },
+                });
+            y -= 0.048f;
 
             container.Add(
                 new CuiLabel

@@ -77,6 +77,8 @@ On the **Invaders** tab bot list, **TO ME** teleports **that bot to you** (rando
 
 **Streamer HUD (1.6.2+):** Players with **`maxxinvaders.admin`** see optional **world tags** (yellow name, green HP%, white distance) and a **right-side** list of alive invaders. Defaults are **on**; turn off under **Invaders GUI → MAXX SETTINGS → Streamer HUD**, or set **`Gui.ShowInvaderWorldTags`** / **`Gui.ShowInvaderHudList`** in config. World tags use Rust **`ddraw`** (same family as debug overlays); if nothing draws, ensure the client allows dev/debug draw for admins.
 
+**Why GUI spawns feel better than webhooks:** **GUI** always passes **you** as the **anchor** player, so spawn position + RoamingNPCs **patrol/leash** center on **your** Steam id. **TikFinity** hits RustMaxx without a 7th RCON arg unless you set **TikFinity patrol anchor** (server dashboard), **`?anchorSteam=`**, JSON **`anchorSteam`**, env, or **`DefaultAnchorSteamId`** in **`MaxxInvaders.json`** (**1.6.5+**). Without any anchor, **`anchorSteam`** was **0** and spawn could use **another** online player as the ring center — behavior diverged from GUI.
+
 ## “Failed to create agent because it is not close enough to the NavMesh”
 
 Spawns must land on **walkable NavMesh**. MaxxInvaders **1.1.3+** expands NavMesh sampling (up to ~28 m) for spawn points, scientist **Spawn()**, RoamingNPCs **Teleport**, and scientist steering targets. If this still spams the console, try **smaller** `DefaultSpawnRadius`, **more** `SpawnAttempts`, or test in open terrain away from cliffs, quarry edges, or monument gaps. **RoamingNPCs** bots use their own spawn logic first; we only snap positions after **Teleport**.
@@ -113,6 +115,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.6.5:** **`DefaultAnchorSteamId`** (optional in `MaxxInvaders.json` / **MAXX SETTINGS**): when TikFinity/RCON **does not** pass the 7th `maxxinvaders.spawn` arg, the plugin uses this **Steam64** as spawn ring + RoamingNPCs **bridge anchor** — same as **GUI** spawns (where **you** are always the anchor). Set to your Steam id (or keep using RustMaxx **TikFinity patrol anchor**, which adds the 7th arg for you).
 - **1.6.4:** World `ddraw` tags use **smaller** text (`<size=10>`). For **RoamingNPCs** invaders, the **yellow name line is omitted** (the grey **vanilla nameplate** already shows `displayName`); only **HP%** and **distance** float above. Scientist-only invaders still get all three lines.
 - **1.6.2:** **Streamer HUD** (default **on**, **`maxxinvaders.admin`** only): **3D world tags** above each invader (yellow **name**, green **HP%**, white **distance**; `ddraw`, max range **`InvaderWorldTagMaxDistance`**), plus a **middle-right** CUI list of alive bots. Toggle in **MAXX SETTINGS** or `Gui` in `MaxxInvaders.json`.
 - **1.6.1:** Default spawn ring is **tight to the anchor** (`MinimumSpawnRadiusFromAnchor` / `DefaultSpawnRadius` **5–22 m**). The anchor streamer is **excluded** from the “too close to players” check so bots can spawn beside you (previously your own character blocked nearby spots). Tune **`MinimumDistanceFromPlayers`** if other players are near.
