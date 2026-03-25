@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.7")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.8")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2207,7 +2207,7 @@ namespace Oxide.Plugins
                     if (npc == null) continue;
                     var dist = Vector3.Distance(player.transform.position, npc.transform.position);
                     if (dist > maxD) continue;
-                    DrawInvaderWorldTag(player, npc, r.ViewerName ?? r.NpcId, dist, r.IsRoamingNpc);
+                    DrawInvaderWorldTag(player, npc, r.ViewerName ?? r.NpcId, dist);
                 }
             }
         }
@@ -2274,37 +2274,24 @@ namespace Oxide.Plugins
             return Mathf.Clamp01(npc.health / mh) * 100f;
         }
 
-        /// <param name="isRoamingNpc">RoamingNPCs already shows the viewer name on the vanilla nameplate — skip duplicate yellow name line.</param>
-        private static void DrawInvaderWorldTag(
-            BasePlayer viewer,
-            BasePlayer npc,
-            string rawName,
-            float distMeters,
-            bool isRoamingNpc)
+        /// <summary>3D tags (RoamingNPCs 0.5.15+ clears vanilla nameplate for MaxxInvaders bridge bots). distanceFade 0 = stay visible at range.</summary>
+        private static void DrawInvaderWorldTag(BasePlayer viewer, BasePlayer npc, string rawName, float distMeters)
         {
             const string Sz = "<size=10>";
             const string SzEnd = "</size>";
+            const float NoFade = 0f;
             var hpPct = GetHealthPercentDisplay(npc);
             var root = npc.transform.position + Vector3.up * 1.95f;
             var yel = new Color(1f, 0.93f, 0.18f);
             var grn = new Color(0.35f, 1f, 0.5f);
 
-            if (isRoamingNpc)
-            {
-                // Grey nameplate = bot displayName (RoamingNPCs). Only HP + distance here, smaller stack.
-                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root + Vector3.up * 0.12f,
-                    $"{Sz}{hpPct:F0}%{SzEnd}");
-                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * 0.18f,
-                    $"{Sz}{distMeters:F0} m{SzEnd}");
-                return;
-            }
-
             var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(rawName) ? "?" : rawName.Trim());
             viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, yel, root + Vector3.up * 0.32f,
-                $"{Sz}{nm}{SzEnd}");
-            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root, $"{Sz}{hpPct:F0}%{SzEnd}");
+                $"{Sz}{nm}{SzEnd}", NoFade);
+            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root, $"{Sz}{hpPct:F0}%{SzEnd}",
+                NoFade);
             viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * 0.32f,
-                $"{Sz}{distMeters:F0} m{SzEnd}");
+                $"{Sz}{distMeters:F0} m{SzEnd}", NoFade);
         }
 
         #endregion

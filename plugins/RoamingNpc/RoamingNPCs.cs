@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.14")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.15")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3370,6 +3370,13 @@ namespace Oxide.Plugins
             BotIdGenerator.AddID(data.userID);
 
             customPet.displayName = data.DisplayName;
+            // MaxxInvaders draws viewer name via ddraw; hide vanilla nameplate (Data.DisplayName kept for corpse/UI).
+            if (data.SpawnedFromMaxxInvadersBridge)
+            {
+                customPet.displayName = "";
+                customPet.SendNetworkUpdate();
+            }
+
             customPet.userID = data.userID;
             customPet.UserIDString = data.userID.ToString();
             customPet.gameObject.AwakeFromInstantiate();
@@ -3484,7 +3491,7 @@ namespace Oxide.Plugins
         public void SetInfoBot(CustomPet npc, BasePlayer player, ref string text)
         {
             text = "<size=16>";
-            text += npc.displayName + $"[{npc.UserIDString}] ({npc.GetPersonality()})";
+            text += npc.GetResolvedDisplayName() + $"[{npc.UserIDString}] ({npc.GetPersonality()})";
             text += $"\nDistance[{npc.Distance(player):0.0 m}]";
             text += $"   Health: {npc.Health() / npc.MaxHealth():0%}";
             text += $"\nState: {DescribeBrainStateForDebug(npc)}";
@@ -3501,7 +3508,7 @@ namespace Oxide.Plugins
                 if (npc != null)
                 {
                     SetInfoUI(npc, ref text);
-                    info.Add(npc.displayName, text);
+                    info.Add(npc.GetResolvedDisplayName(), text);
                 }
             }
             try
@@ -3921,6 +3928,11 @@ namespace Oxide.Plugins
             public float ThinkController => Data?.Setup?.Controller?.GetTimerTickController() ?? 0.1f;
             public float ThinkBrain => Data?.Setup?.Controller?.GetTimerTickBrain() ?? 0.1f;
             public DataBot Data;
+
+            /// <summary>World nameplate may be cleared for MaxxInvaders bridge; use stored Data.DisplayName for UI/logs.</summary>
+            public string GetResolvedDisplayName() =>
+                !string.IsNullOrEmpty(displayName) ? displayName : Data?.DisplayName ?? "";
+
             private Brain customBrain;
             private MoveController moveController;
             public Brain CustomBrain => customBrain;
@@ -4213,7 +4225,9 @@ namespace Oxide.Plugins
                             nPCPlayerCorpse.CreateEmptyContainer(inventory.containerMain.capacity);
                         }
 
-                        nPCPlayerCorpse.playerName = displayName;
+                        nPCPlayerCorpse.playerName = string.IsNullOrEmpty(displayName) && Data != null
+                            ? Data.DisplayName
+                            : displayName;
                         nPCPlayerCorpse.playerSteamID = userID;
                         nPCPlayerCorpse.Spawn();
                         if (ShouldCorpseTakeChildren)
@@ -4255,7 +4269,9 @@ namespace Oxide.Plugins
                             playerCorpse.TakeFrom(this, inventory.containerMain, inventory.containerWear, inventory.containerBelt);
                         }
 
-                        playerCorpse.playerName = displayName;
+                        playerCorpse.playerName = string.IsNullOrEmpty(displayName) && Data != null
+                            ? Data.DisplayName
+                            : displayName;
                         playerCorpse.playerSteamID = userID;
                         playerCorpse.Spawn();
                         playerCorpse.TakeChildren(this);

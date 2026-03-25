@@ -115,6 +115,8 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.6.8:** **World tags** always show **name + HP + distance**; `ddraw.text` uses **distance fade 0** so labels stay readable at long range. **RoamingNPCs 0.5.15+** clears the **vanilla nameplate** for **MaxxInvaders bridge** bots only (`Data.DisplayName` kept for corpse + admin UI via `GetResolvedDisplayName`).
+- **1.6.7:** **MAXX SETTINGS** uses a **scroll view** (mouse wheel) so all fields are reachable; **Access** line stays **fixed** at the bottom of the panel.
 - **1.6.6:** **`DefaultAnchorSteamId`** field moved **up** in **MAXX SETTINGS** (under Streamer HUD) so it is not drawn off-screen. Chat: **`/maxxinvaders anchor <Steam64>`** / **`anchor clear`** (admin).
 - **1.6.5:** **`DefaultAnchorSteamId`** (optional in `MaxxInvaders.json` / **MAXX SETTINGS**): when TikFinity/RCON **does not** pass the 7th `maxxinvaders.spawn` arg, the plugin uses this **Steam64** as spawn ring + RoamingNPCs **bridge anchor** — same as **GUI** spawns (where **you** are always the anchor). Set to your Steam id (or keep using RustMaxx **TikFinity patrol anchor**, which adds the 7th arg for you).
 - **1.6.4:** World `ddraw` tags use **smaller** text (`<size=10>`). For **RoamingNPCs** invaders, the **yellow name line is omitted** (the grey **vanilla nameplate** already shows `displayName`); only **HP%** and **distance** float above. Scientist-only invaders still get all three lines.
