@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.11")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.12")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -5058,6 +5058,10 @@ namespace Oxide.Plugins
             }
             public void OnCollectiblePickedup(Item item) => minerState?.OnCollectiblePickedup(item);
             public bool IsActive(IBotState state) => currentState != null && state != null && currentState.NameState == state.NameState;
+            /// <summary>MaxxInvaders bridge with streamer anchor: skip hunter/researcher so bots do not path to animals or monuments across the map.</summary>
+            private bool BridgeAnchorStayLocalOnly =>
+                owner?.Data?.SpawnedFromMaxxInvadersBridge == true && owner.Data.BridgeProtectAnchorUserId != 0UL;
+
             public void ChangeState(IBotState state)
             {
                 currentState?.LeaveState(state);
@@ -5293,7 +5297,7 @@ namespace Oxide.Plugins
                     }
                     else if (IsActive(attackerState)) ChangeState(null);
 
-                    if (canUseHunterState && hunterState.CanEnterState)
+                    if (canUseHunterState && !BridgeAnchorStayLocalOnly && hunterState.CanEnterState)
                     {
                         if (!IsActive(hunterState)) ChangeState(hunterState);
 
@@ -5343,11 +5347,13 @@ namespace Oxide.Plugins
                     }
                     else if (IsActive(minerState)) ChangeState(null);
 
-                    if (canUseResearcherState)
+                    if (canUseResearcherState && !BridgeAnchorStayLocalOnly && researcherState.CanEnterState)
                     {
                         if (!IsActive(researcherState)) ChangeState(researcherState);
                         yield return currentState.routine;
+                        goto End;
                     }
+                    else if (IsActive(researcherState)) ChangeState(null);
 
                 End: yield return CoroutineEx.waitForSeconds(ThinkStateDelta);
                 }

@@ -78,6 +78,8 @@ Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot 
 
 **0.5.11+:** **Friendly** personality bots **flee players** (`RunAwayCoroutine`) — that fights patrol and causes **flee + leash zip** loops. For MaxxInvaders bridge spawns with an anchor, that flee path is **skipped** (target cleared / no run-away) so **BridgePatrol** can drive movement instead.
 
+**0.5.12+:** For the same bridge + anchor spawns, **Hunter** (chase animals) and **Researcher** (monument visits) brain states are **disabled** so NPCs do not path to **far** animals or **monuments**. They still use **BridgePatrol** (radius in `streamer_patrol` → `BridgePatrol`), **Miner** (gather within controller radius), **Dropped**, etc. Tighten **`BridgePatrol.RadiusMeters`** and **`Controller` → find radius** in `RoamingNPCs.json` for your `streamer_patrol` template to keep activity local.
+
 Ensure **`streamer_patrol`** exists in `RoamingNPCs.json` and **`"Enable bot?": true`**.
 
 ```bash
