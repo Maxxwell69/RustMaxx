@@ -2244,7 +2244,18 @@ namespace Oxide.Plugins
                 if (!CanAdmin(player)) continue;
 
                 if (_cfg.Gui.ShowInvaderHudList)
-                    UpdateInvaderHudPanel(player, bots);
+                {
+                    // Right-side INVADERS list overlaps Rust's loot / NPC inventory UI — hide while loot is open.
+                    if (IsPlayerLootInventoryUiOpen(player))
+                    {
+                        _lastHudContentByUser.Remove(player.userID);
+                        CuiHelper.DestroyUi(player, HudOverlayUiName);
+                    }
+                    else
+                    {
+                        UpdateInvaderHudPanel(player, bots);
+                    }
+                }
                 else
                 {
                     _lastHudContentByUser.Remove(player.userID);
@@ -2262,6 +2273,22 @@ namespace Oxide.Plugins
                     if (dist > maxD) continue;
                     DrawInvaderWorldTag(player, npc, ResolveViewerNameForWorldTag(r), dist);
                 }
+            }
+        }
+
+        /// <summary>True while the player has the loot panel open (own inventory + looting another entity / PNPC, etc.).</summary>
+        private static bool IsPlayerLootInventoryUiOpen(BasePlayer player)
+        {
+            try
+            {
+                var loot = player?.inventory?.loot;
+                if (loot == null) return false;
+                if (loot.entitySource != null) return true;
+                return loot.containers != null && loot.containers.Count > 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 
