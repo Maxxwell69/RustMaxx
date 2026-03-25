@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.8")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.9")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -497,6 +497,8 @@ namespace Oxide.Plugins
             /// <summary>When true, NPC pathfinds toward <see cref="AnchorPosition"/> until within <see cref="ReturnRunArrivalMeters"/>.</summary>
             public bool ReturnRunActive;
             public Vector3 AnchorPosition;
+            /// <summary>When non-zero, <see cref="AnchorPosition"/> is refreshed each behavior tick from this player (streamer patrol / webhook anchor).</summary>
+            public ulong AnchorSteamId;
             public DateTime SpawnedAtUtc;
             public DateTime? ExpiresAtUtc;
         }
@@ -860,6 +862,7 @@ namespace Oxide.Plugins
                 IsRoamingNpc = isRoaming,
                 RoamingTemplateKey = roamingTemplate ?? "",
                 AnchorPosition = pos,
+                AnchorSteamId = anchorPlayer != null && anchorPlayer.IsValid() ? anchorPlayer.userID : 0UL,
                 SpawnedAtUtc = DateTime.UtcNow,
                 ExpiresAtUtc = lifetime > 0 ? DateTime.UtcNow.AddSeconds(lifetime) : null,
             };
@@ -1093,6 +1096,14 @@ namespace Oxide.Plugins
                 var pos = r.NpcPlayer.transform.position;
                 UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
 
+                // Move leash center with streamer/base anchor (RCON webhook + GUI spawns with anchor player).
+                if (r.AnchorSteamId != 0UL)
+                {
+                    var ap = FindPlayerOrSleeperByUserId(r.AnchorSteamId);
+                    if (ap != null && ap.IsValid())
+                        r.AnchorPosition = ap.transform.position;
+                }
+
                 // Run back toward streamer anchor (GUI "Return") — pathfind until within 20m, no teleport.
                 if (r.ReturnRunActive && r.AnchorPosition != Vector3.zero)
                 {
@@ -1106,7 +1117,7 @@ namespace Oxide.Plugins
                     r.ReturnRunActive = false;
                 }
 
-                // Keep NPCs inside streamer-centered radius (anchor set at spawn point).
+                // Keep NPCs inside streamer-centered radius (anchor follows AnchorSteamId when set).
                 if (_cfg.MaxDistanceFromAnchor > 5f)
                 {
                     var anchor = r.AnchorPosition;
