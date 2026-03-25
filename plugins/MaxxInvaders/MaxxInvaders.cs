@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.2")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.3")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2129,7 +2129,7 @@ namespace Oxide.Plugins
 
             foreach (var player in BasePlayer.activePlayerList)
             {
-                if (player == null || player.IsNpc || player.connection == null) continue;
+                if (player == null || player.IsNpc || player.IsDestroyed) continue;
                 if (!CanAdmin(player)) continue;
 
                 if (_cfg.Gui.ShowInvaderHudList)
