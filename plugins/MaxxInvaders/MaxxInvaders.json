@@ -4,7 +4,7 @@
   "PreventDuplicateViewerNPCs": true,
   "MinimumSpawnRadiusFromAnchor": 20.0,
   "DefaultSpawnRadius": 80.0,
-  "MaxDistanceFromAnchor": 140.0,
+  "MaxDistanceFromAnchor": 55.0,
   "MinimumDistanceFromPlayers": 12.0,
   "BlockSpawnInSafeZones": true,
   "BlockSpawnInMonuments": true,

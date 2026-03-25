@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.9")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.10")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8767,14 +8767,28 @@ namespace Oxide.Plugins
             setup.Amount = 1;
             setup.Name = safe;
 
+            // MaxxInvaders bridge: when anchor Steam is set, always bind RoamingNPCs patrol/protection to that player.
+            // Older logic only set BridgeProtectAnchorUserId if BridgePatrol.Enable or _protectBridgeAnchorPlayer —
+            // templates missing those flags left BridgeProtectAnchorUserId=0 so the bot used full map roam AI ("runs away").
+            if (anchorSteamIdToProtect != 0UL)
+            {
+                setup.BridgePatrol ??= new SetupBridgePatrol();
+                if (!setup.BridgePatrol.Enable)
+                {
+                    setup.BridgePatrol.Enable = true;
+                    if (setup.BridgePatrol.RadiusMeters < 8f) setup.BridgePatrol.RadiusMeters = 28f;
+                }
+
+                setup.BattleState ??= new SetupBattle();
+                if (!setup.BattleState._protectBridgeAnchorPlayer) setup.BattleState._protectBridgeAnchorPlayer = true;
+            }
+
             string uniqueKey = $"{key}_{suffix}";
 
             var data = new DataBot(uniqueKey, setup);
             data.DisplayName = safe;
             data.SpawnedFromMaxxInvadersBridge = true;
-            if (anchorSteamIdToProtect != 0UL &&
-                (setup.BattleState._protectBridgeAnchorPlayer || (setup.BridgePatrol?.Enable ?? false)))
-                data.BridgeProtectAnchorUserId = anchorSteamIdToProtect;
+            if (anchorSteamIdToProtect != 0UL) data.BridgeProtectAnchorUserId = anchorSteamIdToProtect;
 
             try
             {

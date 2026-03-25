@@ -74,6 +74,8 @@ Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot 
 
 **Stay near streamer / base (easiest):** in RustMaxx go to **Servers → [TIKFINITY_SERVER_ID server] → TikFinity patrol anchor** and save your **Steam64** once — no `?anchorSteam=` in the TikFinity URL. Resolution order: JSON **`anchorSteam`** → **`?anchorSteam=`** → **server dashboard field** → env **`TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID`**. That Steam account must be **online or sleeping** on the server. Tune **`MaxDistanceFromAnchor`** in `MaxxInvaders.json` to tighten the patrol area. **MaxxInvaders 1.5.9+** refreshes the patrol center from the anchor player’s **current** position each tick while they are online (so the leash follows you; older builds only used the position at spawn time).
 
+**RoamingNPCs 0.5.10+ (RustMaxx `RoamingNPCs.cs`):** bridge spawns with a non-zero anchor Steam id **always** set `BridgeProtectAnchorUserId` and turn on **Bridge patrol** + **protect anchor** when the template omitted those flags — otherwise the bot kept **full roam AI** and looked like it was “running away” from you.
+
 Ensure **`streamer_patrol`** exists in `RoamingNPCs.json` and **`"Enable bot?": true`**.
 
 ```bash
