@@ -1049,11 +1049,26 @@ namespace Oxide.Plugins
             if (n == 0) return 0;
             // Arc length ~2πr/n — scale radius so neighbors stay ~1.5m+ apart on the ring.
             var radius = Mathf.Max(2.1f, 0.28f * n);
+            // If the computed ring can't be placed on navmesh (common in areas with sparse navmesh),
+            // fall back to tighter rings close to the admin so tpall still moves bots.
+            var attemptRadii = new float[]
+            {
+                radius,
+                Mathf.Max(2.1f, radius * 0.6f),
+                2.35f
+            };
             var moved = 0;
             for (var i = 0; i < n; i++)
             {
                 var ang = (2f * Mathf.PI * i / n) + Random.Range(-0.06f, 0.06f);
-                if (TryTeleportNpcToAdmin(bots[i].NpcPlayer, admin, radius, ang)) moved++;
+                foreach (var r in attemptRadii)
+                {
+                    if (TryTeleportNpcToAdmin(bots[i].NpcPlayer, admin, r, ang))
+                    {
+                        moved++;
+                        break;
+                    }
+                }
             }
 
             return moved;
