@@ -80,6 +80,8 @@ Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot 
 
 **0.5.12+:** For the same bridge + anchor spawns, **Hunter** (chase animals) and **Researcher** (monument visits) brain states are **disabled** so NPCs do not path to **far** animals or **monuments**. They still use **BridgePatrol** (radius in `streamer_patrol` → `BridgePatrol`), **Miner** (gather within controller radius), **Dropped**, etc. Tighten **`BridgePatrol.RadiusMeters`** and **`Controller` → find radius** in `RoamingNPCs.json` for your `streamer_patrol` template to keep activity local.
 
+**0.5.13+:** On plugin load, persisted keys like **`streamer_patrol_anon_…`** (MaxxInvaders bridge dynamic keys) are recognized and removed **without** the “Bot config not found” warning — they are not separate `Bots settings` entries.
+
 Ensure **`streamer_patrol`** exists in `RoamingNPCs.json` and **`"Enable bot?": true`**.
 
 ```bash

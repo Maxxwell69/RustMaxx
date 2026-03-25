@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.12")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.13")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3232,6 +3232,27 @@ namespace Oxide.Plugins
                 {
                     object hookResult = Interface.CallHook("OnRoamingNPCDataValidate", key, data);
                     if (hookResult is bool && (bool)hookResult) continue;
+
+                    // MaxxInvaders bridge spawns use dynamic keys "templateKey_viewerId..." (not a config row). Remove stale data quietly.
+                    var staleBridgeDynamicKey = false;
+                    if (config?.bots != null)
+                    {
+                        foreach (var botKey in config.bots.Keys.OrderByDescending(k => k.Length))
+                        {
+                            if (key.Length > botKey.Length + 1 && key.StartsWith(botKey + "_", StringComparison.OrdinalIgnoreCase))
+                            {
+                                staleBridgeDynamicKey = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (staleBridgeDynamicKey)
+                    {
+                        Interface.CallHook("OnRoamingNPCRemove", key);
+                        Data.Remove(key);
+                        continue;
+                    }
 
                     Debug.LogWarning(RU ? $"Не найден конфиг бота[{key}], загруженные данные будут удалены" : $"Bot config[{key}] not found, loaded data will be deleted");
                     Interface.CallHook("OnRoamingNPCRemove", key);
