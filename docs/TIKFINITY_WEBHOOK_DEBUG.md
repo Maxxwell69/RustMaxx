@@ -106,6 +106,28 @@ Webhook spawns have **no in-game streamer anchor**; patrol/bodyguard tied to the
 
 ---
 
+## TikFinity URL placeholders (viewer display name)
+
+TikFinity documents these **placeholder parameters** for the user who triggered the event (see [Streamer.bot integration](https://tikfinity.zerody.one/streamerbot-integration) on `tikfinity.zerody.one` — same placeholders apply to **Trigger WebHook** URL / body text in Actions):
+
+| Placeholder | Meaning |
+|-------------|---------|
+| **`%nickname%`** | TikTok **display name** (what you usually want on the NPC) |
+| **`%username%`** | TikTok **@handle** (unique text handle) |
+| **`%userId%`** | Numeric TikTok **user id** (use for crew / `uniqueId` style fields) |
+
+**Authentic MaxxInvaders URL (GET or TikFinity-substituted query):**
+
+```text
+https://www.rustmaxx.com/api/tikfinity/webhook?action=maxxinvaders&viewerName=%nickname%
+```
+
+Use **`%nickname%`** for the viewer’s **visible name** on the bot. Use **`%username%`** only if you want the **@handle** as the name instead.
+
+RustMaxx also reads these JSON fields if you use **POST** with a custom body: `viewerName`, `nickname`, `userName`, `username`, `displayName`, or nested `user` / `viewer` / `sender` objects (see `extractViewerNameFromWebhookBody` in `lib/tikfinity.ts`).
+
+---
+
 ## 5. TikFinity-specific issues
 
 | Symptom | What to check |
