@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   RUSTMAXX_ORIGIN,
+  normalizeTikfinityWebhookUrlForDisplay,
   rustmaxxTikfinityWebhookUrl,
 } from "@/lib/rustmaxx-public-url";
 
@@ -173,7 +174,9 @@ export default function AdminStreamerInteractionsPage() {
   function copyWebhook() {
     if (!data) return;
     navigator.clipboard.writeText(
-      data.webhookUrl ?? rustmaxxTikfinityWebhookUrl()
+      normalizeTikfinityWebhookUrlForDisplay(
+        data.webhookUrl ?? rustmaxxTikfinityWebhookUrl()
+      )
     );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -245,8 +248,10 @@ export default function AdminStreamerInteractionsPage() {
   /** Chips: hide npcmaxx — use the dedicated spawn URL block (needs template). */
   const webhookActionChips = webhookActions.filter((a) => a.action !== "npcmaxx");
 
-  /** Live webhook base URL. */
-  const webhookUrl = data.webhookUrl ?? rustmaxxTikfinityWebhookUrl();
+  /** Live webhook base URL (always www on rustmaxx.com apex for TikFinity). */
+  const webhookUrl = normalizeTikfinityWebhookUrlForDisplay(
+    data.webhookUrl ?? rustmaxxTikfinityWebhookUrl()
+  );
   const spawnNpcWebhookUrl = `${webhookUrl}?action=npcmaxx&template=${encodeURIComponent(
     tikfinitySpawnTemplate
   )}`;

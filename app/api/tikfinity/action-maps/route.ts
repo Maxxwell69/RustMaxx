@@ -5,7 +5,7 @@ import {
   getGiftToActionMapForAdmin,
 } from "@/lib/tikfinity";
 import { listTikfinityConnections } from "@/lib/tikfinity-connections";
-import { getPublicOriginOrNull } from "@/lib/twitch-public-url";
+import { getTikfinityWebhookUrlOrNull } from "@/lib/tikfinity-webhook-public-url";
 
 /**
  * GET: Return TikFinity webhook URL, available actions, gift→action map, and admin connections.
@@ -16,8 +16,7 @@ export async function GET(request: NextRequest) {
     const authErr = await requireCanManageServersFromDb(request);
     if (authErr) return authErr;
 
-    const origin = getPublicOriginOrNull();
-    const webhookUrl = origin ? `${origin}/api/tikfinity/webhook` : null;
+    const webhookUrl = getTikfinityWebhookUrlOrNull();
     let connections: Awaited<ReturnType<typeof listTikfinityConnections>> = [];
     try {
       connections = await listTikfinityConnections();

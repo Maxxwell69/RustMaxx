@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCanManageServersFromDb } from "@/lib/api-auth";
 import { query } from "@/lib/db";
 import type { ServerRow } from "@/lib/db";
+import { getTikfinityWebhookUrlOrNull } from "@/lib/tikfinity-webhook-public-url";
 import { getPublicOriginOrNull } from "@/lib/twitch-public-url";
 import { ensureConnection } from "@/lib/rcon-manager";
 
@@ -17,8 +18,8 @@ export async function GET(request: NextRequest) {
 
   const probeRcon = request.nextUrl.searchParams.get("probeRcon") === "1";
 
-  const origin = getPublicOriginOrNull();
-  const webhookUrl = origin ? `${origin}/api/tikfinity/webhook` : null;
+  const originRaw = getPublicOriginOrNull();
+  const webhookUrl = getTikfinityWebhookUrlOrNull();
 
   const crewSpawnOnRegisterConfigured = Boolean(
     process.env.CREW_RNPC_TEMPLATE_KEY?.trim()
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
         }
       : null,
     webhookUrl,
-    appUrlConfigured: Boolean(origin),
+    appUrlConfigured: Boolean(originRaw),
     features: {
       crewSpawnOnRegisterConfigured,
       npcmaxxRequireCrewRegistry,
