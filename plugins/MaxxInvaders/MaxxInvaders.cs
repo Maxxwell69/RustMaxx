@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.6")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.7")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2680,14 +2680,99 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 panel,
-                "<size=17><color=#d62828>MAXX SETTINGS</color></size>\n<size=10><color=#8899aa>Writes oxide/config/MaxxInvaders.json</color></size>",
+                "<size=17><color=#d62828>MAXX SETTINGS</color></size>\n<size=10><color=#8899aa>Writes oxide/config/MaxxInvaders.json — scroll below</color></size>",
                 "0.03 0.90",
                 "0.97 0.99",
                 12,
                 TextAnchor.UpperLeft,
                 "0.95 0.97 1 1");
 
-            float y = 0.86f;
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text =
+                            "Access: /migrate-to-skills | /maxxinvaders maxx | roaming | anchor <Steam64>",
+                        FontSize = 7,
+                        Align = TextAnchor.LowerLeft,
+                        Color = "0.65 0.72 0.78 1",
+                    },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.048" },
+                },
+                panel);
+
+            var scrollHostName = Guid.NewGuid().ToString("N");
+            container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.06 0.07 0.09 0.55" },
+                    RectTransform = { AnchorMin = "0.02 0.055", AnchorMax = "0.985 0.885" },
+                    CursorEnabled = true,
+                },
+                panel,
+                scrollHostName);
+
+            const int contentH = 1520;
+            var panelSize = -contentH;
+            var scrollerName = Guid.NewGuid().ToString("N");
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = scrollerName,
+                    Parent = scrollHostName,
+                    Components =
+                    {
+                        new CuiNeedsCursorComponent(),
+                        new CuiImageComponent
+                        {
+                            Color = "0.07 0.08 0.10 0.35",
+                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                            ImageType = Image.Type.Tiled,
+                        },
+                        new CuiScrollViewComponent
+                        {
+                            ContentTransform = new CuiRectTransform
+                            {
+                                AnchorMin = "0 0.98",
+                                AnchorMax = "1 0.98",
+                                OffsetMin = $"0 {panelSize}",
+                                OffsetMax = "0 0",
+                            },
+                            Vertical = true,
+                            Horizontal = false,
+                            MovementType = ScrollRect.MovementType.Clamped,
+                            Elasticity = 0.2f,
+                            Inertia = true,
+                            DecelerationRate = 0.3f,
+                            ScrollSensitivity = 28f,
+                            VerticalScrollbar = new CuiScrollbar { AutoHide = true, Size = 18 },
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    },
+                });
+
+            var inner = Guid.NewGuid().ToString("N");
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = inner,
+                    Parent = scrollerName,
+                    Components =
+                    {
+                        new CuiRectTransformComponent
+                        {
+                            AnchorMin = "0 1",
+                            AnchorMax = "1 1",
+                            OffsetMin = "8 -1500",
+                            OffsetMax = "-8 0",
+                        },
+                    },
+                });
+
+            float y = 0.995f;
             void RowLabel(string text, float h = 0.034f)
             {
                 container.Add(
@@ -2696,8 +2781,8 @@ namespace Oxide.Plugins
                         Text = { Text = text, FontSize = 10, Align = TextAnchor.MiddleLeft, Color = "0.9 0.92 0.96 1" },
                         RectTransform = { AnchorMin = $"0.03 {y - h}", AnchorMax = $"0.97 {y}" },
                     },
-                    panel);
-                y -= h + 0.008f;
+                    inner);
+                y -= h + 0.006f;
             }
 
             void RowToggle(string label, bool current, string fieldName)
@@ -2709,146 +2794,18 @@ namespace Oxide.Plugins
                         Text = { Text = $"{label}: <b>{on}</b>", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = "0.9 0.92 0.96 1" },
                         RectTransform = { AnchorMin = $"0.03 {y - 0.032f}", AnchorMax = $"0.72 {y}" },
                     },
-                    panel);
+                    inner);
                 AddCuiButtonWithText(
                     container,
-                    panel,
+                    inner,
                     $"maxxinvaders.gui cfgtoggle {fieldName}",
                     "0.72 0.14 0.10 0.92",
                     "Toggle",
                     $"0.73 {y - 0.032f}",
                     $"0.97 {y}",
                     10);
-                y -= 0.044f;
+                y -= 0.042f;
             }
-
-            RowLabel("<b>Options</b>", 0.03f);
-            RowToggle("UseRoamingNPCsWhenAvailable", _cfg.UseRoamingNPCsWhenAvailable,
-                nameof(InvaderConfig.UseRoamingNPCsWhenAvailable));
-            RowToggle("PreventDuplicateViewerNPCs", _cfg.PreventDuplicateViewerNPCs,
-                nameof(InvaderConfig.PreventDuplicateViewerNPCs));
-            RowToggle("BlockSpawnInSafeZones", _cfg.BlockSpawnInSafeZones, nameof(InvaderConfig.BlockSpawnInSafeZones));
-            RowToggle("BlockSpawnInMonuments", _cfg.BlockSpawnInMonuments,
-                nameof(InvaderConfig.BlockSpawnInMonuments));
-            RowToggle("DespawnOnUnload", _cfg.DespawnOnUnload, nameof(InvaderConfig.DespawnOnUnload));
-
-            RowLabel("<b>Streamer HUD</b> (maxxinvaders.admin)", 0.03f);
-            RowToggle("ShowInvaderWorldTags (3D: yellow name / green HP / white m)", _cfg.Gui.ShowInvaderWorldTags,
-                "ShowInvaderWorldTags");
-            RowToggle("ShowInvaderHudList (right panel)", _cfg.Gui.ShowInvaderHudList, "ShowInvaderHudList");
-            RowNum("InvaderWorldTagMaxDistance", "InvaderWorldTagMaxDistance",
-                _cfg.Gui.InvaderWorldTagMaxDistance.ToString(CultureInfo.InvariantCulture));
-
-            RowLabel("<b>Webhook / RCON default anchor</b>", 0.028f);
-            container.Add(
-                new CuiLabel
-                {
-                    Text =
-                    {
-                        Text =
-                            "DefaultAnchorSteamId — used when spawn has no 7th RCON arg (set once; or /maxxinvaders anchor …)",
-                        FontSize = 8,
-                        Align = TextAnchor.LowerLeft,
-                        Color = "0.72 0.78 0.88 1",
-                    },
-                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.97 {y}" },
-                },
-                panel);
-            y -= 0.026f;
-            container.Add(
-                new CuiLabel
-                {
-                    Text = { Text = "Steam64", FontSize = 9, Align = TextAnchor.LowerLeft },
-                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
-                },
-                panel);
-            AddRawCuiElement(
-                container,
-                new CuiElement
-                {
-                    Name = Guid.NewGuid().ToString("N"),
-                    Parent = panel,
-                    Components =
-                    {
-                        new CuiInputFieldComponent
-                        {
-                            Align = TextAnchor.MiddleLeft,
-                            CharsLimit = 22,
-                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultAnchorSteamId)} ",
-                            FontSize = 12,
-                            IsPassword = false,
-                            Text = _cfg.DefaultAnchorSteamId ?? "",
-                            NeedsKeyboard = true,
-                        },
-                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
-                    },
-                });
-            y -= 0.048f;
-
-            container.Add(
-                new CuiLabel
-                {
-                    Text = { Text = "DefaultRoamingTemplateKey", FontSize = 9, Align = TextAnchor.LowerLeft },
-                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
-                },
-                panel);
-            AddRawCuiElement(
-                container,
-                new CuiElement
-                {
-                    Name = Guid.NewGuid().ToString("N"),
-                    Parent = panel,
-                    Components =
-                    {
-                        new CuiInputFieldComponent
-                        {
-                            Align = TextAnchor.MiddleLeft,
-                            CharsLimit = 64,
-                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultRoamingTemplateKey)} ",
-                            FontSize = 12,
-                            IsPassword = false,
-                            Text = _cfg.DefaultRoamingTemplateKey ?? "",
-                            NeedsKeyboard = true,
-                        },
-                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
-                    },
-                });
-            y -= 0.048f;
-
-            container.Add(
-                new CuiLabel
-                {
-                    Text =
-                    {
-                        Text = "ViewerRoamingTemplateKey (e.g. streamer_patrol; empty = tier + default)",
-                        FontSize = 9,
-                        Align = TextAnchor.LowerLeft,
-                    },
-                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
-                },
-                panel);
-            AddRawCuiElement(
-                container,
-                new CuiElement
-                {
-                    Name = Guid.NewGuid().ToString("N"),
-                    Parent = panel,
-                    Components =
-                    {
-                        new CuiInputFieldComponent
-                        {
-                            Align = TextAnchor.MiddleLeft,
-                            CharsLimit = 64,
-                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.ViewerRoamingTemplateKey)} ",
-                            FontSize = 12,
-                            IsPassword = false,
-                            Text = _cfg.ViewerRoamingTemplateKey ?? "",
-                            NeedsKeyboard = true,
-                        },
-                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
-                    },
-                });
-            y -= 0.048f;
 
             void RowNum(string label, string field, string display)
             {
@@ -2858,13 +2815,13 @@ namespace Oxide.Plugins
                         Text = { Text = label, FontSize = 9, Align = TextAnchor.LowerLeft },
                         RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
                     },
-                    panel);
+                    inner);
                 AddRawCuiElement(
                     container,
                     new CuiElement
                     {
                         Name = Guid.NewGuid().ToString("N"),
-                        Parent = panel,
+                        Parent = inner,
                         Components =
                         {
                             new CuiInputFieldComponent
@@ -2880,9 +2837,138 @@ namespace Oxide.Plugins
                             new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
                         },
                     });
-                y -= 0.048f;
+                y -= 0.046f;
             }
 
+            RowLabel("<b>Options</b>", 0.028f);
+            RowToggle("UseRoamingNPCsWhenAvailable", _cfg.UseRoamingNPCsWhenAvailable,
+                nameof(InvaderConfig.UseRoamingNPCsWhenAvailable));
+            RowToggle("PreventDuplicateViewerNPCs", _cfg.PreventDuplicateViewerNPCs,
+                nameof(InvaderConfig.PreventDuplicateViewerNPCs));
+            RowToggle("BlockSpawnInSafeZones", _cfg.BlockSpawnInSafeZones, nameof(InvaderConfig.BlockSpawnInSafeZones));
+            RowToggle("BlockSpawnInMonuments", _cfg.BlockSpawnInMonuments,
+                nameof(InvaderConfig.BlockSpawnInMonuments));
+            RowToggle("DespawnOnUnload", _cfg.DespawnOnUnload, nameof(InvaderConfig.DespawnOnUnload));
+
+            RowLabel("<b>Streamer HUD</b> (maxxinvaders.admin)", 0.028f);
+            RowToggle("ShowInvaderWorldTags (3D: yellow name / green HP / white m)", _cfg.Gui.ShowInvaderWorldTags,
+                "ShowInvaderWorldTags");
+            RowToggle("ShowInvaderHudList (right panel)", _cfg.Gui.ShowInvaderHudList, "ShowInvaderHudList");
+            RowNum("InvaderWorldTagMaxDistance", "InvaderWorldTagMaxDistance",
+                _cfg.Gui.InvaderWorldTagMaxDistance.ToString(CultureInfo.InvariantCulture));
+
+            RowLabel("<b>Webhook / RCON default anchor</b>", 0.026f);
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text =
+                            "DefaultAnchorSteamId — if spawn has no 7th RCON arg (/maxxinvaders anchor …)",
+                        FontSize = 8,
+                        Align = TextAnchor.LowerLeft,
+                        Color = "0.72 0.78 0.88 1",
+                    },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.022f}", AnchorMax = $"0.97 {y}" },
+                },
+                inner);
+            y -= 0.028f;
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Steam64", FontSize = 9, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
+                },
+                inner);
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = inner,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 22,
+                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultAnchorSteamId)} ",
+                            FontSize = 12,
+                            IsPassword = false,
+                            Text = _cfg.DefaultAnchorSteamId ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
+                    },
+                });
+            y -= 0.046f;
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "DefaultRoamingTemplateKey", FontSize = 9, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
+                },
+                inner);
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = inner,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 64,
+                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultRoamingTemplateKey)} ",
+                            FontSize = 12,
+                            IsPassword = false,
+                            Text = _cfg.DefaultRoamingTemplateKey ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
+                    },
+                });
+            y -= 0.046f;
+
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = "ViewerRoamingTemplateKey (e.g. streamer_patrol; empty = tier + default)",
+                        FontSize = 9,
+                        Align = TextAnchor.LowerLeft,
+                    },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
+                },
+                inner);
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = inner,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 64,
+                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.ViewerRoamingTemplateKey)} ",
+                            FontSize = 12,
+                            IsPassword = false,
+                            Text = _cfg.ViewerRoamingTemplateKey ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
+                    },
+                });
+            y -= 0.046f;
+
+            RowLabel("<b>Spawn / caps</b>", 0.028f);
             RowNum("MaxActiveNPCs", nameof(InvaderConfig.MaxActiveNPCs), _cfg.MaxActiveNPCs.ToString());
             RowNum("MinimumSpawnRadiusFromAnchor", nameof(InvaderConfig.MinimumSpawnRadiusFromAnchor),
                 _cfg.MinimumSpawnRadiusFromAnchor.ToString(CultureInfo.InvariantCulture));
@@ -2895,21 +2981,6 @@ namespace Oxide.Plugins
             RowNum("SpawnAttempts", nameof(InvaderConfig.SpawnAttempts), _cfg.SpawnAttempts.ToString());
             RowNum("PerViewerCooldownSeconds", nameof(InvaderConfig.PerViewerCooldownSeconds),
                 _cfg.PerViewerCooldownSeconds.ToString(CultureInfo.InvariantCulture));
-
-            container.Add(
-                new CuiLabel
-                {
-                    Text =
-                    {
-                        Text =
-                            "Access: /migrate-to-skills opens this tab. Also /maxxinvaders maxx | /maxxinvaders roaming | anchor",
-                        FontSize = 7,
-                        Align = TextAnchor.LowerLeft,
-                        Color = "0.65 0.72 0.78 1",
-                    },
-                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.98 0.055" },
-                },
-                panel);
         }
 
         private void AddRoamingBotsEditor(CuiElementContainer container, string panel, BasePlayer player)
