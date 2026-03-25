@@ -12,7 +12,7 @@ using Oxide.Plugins.PersonalNPCex;
 
 namespace Oxide.Plugins
 {
-    [Info("PersonalNPC", "walkinrey", "2.0.5")] 
+    [Info("PersonalNPC", "walkinrey", "2.0.6")] 
     public class PersonalNPC : RustPlugin 
     {
         public static PersonalNPC Instance;
@@ -2283,7 +2283,7 @@ namespace Oxide.Plugins
                 {
                     controller.CustomDisplayName = null;
                     controller.bot.displayName = ResolveBotDisplayName(controller, player);
-                    controller.bot.SendNetworkUpdate();
+                    controller.bot.SendNetworkUpdateImmediate();
                     SendMsg(player, "ChatCommand_Notice_Name_Reset");
                     return;
                 }
@@ -2306,7 +2306,7 @@ namespace Oxide.Plugins
 
                 controller.CustomDisplayName = newName.Trim();
                 controller.bot.displayName = ResolveBotDisplayName(controller, player);
-                controller.bot.SendNetworkUpdate();
+                controller.bot.SendNetworkUpdateImmediate();
                 SendMsg(player, "ChatCommand_Notice_Name_Changed", new string[] { controller.bot.displayName });
                 return;
             }
@@ -3185,6 +3185,7 @@ namespace Oxide.Plugins
             controller.plugin = this;
 
             bot.displayName = ResolveBotDisplayName(controller, player);
+            bot.SendNetworkUpdate();
 
             controller.enableCopterLocksAPI = VehicleDeployedLocks != null;
             controller.cachedImages = new Dictionary<string, string>();
@@ -3480,6 +3481,9 @@ namespace Oxide.Plugins
                     var frankenstein = bot.GetComponent<BasePet>();
 
                     frankenstein.ApplyPetStatModifiers();
+                    // Frankenstein pet init can reset displayName — re-apply nameplate text.
+                    bot.displayName = ResolveBotDisplayName(this, owner);
+                    bot.SendNetworkUpdate();
                     //frankenstein.Brain.SetOwningPlayer(owner);
 
                     _botNavigator = frankenstein.GetComponent<FrankensteinPet>().Brain.Navigator;
