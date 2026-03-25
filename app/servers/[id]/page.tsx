@@ -37,6 +37,7 @@ export default function ServerDetailPage() {
     game_port?: number | null;
     location?: string | null;
     logo_url?: string | null;
+    tikfinity_anchor_steam_id?: string | null;
   } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [listingForm, setListingForm] = useState({
@@ -61,6 +62,9 @@ export default function ServerDetailPage() {
   const [rconForm, setRconForm] = useState({ host: "", port: "", password: "" });
   const [rconSaving, setRconSaving] = useState(false);
   const [rconFeedback, setRconFeedback] = useState<string | null>(null);
+  const [tikfinityAnchorSteam, setTikfinityAnchorSteam] = useState("");
+  const [tikfinityAnchorSaving, setTikfinityAnchorSaving] = useState(false);
+  const [tikfinityAnchorFeedback, setTikfinityAnchorFeedback] = useState<string | null>(null);
   const [profiledPlayers, setProfiledPlayers] = useState<ProfiledPlayer[]>([]);
   const [inactiveLoading, setInactiveLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -93,6 +97,9 @@ export default function ServerDetailPage() {
             port: s.rcon_port != null ? String(s.rcon_port) : "",
             password: "",
           });
+          setTikfinityAnchorSteam(
+            typeof s.tikfinity_anchor_steam_id === "string" ? s.tikfinity_anchor_steam_id : ""
+          );
         }
       })
       .catch(() => setServer(null));
@@ -314,6 +321,33 @@ export default function ServerDetailPage() {
     }
   }
 
+  async function saveTikfinityAnchor() {
+    setTikfinityAnchorFeedback(null);
+    const t = tikfinityAnchorSteam.trim();
+    if (t && !/^\d{17}$/.test(t)) {
+      setTikfinityAnchorFeedback("Steam64 must be exactly 17 digits, or leave empty to clear.");
+      return;
+    }
+    setTikfinityAnchorSaving(true);
+    try {
+      const res = await fetch(`/api/servers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ tikfinity_anchor_steam_id: t ? t : null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setTikfinityAnchorFeedback(typeof data.error === "string" ? data.error : "Save failed");
+        return;
+      }
+      setServer((prev) => (prev ? { ...prev, ...data } : null));
+      setTikfinityAnchorFeedback("Saved. TikFinity webhooks for this server will use this anchor when the URL omits anchorSteam.");
+    } finally {
+      setTikfinityAnchorSaving(false);
+    }
+  }
+
   async function sendCommand(cmd: string) {
     const c = (cmd || command).trim();
     if (!c) return;
@@ -470,6 +504,47 @@ export default function ServerDetailPage() {
             className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
           >
             {rconSaving ? "Saving…" : "Save RCON settings"}
+          </button>
+        </div>
+      )}
+
+      {(server.myRole === "owner" || server.myRole === "admin") && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <h2 className="text-sm font-medium text-zinc-300">TikFinity patrol anchor (optional)</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Set your <strong className="text-zinc-400">Steam64</strong> (17 digits) once.{" "}
+            <code className="rounded bg-zinc-800 px-1">maxxinvaders</code> webhooks for this server then spawn / leash viewer bots{" "}
+            <strong className="text-zinc-400">near you</strong> when you are online or sleeping — no{" "}
+            <code className="rounded bg-zinc-800 px-1">?anchorSteam=</code> in the TikFinity URL. Tune leash radius in{" "}
+            <code className="rounded bg-zinc-800 px-1">MaxxInvaders.json</code> on the game server (
+            <code className="rounded bg-zinc-800 px-1">MaxDistanceFromAnchor</code>).
+          </p>
+          <div className="mt-3">
+            <label className="mb-1 block text-xs text-zinc-400">Streamer / base owner Steam64</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={tikfinityAnchorSteam}
+              onChange={(e) => setTikfinityAnchorSteam(e.target.value.replace(/\D/g, "").slice(0, 17))}
+              className="w-full max-w-md rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 font-mono text-sm text-zinc-100"
+              placeholder="76561198963850965"
+              autoComplete="off"
+            />
+          </div>
+          {tikfinityAnchorFeedback && (
+            <p
+              className={`mt-2 text-xs ${tikfinityAnchorFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}
+            >
+              {tikfinityAnchorFeedback}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void saveTikfinityAnchor()}
+            disabled={tikfinityAnchorSaving}
+            className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
+          >
+            {tikfinityAnchorSaving ? "Saving…" : "Save patrol anchor"}
           </button>
         </div>
       )}

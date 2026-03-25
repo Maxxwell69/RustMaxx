@@ -38,6 +38,8 @@ export type ServerRow = {
   level?: string | null;
   map_preview_url?: string | null;
   map_last_fetched_at?: Date | string | null;
+  /** TikFinity maxxinvaders: default patrol anchor (Steam64) when URL/body omit anchorSteam. */
+  tikfinity_anchor_steam_id?: string | null;
 };
 
 export type PublicServerRow = {

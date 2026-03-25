@@ -72,7 +72,7 @@ Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot 
 
 **Roaming template:** defaults to **`streamer_patrol`**. Override with **`?template=your_bot_key`** or JSON **`template`** / **`roamingTemplate`**, or a TikFinity connection (server action MaxxInvaders) with a Roaming template. Other defaults: **`tier=1`**, **`mode=roaming`**, **`kit=-`**.
 
-**Stay near streamer / base:** set **`?anchorSteam=7656119…`** (17-digit Steam64), or JSON **`anchorSteam`** / **`streamerSteamId`**, or env **`TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID`**. That Steam account must be **online or sleeping** on the server; MaxxInvaders uses them as the spawn anchor (tune **`MaxDistanceFromAnchor`** in `MaxxInvaders.json` to tighten the leash). There is no separate “TC position” yet — use the base owner’s Steam while they are at the base.
+**Stay near streamer / base (easiest):** in RustMaxx go to **Servers → [TIKFINITY_SERVER_ID server] → TikFinity patrol anchor** and save your **Steam64** once — no `?anchorSteam=` in the TikFinity URL. Resolution order: JSON **`anchorSteam`** → **`?anchorSteam=`** → **server dashboard field** → env **`TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID`**. That Steam account must be **online or sleeping** on the server. Tune **`MaxDistanceFromAnchor`** in `MaxxInvaders.json` to tighten the patrol area.
 
 Ensure **`streamer_patrol`** exists in `RoamingNPCs.json` and **`"Enable bot?": true`**.
 

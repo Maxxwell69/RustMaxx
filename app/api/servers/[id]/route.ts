@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit";
 import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
 import { getServerWithRole, canEditServer, canDeleteServer } from "@/lib/server-access";
 import type { ServerRow } from "@/lib/db";
+import { parseSteam64Anchor } from "@/lib/maxxinvaders-anchor-steam";
 
 export async function GET(
   request: NextRequest,
@@ -46,6 +47,8 @@ export async function PATCH(
     rcon_port?: number;
     /** Omit or leave empty to keep existing password; send non-empty to replace. */
     rcon_password?: string;
+    /** TikFinity maxxinvaders default patrol anchor (Steam64); null or "" clears. */
+    tikfinity_anchor_steam_id?: string | null;
   };
   try {
     body = await request.json();
@@ -121,6 +124,30 @@ export async function PATCH(
     rconCredentialsChanged = true;
   }
 
+  if (body.tikfinity_anchor_steam_id !== undefined) {
+    const raw = body.tikfinity_anchor_steam_id;
+    if (raw === null || raw === "") {
+      updates.push(`tikfinity_anchor_steam_id = $${idx++}`);
+      values.push(null);
+    } else if (typeof raw === "string") {
+      const t = raw.trim();
+      if (t === "") {
+        updates.push(`tikfinity_anchor_steam_id = $${idx++}`);
+        values.push(null);
+      } else {
+        const ok = parseSteam64Anchor(t);
+        if (!ok) {
+          return NextResponse.json(
+            { error: "tikfinity_anchor_steam_id must be exactly 17 digits (Steam64) or empty" },
+            { status: 400 }
+          );
+        }
+        updates.push(`tikfinity_anchor_steam_id = $${idx++}`);
+        values.push(ok);
+      }
+    }
+  }
+
   if (updates.length === 0) {
     const { rcon_password: _sec, ...safeExisting } = existing as Record<string, unknown>;
     return NextResponse.json({ ...safeExisting, myRole: result.serverRole });
@@ -128,7 +155,7 @@ export async function PATCH(
   if (rconCredentialsChanged) disconnect(serverId);
   values.push(serverId);
   const { rows } = await query<ServerRow>(
-    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at`,
+    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id`,
     values
   );
   const auditFields = Object.keys(body).filter((k) => k !== "rcon_password");

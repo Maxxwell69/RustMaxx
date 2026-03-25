@@ -17,7 +17,7 @@ export async function getServerWithRole(
   globalRole: UserRole
 ): Promise<ServerWithRole | null> {
   const serverColumns =
-    "id, name, rcon_host, rcon_port, rcon_password, created_at, owner_id, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at";
+    "id, name, rcon_host, rcon_port, rcon_password, created_at, owner_id, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id";
   if (globalRole === "super_admin") {
     const { rows } = await query<ServerRow>(
       `SELECT ${serverColumns} FROM servers WHERE id = $1`,

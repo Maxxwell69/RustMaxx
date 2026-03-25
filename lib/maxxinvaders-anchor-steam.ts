@@ -8,14 +8,25 @@ export function parseSteam64Anchor(raw: string | null | undefined): string | nul
   return t;
 }
 
+export type MaxxInvadersAnchorOptions = {
+  /** Per-server default from dashboard (TIKFINITY_SERVER_ID row). */
+  serverDefault?: string | null;
+  envFallback?: string | undefined;
+};
+
 /**
- * Resolve anchor Steam64 for maxxinvaders webhook: JSON body fields first, then ?anchorSteam=, then env.
+ * Resolve anchor Steam64 for maxxinvaders webhook: body → ?anchorSteam= → server default → env.
  */
 export function resolveMaxxInvadersAnchorSteam(
   request: { nextUrl: URL },
   body: unknown,
-  envFallback: string | undefined
+  options: MaxxInvadersAnchorOptions | string | undefined
 ): string | null {
+  const opts: MaxxInvadersAnchorOptions =
+    typeof options === "string" || options === undefined
+      ? { envFallback: typeof options === "string" ? options : undefined }
+      : options;
+
   if (body && typeof body === "object") {
     const o = body as Record<string, unknown>;
     for (const k of ["anchorSteam", "streamerSteamId", "anchorSteamId"] as const) {
@@ -33,5 +44,7 @@ export function resolveMaxxInvadersAnchorSteam(
   const q = request.nextUrl.searchParams.get("anchorSteam")?.trim();
   const fromQuery = parseSteam64Anchor(q ?? null);
   if (fromQuery) return fromQuery;
-  return parseSteam64Anchor(envFallback ?? null);
+  const fromServer = parseSteam64Anchor(opts.serverDefault ?? null);
+  if (fromServer) return fromServer;
+  return parseSteam64Anchor(opts.envFallback ?? null);
 }

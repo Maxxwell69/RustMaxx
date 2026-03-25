@@ -360,7 +360,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
   }
 
   const { rows } = await query<ServerRow>(
-    "SELECT id, name, rcon_host, rcon_port, rcon_password FROM servers WHERE id = $1",
+    "SELECT id, name, rcon_host, rcon_port, rcon_password, tikfinity_anchor_steam_id FROM servers WHERE id = $1",
     [TIKFINITY_SERVER_ID]
   );
   const server = rows[0];
@@ -555,7 +555,10 @@ async function runWebhook(request: NextRequest, body: unknown) {
     const viewerId =
       extractTikTokUniqueIdFromBody(body) ??
       `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-    const anchorSteam64 = resolveMaxxInvadersAnchorSteam(request, body, TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID);
+    const anchorSteam64 = resolveMaxxInvadersAnchorSteam(request, body, {
+      serverDefault: server.tikfinity_anchor_steam_id ?? null,
+      envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
+    });
 
     if (NPCMAXX_REQUIRE_CREW_REGISTRY) {
       const uid = extractTikTokUniqueIdFromBody(body);

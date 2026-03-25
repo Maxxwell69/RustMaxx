@@ -367,10 +367,18 @@ export default function AdminStreamerInteractionsPage() {
               <code className="rounded bg-zinc-800 px-1">tier</code>, <code className="rounded bg-zinc-800 px-1">uniqueId</code> when crew gate is on.
             </p>
             <p className="mt-2 text-sm text-zinc-400">
-              <strong className="text-zinc-300">Stay near streamer / base:</strong> add{" "}
-              <code className="rounded bg-zinc-800 px-1">?anchorSteam=7656119…</code> (your 17-digit Steam64) or set env{" "}
-              <code className="rounded bg-zinc-800 px-1">TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID</code>. That account must be{" "}
-              <strong className="text-zinc-300">online or sleeping</strong> on the server so spawn + patrol leash around them. For a &quot;base&quot; anchor, use the TC owner&apos;s Steam64 while they are at the base.
+              <strong className="text-zinc-300">Easiest — patrol near you without URL params:</strong> open{" "}
+              <strong className="text-zinc-300">Servers → your server → TikFinity patrol anchor</strong> and save your 17-digit Steam64 once.
+              Webhooks for that server then anchor automatically (same as setting env{" "}
+              <code className="rounded bg-zinc-800 px-1">TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID</code>, but per-server in the dashboard).
+            </p>
+            <p className="mt-2 text-sm text-zinc-400">
+              <strong className="text-zinc-300">Override:</strong>{" "}
+              <code className="rounded bg-zinc-800 px-1">?anchorSteam=7656119…</code> or JSON{" "}
+              <code className="rounded bg-zinc-800 px-1">anchorSteam</code>. You must be{" "}
+              <strong className="text-zinc-300">online or sleeping</strong> on the Rust server. Tighten leash in{" "}
+              <code className="rounded bg-zinc-800 px-1">MaxxInvaders.json</code> (
+              <code className="rounded bg-zinc-800 px-1">MaxDistanceFromAnchor</code>).
             </p>
             {data.tikfinityFeatures?.npcmaxxRequireCrewRegistry && (
               <p className="mt-2 rounded border border-amber-800/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-100/95">
