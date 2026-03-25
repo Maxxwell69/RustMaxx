@@ -493,7 +493,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
             error: spawn.error ?? "Command send failed",
             debug:
               spawn.step === "rcon_connect"
-                ? connectedErrorDebug()
+                ? connectedErrorDebug(server.rcon_host)
                 : "RCON connected but npcmaxx.spawn failed. Check NPCMaxx + RoamingNPCs and template key.",
             step: spawn.step,
             command: spawn.command,
@@ -600,7 +600,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
             error: spawnMi.error ?? "Command send failed",
             debug:
               spawnMi.step === "rcon_connect"
-                ? connectedErrorDebug()
+                ? connectedErrorDebug(server.rcon_host)
                 : "RCON connected but maxxinvaders.spawn failed. Load MaxxInvaders + RoamingNPCs; check tier/mode and oxide/config/MaxxInvaders.json (ViewerRoamingTemplateKey).",
             step: spawnMi.step,
             command: spawnMi.command,
@@ -662,19 +662,19 @@ async function runWebhook(request: NextRequest, body: unknown) {
       action,
       serverId: server.id,
     }).catch(() => {});
-    return withCors(
-      NextResponse.json(
-        {
-          ok: false,
-          error: "Could not connect to game server",
-          debug: connectedErrorDebug(),
-          step: "rcon_connect",
-          command: command,
-        },
-        { status: 502 }
-      )
-    );
-  }
+      return withCors(
+        NextResponse.json(
+          {
+            ok: false,
+            error: connected.error?.trim() || "Could not connect to game server",
+            debug: connectedErrorDebug(server.rcon_host),
+            step: "rcon_connect",
+            command: command,
+          },
+          { status: 502 }
+        )
+      );
+    }
 
   const result = sendCommand(server.id, command);
   if (!result.ok) {
@@ -725,6 +725,20 @@ async function runWebhook(request: NextRequest, body: unknown) {
   );
 }
 
-function connectedErrorDebug(): string {
-  return "Check RCON: in dashboard set the server's RCON host (IP), port (often 28082 for WebRcon), and password.";
+function rconHostLooksUnreachableFromCloud(host: string | null | undefined): boolean {
+  const h = (host ?? "").trim().toLowerCase();
+  if (!h) return false;
+  if (h === "localhost" || h === "127.0.0.1" || h === "::1") return true;
+  if (/^192\.168\./.test(h) || /^10\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  return false;
+}
+
+function connectedErrorDebug(rconHost?: string | null): string {
+  let msg =
+    "Check RCON in RustMaxx → Servers → your server: host must be a public IP or hostname (WebSocket/WebRCON port, often 28082), password must match server rcon.password. Env vars (APP_URL, TIKFINITY_SERVER_ID) do not replace this row.";
+  if (rconHostLooksUnreachableFromCloud(rconHost ?? undefined)) {
+    msg +=
+      " This host looks private or local — RustMaxx runs in the cloud and cannot open WebRCON to 127.0.0.1 or LAN IPs; use your host’s public RCON endpoint, port forwarding, or a tunnel.";
+  }
+  return msg;
 }
