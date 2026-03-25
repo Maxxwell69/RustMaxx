@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.5")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.6")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1066,7 +1066,7 @@ namespace Oxide.Plugins
                 return explicitAnchor;
             if (string.IsNullOrWhiteSpace(_cfg.DefaultAnchorSteamId)) return null;
             if (!ulong.TryParse(_cfg.DefaultAnchorSteamId.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
-                    out var steam) || steam < 10000UL)
+                    out var steam) || steam < 10000000000000000UL)
                 return null;
             return FindPlayerOrSleeperByUserId(steam);
         }
@@ -1777,7 +1777,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /mi ui | /migrate-to-skills (Maxx config) | /maxxinvaders ui | maxx | roaming | list | spawn | rename | kill | …");
+                    "Usage: /maxxinvaders ui | maxx | roaming | anchor <Steam64> | list | spawn | …");
                 return;
             }
 
@@ -1799,6 +1799,41 @@ namespace Oxide.Plugins
                     if (!CanAdmin(player)) return;
                     _guiMainTab[player.userID] = GuiTabRoamingEdit;
                     OpenGui(player, 0);
+                    break;
+                case "anchor":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    if (args.Length < 2)
+                    {
+                        player.ChatMessage(
+                            string.IsNullOrWhiteSpace(_cfg.DefaultAnchorSteamId)
+                                ? "DefaultAnchorSteamId is empty. Usage: /maxxinvaders anchor <17-digit Steam64>  |  /maxxinvaders anchor clear"
+                                : $"DefaultAnchorSteamId = {_cfg.DefaultAnchorSteamId}  |  /maxxinvaders anchor <Steam64>  |  anchor clear");
+                        return;
+                    }
+
+                    var anchorArg = args[1].Trim();
+                    if (anchorArg.Equals("clear", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _cfg.DefaultAnchorSteamId = "";
+                        SaveConfig();
+                        player.ChatMessage("[MaxxInvaders] DefaultAnchorSteamId cleared. Saved.");
+                        return;
+                    }
+
+                    if (ulong.TryParse(anchorArg, NumberStyles.Integer, CultureInfo.InvariantCulture, out var steamId) &&
+                        steamId >= 10000000000000000UL)
+                    {
+                        _cfg.DefaultAnchorSteamId = anchorArg;
+                        SaveConfig();
+                        player.ChatMessage($"[MaxxInvaders] DefaultAnchorSteamId set to {anchorArg}. Saved.");
+                    }
+                    else
+                        player.ChatMessage("[MaxxInvaders] Invalid Steam64 (expect 17 digits).");
                     break;
                 case "list":
                     if (!CanUse(player)) return;
@@ -2555,10 +2590,11 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (ulong.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var steam) &&
-                    steam >= 10000UL)
+                var t = value.Trim();
+                if (ulong.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out var steam) &&
+                    steam >= 10000000000000000UL)
                 {
-                    _cfg.DefaultAnchorSteamId = value.Trim();
+                    _cfg.DefaultAnchorSteamId = t;
                     SaveConfig();
                 }
             }
@@ -2703,6 +2739,52 @@ namespace Oxide.Plugins
             RowNum("InvaderWorldTagMaxDistance", "InvaderWorldTagMaxDistance",
                 _cfg.Gui.InvaderWorldTagMaxDistance.ToString(CultureInfo.InvariantCulture));
 
+            RowLabel("<b>Webhook / RCON default anchor</b>", 0.028f);
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text =
+                            "DefaultAnchorSteamId — used when spawn has no 7th RCON arg (set once; or /maxxinvaders anchor …)",
+                        FontSize = 8,
+                        Align = TextAnchor.LowerLeft,
+                        Color = "0.72 0.78 0.88 1",
+                    },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.97 {y}" },
+                },
+                panel);
+            y -= 0.026f;
+            container.Add(
+                new CuiLabel
+                {
+                    Text = { Text = "Steam64", FontSize = 9, Align = TextAnchor.LowerLeft },
+                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
+                },
+                panel);
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = Guid.NewGuid().ToString("N"),
+                    Parent = panel,
+                    Components =
+                    {
+                        new CuiInputFieldComponent
+                        {
+                            Align = TextAnchor.MiddleLeft,
+                            CharsLimit = 22,
+                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultAnchorSteamId)} ",
+                            FontSize = 12,
+                            IsPassword = false,
+                            Text = _cfg.DefaultAnchorSteamId ?? "",
+                            NeedsKeyboard = true,
+                        },
+                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
+                    },
+                });
+            y -= 0.048f;
+
             container.Add(
                 new CuiLabel
                 {
@@ -2820,43 +2902,7 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text =
-                            "DefaultAnchorSteamId (optional; webhook/RCON when 7th arg omitted — your Steam64)",
-                        FontSize = 8,
-                        Align = TextAnchor.LowerLeft,
-                    },
-                    RectTransform = { AnchorMin = $"0.03 {y - 0.02f}", AnchorMax = $"0.35 {y}" },
-                },
-                panel);
-            AddRawCuiElement(
-                container,
-                new CuiElement
-                {
-                    Name = Guid.NewGuid().ToString("N"),
-                    Parent = panel,
-                    Components =
-                    {
-                        new CuiInputFieldComponent
-                        {
-                            Align = TextAnchor.MiddleLeft,
-                            CharsLimit = 20,
-                            Command = $"maxxinvaders.gui cfgstr {nameof(InvaderConfig.DefaultAnchorSteamId)} ",
-                            FontSize = 11,
-                            IsPassword = false,
-                            Text = _cfg.DefaultAnchorSteamId ?? "",
-                            NeedsKeyboard = true,
-                        },
-                        new CuiRectTransformComponent { AnchorMin = $"0.36 {y - 0.038f}", AnchorMax = $"0.97 {y}" },
-                    },
-                });
-            y -= 0.048f;
-
-            container.Add(
-                new CuiLabel
-                {
-                    Text =
-                    {
-                        Text =
-                            "Access: /migrate-to-skills opens this tab. Also /maxxinvaders maxx | /maxxinvaders roaming",
+                            "Access: /migrate-to-skills opens this tab. Also /maxxinvaders maxx | /maxxinvaders roaming | anchor",
                         FontSize = 7,
                         Align = TextAnchor.LowerLeft,
                         Color = "0.65 0.72 0.78 1",

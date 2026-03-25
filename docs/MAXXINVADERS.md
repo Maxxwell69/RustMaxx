@@ -115,6 +115,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.6.6:** **`DefaultAnchorSteamId`** field moved **up** in **MAXX SETTINGS** (under Streamer HUD) so it is not drawn off-screen. Chat: **`/maxxinvaders anchor <Steam64>`** / **`anchor clear`** (admin).
 - **1.6.5:** **`DefaultAnchorSteamId`** (optional in `MaxxInvaders.json` / **MAXX SETTINGS**): when TikFinity/RCON **does not** pass the 7th `maxxinvaders.spawn` arg, the plugin uses this **Steam64** as spawn ring + RoamingNPCs **bridge anchor** — same as **GUI** spawns (where **you** are always the anchor). Set to your Steam id (or keep using RustMaxx **TikFinity patrol anchor**, which adds the 7th arg for you).
 - **1.6.4:** World `ddraw` tags use **smaller** text (`<size=10>`). For **RoamingNPCs** invaders, the **yellow name line is omitted** (the grey **vanilla nameplate** already shows `displayName`); only **HP%** and **distance** float above. Scientist-only invaders still get all three lines.
 - **1.6.2:** **Streamer HUD** (default **on**, **`maxxinvaders.admin`** only): **3D world tags** above each invader (yellow **name**, green **HP%**, white **distance**; `ddraw`, max range **`InvaderWorldTagMaxDistance`**), plus a **middle-right** CUI list of alive bots. Toggle in **MAXX SETTINGS** or `Gui` in `MaxxInvaders.json`.
