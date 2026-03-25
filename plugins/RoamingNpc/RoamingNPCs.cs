@@ -3370,12 +3370,9 @@ namespace Oxide.Plugins
             BotIdGenerator.AddID(data.userID);
 
             customPet.displayName = data.DisplayName;
-            // MaxxInvaders draws viewer name via ddraw; hide vanilla nameplate (Data.DisplayName kept for corpse/UI).
-            if (data.SpawnedFromMaxxInvadersBridge)
-            {
-                customPet.displayName = "";
-                customPet.SendNetworkUpdate();
-            }
+            // Hide vanilla nameplate (Data.DisplayName kept for corpse/UI, and for UI we draw via ddraw).
+            customPet.displayName = "";
+            customPet.SendNetworkUpdate();
 
             customPet.userID = data.userID;
             customPet.UserIDString = data.userID.ToString();
@@ -3453,7 +3450,7 @@ namespace Oxide.Plugins
         public void SetInfoStash(DropContainer container, CustomPet npc, BasePlayer player, ref string text)
         {
             text = "<size=16>";
-            text += "Stash: " + container?.entity.ShortPrefabName + $"[{npc.displayName}]";
+            text += "Stash: " + container?.entity.ShortPrefabName + $"[{npc.GetResolvedDisplayName()}]";
             text += $"\nDistance[{player.Distance(container.entity):0.0 m}]";
             text += "</size>";
         }

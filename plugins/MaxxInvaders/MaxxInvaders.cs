@@ -2277,7 +2277,9 @@ namespace Oxide.Plugins
         /// <summary>3D tags (RoamingNPCs 0.5.15+ clears vanilla nameplate for MaxxInvaders bridge bots). distanceFade 0 = stay visible at range.</summary>
         private static void DrawInvaderWorldTag(BasePlayer viewer, BasePlayer npc, string rawName, float distMeters)
         {
-            const string Sz = "<size=10>";
+            // Make the bot name tag slightly larger than the health/distance parts.
+            const string SzName = "<size=12>";
+            const string SzOther = "<size=10>";
             const string SzEnd = "</size>";
             const float NoFade = 0f;
             var hpPct = GetHealthPercentDisplay(npc);
@@ -2287,11 +2289,11 @@ namespace Oxide.Plugins
 
             var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(rawName) ? "?" : rawName.Trim());
             viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, yel, root + Vector3.up * 0.32f,
-                $"{Sz}{nm}{SzEnd}", NoFade);
-            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root, $"{Sz}{hpPct:F0}%{SzEnd}",
+                $"{SzName}{nm}{SzEnd}", NoFade);
+            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root, $"{SzOther}{hpPct:F0}%{SzEnd}",
                 NoFade);
             viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * 0.32f,
-                $"{Sz}{distMeters:F0} m{SzEnd}", NoFade);
+                $"{SzOther}{distMeters:F0} m{SzEnd}", NoFade);
         }
 
         #endregion
