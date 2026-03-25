@@ -76,6 +76,8 @@ Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot 
 
 **RoamingNPCs 0.5.10+ (RustMaxx `RoamingNPCs.cs`):** bridge spawns with a non-zero anchor Steam id **always** set `BridgeProtectAnchorUserId` and turn on **Bridge patrol** + **protect anchor** when the template omitted those flags — otherwise the bot kept **full roam AI** and looked like it was “running away” from you.
 
+**0.5.11+:** **Friendly** personality bots **flee players** (`RunAwayCoroutine`) — that fights patrol and causes **flee + leash zip** loops. For MaxxInvaders bridge spawns with an anchor, that flee path is **skipped** (target cleared / no run-away) so **BridgePatrol** can drive movement instead.
+
 Ensure **`streamer_patrol`** exists in `RoamingNPCs.json` and **`"Enable bot?": true`**.
 
 ```bash

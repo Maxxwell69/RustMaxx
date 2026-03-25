@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.10")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.11")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -7041,6 +7041,14 @@ namespace Oxide.Plugins
                                         Target.userID == owner.Data.BridgeRetaliationTargetUserId;
                         if (owner.GetPersonality() == PersonalityBot.Friendly && !retaliate)
                         {
+                            // Friendly bots use RunAwayCoroutine — fights streamer patrol / leash (constant flee + zip).
+                            if (owner.Data?.SpawnedFromMaxxInvadersBridge == true &&
+                                owner.Data.BridgeProtectAnchorUserId != 0UL)
+                            {
+                                SetTargetState<BasePlayer>(null);
+                                yield break;
+                            }
+
                             yield return RunAwayCoroutine();
                         }
                         else
@@ -7429,6 +7437,9 @@ namespace Oxide.Plugins
                         }
                         else
                         {
+                            if (owner.Data?.SpawnedFromMaxxInvadersBridge == true &&
+                                owner.Data.BridgeProtectAnchorUserId != 0UL)
+                                yield break;
                             yield return RunAwayCoroutine();
                         }
                     }
