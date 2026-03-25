@@ -3369,13 +3369,11 @@ namespace Oxide.Plugins
 
             BotIdGenerator.AddID(data.userID);
 
-            customPet.displayName = data.DisplayName;
-            // Hide vanilla nameplate (Data.DisplayName kept for corpse/UI, and for UI we draw via ddraw).
-            customPet.displayName = "";
-            customPet.SendNetworkUpdate();
-
             customPet.userID = data.userID;
             customPet.UserIDString = data.userID.ToString();
+            // Hide vanilla nameplate (Data.DisplayName kept for corpse/UI, and for UI we draw via ddraw).
+            // Important: do it after userID assignment so the client doesn't briefly render a `0`.
+            customPet.displayName = "";
             customPet.gameObject.AwakeFromInstantiate();
             customPet.Spawn();
 
