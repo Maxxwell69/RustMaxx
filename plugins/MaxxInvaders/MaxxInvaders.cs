@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.9")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.0")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -948,6 +948,60 @@ namespace Oxide.Plugins
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Teleport an invader NPC to a horizontal ring around the admin (navmesh-safe). Used by GUI TP / TP ALL.
+        /// </summary>
+        private static bool TryTeleportNpcToAdmin(BasePlayer npcPlayer, BasePlayer admin, float radiusMeters,
+            float angleRadians)
+        {
+            if (npcPlayer == null || npcPlayer.IsDestroyed || admin == null || !admin.IsValid()) return false;
+            var center = admin.transform.position;
+            var flat = new Vector3(Mathf.Cos(angleRadians), 0f, Mathf.Sin(angleRadians));
+            var tryPos = center + flat * radiusMeters;
+            tryPos.y = TerrainMeta.HeightMap.GetHeight(tryPos);
+            if (!ResolveNavMeshPosition(tryPos, out tryPos))
+            {
+                tryPos = center + flat * (radiusMeters + 1.75f);
+                tryPos.y = TerrainMeta.HeightMap.GetHeight(tryPos);
+                if (!ResolveNavMeshPosition(tryPos, out tryPos)) return false;
+            }
+
+            try
+            {
+                npcPlayer.Teleport(tryPos);
+                if (ResolveNavMeshPosition(npcPlayer.transform.position, out var after))
+                    npcPlayer.Teleport(after);
+            }
+            catch
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Place all alive invaders on a circle around the admin so they do not stack.</summary>
+        private int TeleportAllInvadersToAdmin(BasePlayer admin)
+        {
+            if (admin == null || !admin.IsValid()) return 0;
+            var bots = _registry.All()
+                .Where(r => r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+                .OrderBy(r => r.NpcId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var n = bots.Count;
+            if (n == 0) return 0;
+            // Arc length ~2πr/n — scale radius so neighbors stay ~1.5m+ apart on the ring.
+            var radius = Mathf.Max(2.1f, 0.28f * n);
+            var moved = 0;
+            for (var i = 0; i < n; i++)
+            {
+                var ang = (2f * Mathf.PI * i / n) + Random.Range(-0.06f, 0.06f);
+                if (TryTeleportNpcToAdmin(bots[i].NpcPlayer, admin, radius, ang)) moved++;
+            }
+
+            return moved;
         }
 
         private bool TryFindSpawnPosition(BasePlayer anchorPlayer, out Vector3 pos)
@@ -3140,10 +3194,10 @@ namespace Oxide.Plugins
                     rowName,
                     $"maxxinvaders.gui tp {r.NpcId}",
                     _cfg.Gui.AccentColor,
-                    "TP",
+                    "TO ME",
                     "0.56 0.15",
                     "0.66 0.88",
-                    10);
+                    9);
                 AddCuiButtonWithText(
                     container,
                     rowName,
@@ -3577,12 +3631,29 @@ namespace Oxide.Plugins
 
             AddScrollableInvadersBotList(container, scrollHost, list);
 
+            if (list.Count > 0)
+            {
+                AddCuiButtonWithText(
+                    container,
+                    botsOuter,
+                    "maxxinvaders.gui tpall",
+                    _cfg.Gui.AccentColor,
+                    "TP ALL TO ME",
+                    "0.62 0.87",
+                    "0.98 0.98",
+                    11,
+                    TextAnchor.MiddleCenter,
+                    "0.95 0.97 1 1");
+            }
+
             AddCuiText(
                 container,
                 botsOuter,
-                $"ACTIVE BOTS — scroll with mouse wheel  ·  On map: {list.Count}",
+                list.Count > 0
+                    ? $"ACTIVE BOTS — scroll  ·  On map: {list.Count}  ·  row: bot comes to you (ring if many)"
+                    : $"ACTIVE BOTS — scroll with mouse wheel  ·  On map: {list.Count}",
                 "0.02 0.87",
-                "0.98 0.98",
+                list.Count > 0 ? "0.60 0.98" : "0.98 0.98",
                 13,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
@@ -3918,10 +3989,29 @@ namespace Oxide.Plugins
                 {
                     if (r.NpcId != id) continue;
                     if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
-                        player.Teleport(r.NpcPlayer.transform.position);
+                    {
+                        var ang = Random.Range(0f, Mathf.PI * 2f);
+                        var ok = TryTeleportNpcToAdmin(r.NpcPlayer, player, Random.Range(2f, 2.7f), ang);
+                        if (ok)
+                            player.ChatMessage($"[MaxxInvaders] Pulled {StripCuiMarkup(r.ViewerName ?? id)} to you.");
+                        else
+                            player.ChatMessage("[MaxxInvaders] Could not place bot on navmesh near you — try open ground.");
+                    }
+
                     break;
                 }
-                LogIf(_cfg.Logging.LogGui, $"gui tp {player.displayName} {id}", false);
+
+                LogIf(_cfg.Logging.LogGui, $"gui tp (bot to admin) {player.displayName} {id}", false);
+                return;
+            }
+
+            if (args[0] == "tpall")
+            {
+                var moved = TeleportAllInvadersToAdmin(player);
+                player.ChatMessage(moved > 0
+                    ? $"[MaxxInvaders] Pulled {moved} bot(s) to you in a ring (no overlap)."
+                    : "[MaxxInvaders] No active bots to move.");
+                LogIf(_cfg.Logging.LogGui, $"gui tpall {player.displayName} moved={moved}", false);
                 return;
             }
 

@@ -71,6 +71,8 @@ In the **GUI**, use tabs **Invaders** (spawn + list + bridge status), **Maxx** (
 
 Use **Quick: spawn 1 demo NPC** for an instant test, or fill **viewer name**, **viewer id** (unique), **tier**, **mode**, **kit**, then **Spawn using fields below**. After editing a field, press **Enter** or click outside so Rust sends the value. **Reset form** gives a new random demo id.
 
+On the **Invaders** tab bot list, **TO ME** teleports **that bot to you** (random spot ~2–3 m away on navmesh). **TP ALL TO ME** pulls **every** active bot into a **circle around you** so they do not stack (radius scales with how many bots you have).
+
 ## “Failed to create agent because it is not close enough to the NavMesh”
 
 Spawns must land on **walkable NavMesh**. MaxxInvaders **1.1.3+** expands NavMesh sampling (up to ~28 m) for spawn points, scientist **Spawn()**, RoamingNPCs **Teleport**, and scientist steering targets. If this still spams the console, try **smaller** `DefaultSpawnRadius`, **more** `SpawnAttempts`, or test in open terrain away from cliffs, quarry edges, or monument gaps. **RoamingNPCs** bots use their own spawn logic first; we only snap positions after **Teleport**.
@@ -107,6 +109,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.6.0:** Invaders GUI **TO ME** (was misleading **TP**) teleports **the bot to your position** on navmesh. **TP ALL TO ME** pulls all active bots into a **ring around you** so they do not overlap.
 - **1.2.1:** RoamingNPCs bridge API is **embedded in `RoamingNPCs.cs`** (no separate `NPCMaxxApi.cs`). Clearer spawn failure messages (missing key vs disabled bot vs Respawn null).
 - **1.2.0:** GUI tabs **Invaders | Maxx | Roaming**. **Maxx** edits core MaxxInvaders config in-game. **Roaming** toggles RoamingNPCs bot templates. Chat **`/migrate-to-skills`** opens the Maxx tab.
 - **1.1.4:** Config **`ScientistFallbackEnabled`** (default `true`). Set to `false` to **disable vanilla scientist spawns** and require a successful RoamingNPCs bridge only.
