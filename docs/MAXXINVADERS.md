@@ -113,6 +113,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.6.4:** World `ddraw` tags use **smaller** text (`<size=10>`). For **RoamingNPCs** invaders, the **yellow name line is omitted** (the grey **vanilla nameplate** already shows `displayName`); only **HP%** and **distance** float above. Scientist-only invaders still get all three lines.
 - **1.6.2:** **Streamer HUD** (default **on**, **`maxxinvaders.admin`** only): **3D world tags** above each invader (yellow **name**, green **HP%**, white **distance**; `ddraw`, max range **`InvaderWorldTagMaxDistance`**), plus a **middle-right** CUI list of alive bots. Toggle in **MAXX SETTINGS** or `Gui` in `MaxxInvaders.json`.
 - **1.6.1:** Default spawn ring is **tight to the anchor** (`MinimumSpawnRadiusFromAnchor` / `DefaultSpawnRadius` **5–22 m**). The anchor streamer is **excluded** from the “too close to players” check so bots can spawn beside you (previously your own character blocked nearby spots). Tune **`MinimumDistanceFromPlayers`** if other players are near.
 - **1.6.0:** Invaders GUI **TO ME** (was misleading **TP**) teleports **the bot to your position** on navmesh. **TP ALL TO ME** pulls all active bots into a **ring around you** so they do not overlap.
