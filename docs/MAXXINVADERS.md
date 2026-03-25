@@ -31,8 +31,10 @@ Viewer-linked NPCs for TikFinity / RustMaxx relay events. **1.1.0+** can spawn *
 ```text
 maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> "<kitName>" -
 maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - hostile
+maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - roaming "streamer_patrol"
 ```
 
+- Optional **6th argument** is a **RoamingNPCs bot key** (overrides `ViewerRoamingTemplateKey` / tier default for that spawn). RustMaxx TikFinity webhook defaults to **`streamer_patrol`** when you do not pass `?template=`.
 - Use `-` for an empty kit name when you have no Kits entry.
 - Quote viewer names that contain spaces.
 - `viewerId` should be the **stable** TikTok / platform id from the relay (string).

@@ -1403,7 +1403,7 @@ namespace Oxide.Plugins
             if (parts.Count < 5)
             {
                 arg.ReplyWith(
-                    "Usage: maxxinvaders.spawn <viewerName> <viewerId> <tier> <kitName|-> <mode>");
+                    "Usage: maxxinvaders.spawn <viewerName> <viewerId> <tier> <kitName|-> <mode> [roamingTemplateKey]");
                 return;
             }
 
@@ -1417,8 +1417,11 @@ namespace Oxide.Plugins
 
             var kit = parts[3] == "-" ? "" : parts[3];
             var mode = parts[4].ToLowerInvariant();
+            var roamingTemplateOverride = parts.Count >= 6 && !string.IsNullOrWhiteSpace(parts[5])
+                ? parts[5].Trim()
+                : null;
 
-            var result = TrySpawn(viewerName, viewerId, tier, kit, mode, null, "console");
+            var result = TrySpawn(viewerName, viewerId, tier, kit, mode, null, "console", roamingTemplateOverride);
             if (!result.Success)
             {
                 if (!string.IsNullOrWhiteSpace(result.ErrorDetail))

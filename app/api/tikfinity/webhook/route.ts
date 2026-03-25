@@ -201,14 +201,18 @@ function sanitizeArg(s: string, maxLen = 48): string {
   return s.replace(/\s+/g, "_").slice(0, maxLen) || "Viewer";
 }
 
-/** Tier / mode / kit for MaxxInvaders RCON spawn (query string overrides body). */
+/** Default RoamingNPCs bot for TikFinity viewer spawns (Streamer Patrol template). Override with ?template= or body.template. */
+const DEFAULT_MAXXINVADERS_ROAMING_BOT = "streamer_patrol";
+
+/** Tier / mode / kit / optional roaming template key for MaxxInvaders (query overrides body). */
 function parseMaxxInvadersParams(
   request: NextRequest,
   body: unknown
-): { tier: number; mode: string; kit: string } {
+): { tier: number; mode: string; kit: string; roamingTemplate: string | null } {
   let tier = 1;
   let mode = "roaming";
   let kit = "-";
+  let roamingTemplate: string | null = null;
 
   if (body && typeof body === "object") {
     const o = body as Record<string, unknown>;
@@ -217,6 +221,9 @@ function parseMaxxInvadersParams(
       tier = parseInt(o.tier.trim(), 10);
     if (typeof o.mode === "string" && o.mode.trim()) mode = o.mode.trim();
     if (typeof o.kit === "string") kit = o.kit.trim() === "" ? "-" : o.kit.trim();
+    if (typeof o.template === "string" && o.template.trim()) roamingTemplate = o.template.trim();
+    if (typeof o.roamingTemplate === "string" && o.roamingTemplate.trim())
+      roamingTemplate = o.roamingTemplate.trim();
   }
 
   const tq = request.nextUrl.searchParams.get("tier")?.trim();
@@ -228,8 +235,11 @@ function parseMaxxInvadersParams(
   const kq = request.nextUrl.searchParams.get("kit");
   if (kq !== null) kit = kq.trim() === "" ? "-" : kq.trim();
 
+  const tmplQ = request.nextUrl.searchParams.get("template")?.trim();
+  if (tmplQ) roamingTemplate = tmplQ;
+
   tier = Math.min(99, Math.max(1, Number.isFinite(tier) ? tier : 1));
-  return { tier, mode: mode.toLowerCase(), kit };
+  return { tier, mode: mode.toLowerCase(), kit, roamingTemplate };
 }
 
 /** GET: same as POST but with empty body (action from ?action= e.g. ?action=scientist). Lets you test from browser or TikFinity GET. */
@@ -526,7 +536,15 @@ async function runWebhook(request: NextRequest, body: unknown) {
   }
 
   if (action === "maxxinvaders") {
-    const { tier, mode, kit } = parseMaxxInvadersParams(request, body);
+    const miParams = parseMaxxInvadersParams(request, body);
+    const { tier, mode, kit } = miParams;
+    const roamingFromExplicit = parseNpcTemplateKey(miParams.roamingTemplate);
+    const roamingFromConnection =
+      connectionFromAdmin?.server_action === "maxxinvaders"
+        ? parseNpcTemplateKey(connectionFromAdmin.npc_template_key)
+        : null;
+    const roamingBotKey =
+      roamingFromExplicit ?? roamingFromConnection ?? DEFAULT_MAXXINVADERS_ROAMING_BOT;
     const viewerId =
       extractTikTokUniqueIdFromBody(body) ??
       `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -578,6 +596,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
       tier,
       kit,
       mode,
+      roamingBotKey,
       connectionId: connectionFromAdmin?.id ?? null,
       tikfinityEventName: tikfinityEventNameForLog,
     });
@@ -638,10 +657,11 @@ async function runWebhook(request: NextRequest, body: unknown) {
         tier,
         mode,
         kit,
+        roamingBotKey,
         command: spawnMi.command,
         rconResponse: spawnMi.rconResponse,
         debug:
-          "maxxinvaders.spawn succeeded per game RCON reply. Webhook has no in-game anchor (spawns use world anchor: first online player, or 0,0 if empty — NPC may be far or spawn can fail if no valid position). Use in-game GUI spawn for streamer-anchored patrol.",
+          "maxxinvaders.spawn succeeded per game RCON reply. Roaming bot key is roamingBotKey (default streamer_patrol; override ?template= or TikFinity connection Roaming template). Webhook has no player anchor — true streamer-anchored patrol needs in-game spawn; bridge still uses streamer_patrol behavior where the plugin supports null anchor.",
       })
     );
   }

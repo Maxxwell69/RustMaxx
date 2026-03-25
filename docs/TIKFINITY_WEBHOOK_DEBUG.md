@@ -68,10 +68,12 @@ curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=npcmaxx&template
 
 ### MaxxInvaders viewer spawn (`action=maxxinvaders`)
 
-Sends RCON `maxxinvaders.spawn` using **MaxxInvaders** + RoamingNPCs (set **`ViewerRoamingTemplateKey`** in `oxide/config/MaxxInvaders.json`). Defaults: **`tier=1`**, **`mode=roaming`**, **`kit=-`**. Query string (`tier`, `mode`, `kit`) overrides JSON body.
+Sends RCON `maxxinvaders.spawn` with a **Roaming bot key** as the 6th argument. **Default bot:** **`streamer_patrol`** (Streamer Patrol). Override with **`?template=your_bot_key`** or JSON **`template`** / **`roamingTemplate`**, or set the **Roaming template** field on a TikFinity connection whose server action is MaxxInvaders. Defaults: **`tier=1`**, **`mode=roaming`**, **`kit=-`**.
+
+Ensure **`streamer_patrol`** exists in `RoamingNPCs.json` and **`"Enable bot?": true`** (RoamingNPCs can auto-add the template on first load on recent builds).
 
 ```bash
-curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=maxxinvaders&tier=2&mode=roaming&kit=-" \
+curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=maxxinvaders&tier=2&mode=roaming&kit=-&template=streamer_patrol" \
   -X POST -H "Content-Type: application/json" \
   -d "{\"viewerName\":\"CurlTest\",\"uniqueId\":\"tiktok_test_uid_123\"}"
 ```

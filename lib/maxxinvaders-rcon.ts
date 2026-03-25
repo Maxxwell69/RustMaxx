@@ -33,8 +33,7 @@ function quoteRconArg(s: string): string {
 }
 
 /**
- * Send `maxxinvaders.spawn <viewerName> <viewerId> <tier> <kit|-> <mode>` over RCON.
- * Uses ViewerRoamingTemplateKey / tier defs on the server (anchor is null for console — no streamer protection from webhook).
+ * Send `maxxinvaders.spawn … [roamingBotKey]` over RCON (6th arg = RoamingNPCs bot key, e.g. streamer_patrol).
  */
 export async function maxxinvadersRconSpawn(params: {
   server: ServerRow;
@@ -43,6 +42,8 @@ export async function maxxinvadersRconSpawn(params: {
   tier: number;
   kit: string;
   mode: string;
+  /** RoamingNPCs Bots key (letters, numbers, _, -). Passed as 6th RCON arg so webhook can force e.g. streamer_patrol. */
+  roamingBotKey: string;
   connectionId: string | null;
   tikfinityEventName: string | null;
 }): Promise<MaxxinvadersRconResult> {
@@ -52,9 +53,10 @@ export async function maxxinvadersRconSpawn(params: {
   const kitRaw = params.kit.trim();
   const kitArg = kitRaw === "" || kitRaw === "-" ? "-" : sanitizeToken(kitRaw, 32);
   const modeArg = sanitizeToken(params.mode || "roaming", 24).toLowerCase();
+  const botTok = sanitizeToken(params.roamingBotKey, 64);
 
-  const command = `maxxinvaders.spawn ${quoteRconArg(nameTok)} ${quoteRconArg(idTok)} ${tier} ${kitArg} ${modeArg}`;
-  const templateKey = `maxxinvaders:t${tier}:${modeArg}`;
+  const command = `maxxinvaders.spawn ${quoteRconArg(nameTok)} ${quoteRconArg(idTok)} ${tier} ${kitArg} ${modeArg} ${quoteRconArg(botTok)}`;
+  const templateKey = `maxxinvaders:t${tier}:${modeArg}:${botTok}`;
 
   const connected = await ensureConnection(
     params.server.id,
