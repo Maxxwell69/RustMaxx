@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.13")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.14")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3119,7 +3119,26 @@ namespace Oxide.Plugins
 
         #region Methods
 
-        public string GetBotStateName(CustomPet bot) => bot?.CustomBrain?.currentState?.NameState.ToString();
+        public string GetBotStateName(CustomPet bot)
+        {
+            if (bot?.CustomBrain?.currentState != null)
+                return bot.CustomBrain.currentState.NameState.ToString();
+            var d = bot?.Data;
+            if (d?.SpawnedFromMaxxInvadersBridge == true && d.BridgeProtectAnchorUserId != 0UL)
+                return "BridgePatrolIdle";
+            return null;
+        }
+
+        /// <summary>Admin debug overlay: bridge bots often have no Miner/Hunter FSM target — patrol is driven by BridgePatrolTick instead.</summary>
+        private static string DescribeBrainStateForDebug(CustomPet npc)
+        {
+            if (npc?.CustomBrain?.currentState != null)
+                return npc.CustomBrain.currentState.ToString();
+            var d = npc?.Data;
+            if (d?.SpawnedFromMaxxInvadersBridge == true && d.BridgeProtectAnchorUserId != 0UL)
+                return "Bridge patrol (idle — FSM waits for nearby loot/resources)";
+            return "Not State";
+        }
 
         public bool IsDeployableNatureEntity(BaseEntity entity) => DeployableNature?.Call<bool>("IsDeployableNature", entity) ?? false;
 
@@ -3468,7 +3487,7 @@ namespace Oxide.Plugins
             text += npc.displayName + $"[{npc.UserIDString}] ({npc.GetPersonality()})";
             text += $"\nDistance[{npc.Distance(player):0.0 m}]";
             text += $"   Health: {npc.Health() / npc.MaxHealth():0%}";
-            text += $"\nState: {npc.CustomBrain.currentState?.ToString() ?? "Not State"}";
+            text += $"\nState: {DescribeBrainStateForDebug(npc)}";
             text += "</size>";
         }
         public void UpdateInfoUI()
@@ -3511,7 +3530,7 @@ namespace Oxide.Plugins
             text += $"\nRadiation level[{npc.metabolism.radiation_level.value:0.0}/{npc.metabolism.radiation_level.max:0.0}]";
             text += $"\nRadiation poison[{(npc.metabolism.radiation_poison.value / npc.metabolism.radiation_poison.max):0%} ({npc.metabolism.radiation_poison.value:0.0}/{npc.metabolism.radiation_poison.max:0.0})]";
             text += $"\nInSafeZone: {npc.InSafeZone()}";
-            text += $"\n\nState: {npc.CustomBrain.currentState?.ToString() ?? "Not State"}";
+            text += $"\n\nState: {DescribeBrainStateForDebug(npc)}";
             if (npc.MoveController != null) text += $"\n{npc.MoveController}";
         }
         public void SaveBots()

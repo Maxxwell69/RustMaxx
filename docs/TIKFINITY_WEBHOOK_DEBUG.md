@@ -82,6 +82,8 @@ Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot 
 
 **0.5.13+:** On plugin load, persisted keys like **`streamer_patrol_anon_…`** (MaxxInvaders bridge dynamic keys) are recognized and removed **without** the “Bot config not found” warning — they are not separate `Bots settings` entries.
 
+**0.5.14+:** Admin **State:** overlay for bridge + anchor bots with no active brain FSM (Hunter/Researcher off, Miner idle) no longer shows misleading **`Not State`** — it explains **bridge patrol idle** (movement is still driven by **BridgePatrolTick**).
+
 Ensure **`streamer_patrol`** exists in `RoamingNPCs.json` and **`"Enable bot?": true`**.
 
 ```bash
@@ -124,6 +126,8 @@ https://www.rustmaxx.com/api/tikfinity/webhook?action=maxxinvaders&viewerName=%n
 
 Use **`%nickname%`** for the viewer’s **visible name** on the bot. Use **`%username%`** only if you want the **@handle** as the name instead.
 
+**If the NPC name shows the literal text `%nickname%` or `%username%`:** TikFinity did **not** substitute the placeholder — RustMaxx received that string as-is. Prefer **POST** with JSON **`"viewerName":"%nickname%"`** (many setups substitute variables reliably in the body), or fix the TikFinity action so the placeholder is expanded in the **query string** before the request is sent.
+
 RustMaxx also reads these JSON fields if you use **POST** with a custom body: `viewerName`, `nickname`, `userName`, `username`, `displayName`, or nested `user` / `viewer` / `sender` objects (see `extractViewerNameFromWebhookBody` in `lib/tikfinity.ts`).
 
 ---
@@ -136,6 +140,7 @@ RustMaxx also reads these JSON fields if you use **POST** with a custom body: `v
 | CORS / blocked | TikFinity runs from **tikfinity.zerody.one** — webhook allows that origin. |
 | Empty body | TikFinity must send JSON with **viewer** fields if the action needs a name. |
 | Works in curl, not in TikFinity | Compare Raw payload in TikFinity; match `action`, `giftName`, or event name to your **connections**. |
+| NPC name is literally `%nickname%` | Placeholder not expanded — use POST JSON `"viewerName":"%nickname%"` or correct TikFinity variable mapping for the URL. |
 
 ---
 
