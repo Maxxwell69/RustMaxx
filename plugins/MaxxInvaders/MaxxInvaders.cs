@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.5.7")]
+    [Info("MaxxInvaders", "RustMaxx", "1.5.8")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -984,6 +984,18 @@ namespace Oxide.Plugins
             return p != null ? p.transform.position : Vector3.zero;
         }
 
+        /// <summary>RCON/webhook anchor: online player or sleeping body so spawn + leash use their position.</summary>
+        private static BasePlayer FindPlayerOrSleeperByUserId(ulong userId)
+        {
+            foreach (var p in BasePlayer.activePlayerList)
+                if (p != null && p.userID == userId)
+                    return p;
+            foreach (var p in BasePlayer.sleepingPlayerList)
+                if (p != null && p.userID == userId)
+                    return p;
+            return null;
+        }
+
         private static bool TooCloseToPlayers(Vector3 pos, float minDist)
         {
             var sq = minDist * minDist;
@@ -1403,7 +1415,7 @@ namespace Oxide.Plugins
             if (parts.Count < 5)
             {
                 arg.ReplyWith(
-                    "Usage: maxxinvaders.spawn <viewerName> <viewerId> <tier> <kitName|-> <mode> [roamingTemplateKey]");
+                    "Usage: maxxinvaders.spawn <viewerName> <viewerId> <tier> <kitName|-> <mode> [roamingTemplateKey] [anchorSteam64]");
                 return;
             }
 
@@ -1421,7 +1433,27 @@ namespace Oxide.Plugins
                 ? parts[5].Trim()
                 : null;
 
-            var result = TrySpawn(viewerName, viewerId, tier, kit, mode, null, "console", roamingTemplateOverride);
+            BasePlayer anchorPlayer = null;
+            if (parts.Count >= 7 && !string.IsNullOrWhiteSpace(parts[6]))
+            {
+                var rawAnchor = parts[6].Trim();
+                if (!ulong.TryParse(rawAnchor, NumberStyles.Integer, CultureInfo.InvariantCulture, out var anchorSteam) ||
+                    anchorSteam < 10000UL)
+                {
+                    arg.ReplyWith("Error: invalid_anchor_steam (expect 17-digit Steam64)");
+                    return;
+                }
+
+                anchorPlayer = FindPlayerOrSleeperByUserId(anchorSteam);
+                if (anchorPlayer == null)
+                {
+                    arg.ReplyWith(
+                        $"Error: anchor_offline (no active or sleeping player for Steam64 {anchorSteam})");
+                    return;
+                }
+            }
+
+            var result = TrySpawn(viewerName, viewerId, tier, kit, mode, anchorPlayer, "console", roamingTemplateOverride);
             if (!result.Success)
             {
                 if (!string.IsNullOrWhiteSpace(result.ErrorDetail))

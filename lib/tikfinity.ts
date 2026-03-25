@@ -286,7 +286,7 @@ export const ACTION_META: Record<
   maxxinvaders: {
     label: "MaxxInvaders viewer spawn",
     description:
-      "Spawns a RoamingNPCs bot named after the viewer (payload viewerName / TikFinity field). Defaults to template streamer_patrol. Body: viewerName, optional uniqueId. URL: ?action=maxxinvaders&viewerName={{viewer}} (or POST JSON). Optional: ?template=, tier, mode, kit.",
+      "Spawns a RoamingNPCs bot named after the viewer (payload viewerName / TikFinity field). Defaults to template streamer_patrol. Optional anchor: ?anchorSteam=17digit Steam64, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID — bot spawns near that player (online/sleeping). Body: viewerName, optional uniqueId. URL: ?action=maxxinvaders&viewerName={{viewer}}. Optional: ?template=, tier, mode, kit.",
     exampleGifts: ["InvaderSpawn", "ViewerRaid"],
   },
 };

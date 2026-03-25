@@ -30,8 +30,11 @@ import {
 } from "@/lib/crew-rnpc-registrations";
 import { npcmaxxRconSpawn } from "@/lib/npcmaxx-rcon";
 import { maxxinvadersRconSpawn } from "@/lib/maxxinvaders-rcon";
+import { resolveMaxxInvadersAnchorSteam } from "@/lib/maxxinvaders-anchor-steam";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
+const TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID =
+  process.env.TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID?.trim() ?? undefined;
 
 const CREW_RNPC_TEMPLATE_KEY = process.env.CREW_RNPC_TEMPLATE_KEY?.trim() ?? null;
 const NPCMAXX_REQUIRE_CREW_REGISTRY =
@@ -552,6 +555,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
     const viewerId =
       extractTikTokUniqueIdFromBody(body) ??
       `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const anchorSteam64 = resolveMaxxInvadersAnchorSteam(request, body, TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID);
 
     if (NPCMAXX_REQUIRE_CREW_REGISTRY) {
       const uid = extractTikTokUniqueIdFromBody(body);
@@ -601,6 +605,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
       kit,
       mode,
       roamingBotKey,
+      anchorSteam64,
       connectionId: connectionFromAdmin?.id ?? null,
       tikfinityEventName: tikfinityEventNameForLog,
     });
@@ -623,7 +628,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
       }).catch(() => {});
       const replyHint =
         spawnMi.step === "rcon_reply"
-          ? "Game replied via RCON — see rconResponse. Common: spawn_position (no players online → anchor 0,0; join server or use GUI spawn), RoamingNPCs template missing/disabled, duplicate_viewer/cooldown, or ScientistFallbackEnabled=false with bridge failure."
+          ? "Game replied via RCON — see rconResponse. Common: spawn_position (no players online → anchor 0,0; join server or use GUI spawn), anchor_offline (set ?anchorSteam= or TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID and be online/sleeping), RoamingNPCs template missing/disabled, duplicate_viewer/cooldown, or ScientistFallbackEnabled=false with bridge failure."
           : spawnMi.step === "rcon_connect"
             ? connectedErrorDebug(server.rcon_host)
             : "RCON connected but command could not be sent.";
@@ -664,8 +669,11 @@ async function runWebhook(request: NextRequest, body: unknown) {
         roamingBotKey,
         command: spawnMi.command,
         rconResponse: spawnMi.rconResponse,
+        anchorSteam64: anchorSteam64 ?? null,
         debug:
-          "maxxinvaders.spawn succeeded per game RCON reply. Roaming bot key is roamingBotKey (default streamer_patrol; override ?template= or TikFinity connection Roaming template). Webhook has no player anchor — true streamer-anchored patrol needs in-game spawn; bridge still uses streamer_patrol behavior where the plugin supports null anchor.",
+          anchorSteam64 != null
+            ? "maxxinvaders.spawn used anchor Steam64: spawn ring + RoamingNPCs bridge anchor near that player (must be online or sleeping). Tune MaxxInvaders.json MaxDistanceFromAnchor / MinimumSpawnRadiusFromAnchor to tighten patrol."
+            : "maxxinvaders.spawn succeeded with no anchorSteam — set ?anchorSteam=17digit, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID so the bot stays near you (streamer/base owner must be on server or sleeping).",
       })
     );
   }

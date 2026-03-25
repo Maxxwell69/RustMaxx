@@ -363,8 +363,14 @@ export default function AdminStreamerInteractionsPage() {
               <strong className="text-zinc-300">viewer&apos;s name</strong> from TikFinity: send{" "}
               <code className="rounded bg-zinc-800 px-1">viewerName</code> in the JSON body (mapped from the
               viewer field), or add <code className="rounded bg-zinc-800 px-1">?viewerName=...</code> to the URL.
-              Optional: <code className="rounded bg-zinc-800 px-1">?template=other_bot_key</code>,{" "}
+              Optional:               <code className="rounded bg-zinc-800 px-1">?template=other_bot_key</code>,{" "}
               <code className="rounded bg-zinc-800 px-1">tier</code>, <code className="rounded bg-zinc-800 px-1">uniqueId</code> when crew gate is on.
+            </p>
+            <p className="mt-2 text-sm text-zinc-400">
+              <strong className="text-zinc-300">Stay near streamer / base:</strong> add{" "}
+              <code className="rounded bg-zinc-800 px-1">?anchorSteam=7656119…</code> (your 17-digit Steam64) or set env{" "}
+              <code className="rounded bg-zinc-800 px-1">TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID</code>. That account must be{" "}
+              <strong className="text-zinc-300">online or sleeping</strong> on the server so spawn + patrol leash around them. For a &quot;base&quot; anchor, use the TC owner&apos;s Steam64 while they are at the base.
             </p>
             {data.tikfinityFeatures?.npcmaxxRequireCrewRegistry && (
               <p className="mt-2 rounded border border-amber-800/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-100/95">
