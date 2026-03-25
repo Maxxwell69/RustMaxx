@@ -353,6 +353,37 @@ export default function AdminStreamerInteractionsPage() {
             event name; no <code className="rounded bg-zinc-800 px-1">?action=</code> needed.
           </p>
 
+          <div className="mt-6 rounded-lg border border-zinc-700 bg-zinc-950/50 p-4">
+            <h3 className="text-base font-semibold text-zinc-100">
+              MaxxInvaders — viewer name on bot (Streamer Patrol)
+            </h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Runs <code className="rounded bg-zinc-800 px-1">maxxinvaders.spawn</code> with Roaming template{" "}
+              <strong className="text-zinc-300">streamer_patrol</strong> by default. The in-game bot uses the{" "}
+              <strong className="text-zinc-300">viewer&apos;s name</strong> from TikFinity: send{" "}
+              <code className="rounded bg-zinc-800 px-1">viewerName</code> in the JSON body (mapped from the
+              viewer field), or add <code className="rounded bg-zinc-800 px-1">?viewerName=...</code> to the URL.
+              Optional: <code className="rounded bg-zinc-800 px-1">?template=other_bot_key</code>,{" "}
+              <code className="rounded bg-zinc-800 px-1">tier</code>, <code className="rounded bg-zinc-800 px-1">uniqueId</code> when crew gate is on.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                {`${webhookUrl}?action=maxxinvaders`}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${webhookUrl}?action=maxxinvaders`);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="shrink-0 rounded bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
+              >
+                {copied ? "Copied" : "Copy URL"}
+              </button>
+            </div>
+          </div>
+
           <details className="mt-4 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2">
             <summary className="cursor-pointer text-sm text-zinc-300">Webhook debug (diagnostics)</summary>
             <p className="mt-2 text-xs text-zinc-500">

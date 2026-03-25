@@ -536,6 +536,10 @@ async function runWebhook(request: NextRequest, body: unknown) {
   }
 
   if (action === "maxxinvaders") {
+    const viewerNameFromQuery = request.nextUrl.searchParams.get("viewerName")?.trim();
+    if (viewerNameFromQuery) {
+      payload = { ...payload, viewerName: viewerNameFromQuery };
+    }
     const miParams = parseMaxxInvadersParams(request, body);
     const { tier, mode, kit } = miParams;
     const roamingFromExplicit = parseNpcTemplateKey(miParams.roamingTemplate);

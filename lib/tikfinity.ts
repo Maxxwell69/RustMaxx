@@ -286,7 +286,7 @@ export const ACTION_META: Record<
   maxxinvaders: {
     label: "MaxxInvaders viewer spawn",
     description:
-      "Runs maxxinvaders.spawn over RCON. Defaults to Roaming bot streamer_patrol (Streamer Patrol). Override: ?template=your_bot_key or JSON template / roamingTemplate, or set Roaming template on a TikFinity connection (server action MaxxInvaders). Optional: tier, mode, kit. Send TikTok uniqueId for stable viewerId when crew gate is on.",
+      "Spawns a RoamingNPCs bot named after the viewer (payload viewerName / TikFinity field). Defaults to template streamer_patrol. Body: viewerName, optional uniqueId. URL: ?action=maxxinvaders&viewerName={{viewer}} (or POST JSON). Optional: ?template=, tier, mode, kit.",
     exampleGifts: ["InvaderSpawn", "ViewerRaid"],
   },
 };
