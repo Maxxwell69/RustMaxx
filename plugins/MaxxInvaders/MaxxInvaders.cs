@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.1")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.2")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -34,6 +34,9 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[MaxxInvaders]";
         private const string DataFile = "MaxxInvaders/MaxxInvadersData";
         private const string UiName = "MaxxInvaders.AdminUI";
+        private const string HudOverlayUiName = "MaxxInvaders.HudOverlay";
+        private const float InvaderOverlayDrawDuration = 0.45f;
+        private const int GuiSchemaCurrent = 1;
 
         private static readonly string[] BuiltinScientistPrefabFallbacks =
         {
@@ -62,7 +65,9 @@ namespace Oxide.Plugins
         private readonly Dictionary<string, DateTime> _viewerCooldownUntil = new(StringComparer.OrdinalIgnoreCase);
         private Timer _tickTimer;
         private Timer _persistTimer;
+        private Timer _overlayTimer;
         private bool _debugRuntime;
+        private readonly Dictionary<ulong, string> _lastHudContentByUser = new();
         private DateTime _lastRoamingSpawnFailWarnUtc;
         private string _lastRoamingSpawnFailTemplate;
 
@@ -76,6 +81,14 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermUse, this);
             permission.RegisterPermission(PermDebug, this);
             Subscribe(nameof(OnEntityTakeDamage));
+            Subscribe(nameof(OnPlayerDisconnected));
+        }
+
+        private void OnPlayerDisconnected(BasePlayer player, string reason)
+        {
+            if (player == null) return;
+            _lastHudContentByUser.Remove(player.userID);
+            CuiHelper.DestroyUi(player, HudOverlayUiName);
         }
 
         private void OnServerInitialized()
@@ -85,16 +98,22 @@ namespace Oxide.Plugins
             _tickTimer = timer.Every(Mathf.Clamp(_cfg.BehaviorTickSeconds, 0.25f, 10f), BehaviorTick);
             if (_cfg.PersistIntervalSeconds > 0)
                 _persistTimer = timer.Every(_cfg.PersistIntervalSeconds, () => SaveDataFile());
+            _overlayTimer = timer.Every(0.35f, RefreshInvaderStreamerOverlays);
         }
 
         private void Unload()
         {
             _tickTimer?.Destroy();
             _persistTimer?.Destroy();
+            _overlayTimer?.Destroy();
             foreach (var player in BasePlayer.activePlayerList)
+            {
                 CuiHelper.DestroyUi(player, UiName);
+                CuiHelper.DestroyUi(player, HudOverlayUiName);
+            }
 
             _spawnDrafts.Clear();
+            _lastHudContentByUser.Clear();
 
             if (_cfg?.DespawnOnUnload == true)
                 _registry.DespawnAll(this, "plugin_unload");
@@ -241,6 +260,9 @@ namespace Oxide.Plugins
                 },
             };
 
+            /// <summary>Bump when new Gui defaults must apply to legacy configs (see EnsureConfigDefaults).</summary>
+            public int GuiSchemaVersion { get; set; } = 1;
+
             public GuiSettings Gui { get; set; } = new();
             public LoggingSettings Logging { get; set; } = new();
 
@@ -280,6 +302,15 @@ namespace Oxide.Plugins
                 "john_looter",
                 "alfred_hunter",
             };
+
+            /// <summary>3D ddraw above each bot (yellow name, green HP%, white distance). Admin clients only.</summary>
+            public bool ShowInvaderWorldTags { get; set; } = true;
+
+            /// <summary>Right-side CUI list of alive invaders. Admin clients only.</summary>
+            public bool ShowInvaderHudList { get; set; } = true;
+
+            /// <summary>World tags only drawn when bot is within this distance (meters).</summary>
+            public float InvaderWorldTagMaxDistance { get; set; } = 150f;
         }
 
         private class LoggingSettings
@@ -341,6 +372,19 @@ namespace Oxide.Plugins
                         : _cfg.DefaultRoamingTemplateKey.Trim());
 
             MigrateGuiSpawnRoamingTemplateKeys(new InvaderConfig());
+
+            if (_cfg.GuiSchemaVersion < GuiSchemaCurrent)
+            {
+                if (_cfg.GuiSchemaVersion < 1)
+                {
+                    _cfg.Gui.ShowInvaderWorldTags = true;
+                    _cfg.Gui.ShowInvaderHudList = true;
+                    if (_cfg.Gui.InvaderWorldTagMaxDistance <= 0f)
+                        _cfg.Gui.InvaderWorldTagMaxDistance = 150f;
+                }
+
+                _cfg.GuiSchemaVersion = GuiSchemaCurrent;
+            }
         }
 
         /// <summary>Ensure streamer_patrol appears in the Invaders GUI slot list (defaults + one-time migration).</summary>
@@ -2073,6 +2117,120 @@ namespace Oxide.Plugins
 
         #endregion
 
+        #region Streamer HUD overlays
+
+        private void RefreshInvaderStreamerOverlays()
+        {
+            if (_cfg == null || !_cfg.EnablePlugin) return;
+            var bots = _registry.All()
+                .Where(r => r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
+                .OrderBy(r => r.NpcId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var player in BasePlayer.activePlayerList)
+            {
+                if (player == null || player.IsNpc || player.connection == null) continue;
+                if (!CanAdmin(player)) continue;
+
+                if (_cfg.Gui.ShowInvaderHudList)
+                    UpdateInvaderHudPanel(player, bots);
+                else
+                {
+                    _lastHudContentByUser.Remove(player.userID);
+                    CuiHelper.DestroyUi(player, HudOverlayUiName);
+                }
+
+                if (!_cfg.Gui.ShowInvaderWorldTags) continue;
+
+                var maxD = Mathf.Clamp(_cfg.Gui.InvaderWorldTagMaxDistance, 5f, 500f);
+                foreach (var r in bots)
+                {
+                    var npc = r.NpcPlayer;
+                    if (npc == null) continue;
+                    var dist = Vector3.Distance(player.transform.position, npc.transform.position);
+                    if (dist > maxD) continue;
+                    DrawInvaderWorldTag(player, npc, r.ViewerName ?? r.NpcId, dist);
+                }
+            }
+        }
+
+        private void UpdateInvaderHudPanel(BasePlayer player, List<InvaderRuntime> bots)
+        {
+            var sb = new StringBuilder(256);
+            if (bots.Count == 0)
+                sb.Append("<size=10><color=#8899aa>No active invaders</color></size>");
+            else
+            {
+                foreach (var r in bots)
+                {
+                    var npc = r.NpcPlayer;
+                    var dist = Vector3.Distance(player.transform.position, npc.transform.position);
+                    var hpPct = GetHealthPercentDisplay(npc);
+                    var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(r.ViewerName) ? r.NpcId : r.ViewerName.Trim());
+                    sb.Append("<color=#ffee55>");
+                    sb.Append(nm);
+                    sb.Append("</color> - <color=#55ff88>");
+                    sb.Append(hpPct.ToString("F0", CultureInfo.InvariantCulture));
+                    sb.Append("%</color> - <color=#ffffff>");
+                    sb.Append(dist.ToString("F0", CultureInfo.InvariantCulture));
+                    sb.Append(" m</color>\n");
+                }
+            }
+
+            var body = sb.ToString().TrimEnd();
+            if (_lastHudContentByUser.TryGetValue(player.userID, out var last) && last == body)
+                return;
+            _lastHudContentByUser[player.userID] = body;
+
+            CuiHelper.DestroyUi(player, HudOverlayUiName);
+            var container = new CuiElementContainer();
+            var root = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.05 0.06 0.08 0.82" },
+                    RectTransform = { AnchorMin = "0.72 0.28", AnchorMax = "0.992 0.72" },
+                    CursorEnabled = false,
+                },
+                "Overlay",
+                HudOverlayUiName);
+            container.Add(
+                new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = $"<size=12><color=#ccddee><b>INVADERS</b></color></size>\n\n{body}",
+                        FontSize = 11,
+                        Align = TextAnchor.UpperLeft,
+                    },
+                    RectTransform = { AnchorMin = "0.03 0.03", AnchorMax = "0.97 0.97" },
+                },
+                root);
+            CuiHelper.AddUi(player, container);
+        }
+
+        private static float GetHealthPercentDisplay(BasePlayer npc)
+        {
+            if (npc == null) return 0f;
+            var mh = npc.MaxHealth();
+            if (mh <= 0.001f) return Mathf.Clamp(npc.health, 0f, 100f);
+            return Mathf.Clamp01(npc.health / mh) * 100f;
+        }
+
+        private static void DrawInvaderWorldTag(BasePlayer viewer, BasePlayer npc, string rawName, float distMeters)
+        {
+            var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(rawName) ? "?" : rawName.Trim());
+            var hpPct = GetHealthPercentDisplay(npc);
+            var root = npc.transform.position + Vector3.up * 2.05f;
+            var yel = new Color(1f, 0.93f, 0.18f);
+            var grn = new Color(0.35f, 1f, 0.5f);
+            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, yel, root + Vector3.up * 0.42f, nm);
+            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root, $"{hpPct:F0}%");
+            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * 0.42f,
+                $"{distMeters:F0} m");
+        }
+
+        #endregion
+
         #region GUI
 
         /// <summary>
@@ -2318,6 +2476,12 @@ namespace Oxide.Plugins
                 case nameof(InvaderConfig.DespawnOnUnload):
                     _cfg.DespawnOnUnload = !_cfg.DespawnOnUnload;
                     break;
+                case "ShowInvaderWorldTags":
+                    _cfg.Gui.ShowInvaderWorldTags = !_cfg.Gui.ShowInvaderWorldTags;
+                    break;
+                case "ShowInvaderHudList":
+                    _cfg.Gui.ShowInvaderHudList = !_cfg.Gui.ShowInvaderHudList;
+                    break;
                 default:
                     return;
             }
@@ -2405,6 +2569,14 @@ namespace Oxide.Plugins
                     }
 
                     break;
+                case "InvaderWorldTagMaxDistance":
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var tagMax))
+                    {
+                        _cfg.Gui.InvaderWorldTagMaxDistance = Mathf.Clamp(tagMax, 5f, 500f);
+                        SaveConfig();
+                    }
+
+                    break;
             }
         }
 
@@ -2464,6 +2636,13 @@ namespace Oxide.Plugins
             RowToggle("BlockSpawnInMonuments", _cfg.BlockSpawnInMonuments,
                 nameof(InvaderConfig.BlockSpawnInMonuments));
             RowToggle("DespawnOnUnload", _cfg.DespawnOnUnload, nameof(InvaderConfig.DespawnOnUnload));
+
+            RowLabel("<b>Streamer HUD</b> (maxxinvaders.admin)", 0.03f);
+            RowToggle("ShowInvaderWorldTags (3D: yellow name / green HP / white m)", _cfg.Gui.ShowInvaderWorldTags,
+                "ShowInvaderWorldTags");
+            RowToggle("ShowInvaderHudList (right panel)", _cfg.Gui.ShowInvaderHudList, "ShowInvaderHudList");
+            RowNum("InvaderWorldTagMaxDistance", "InvaderWorldTagMaxDistance",
+                _cfg.Gui.InvaderWorldTagMaxDistance.ToString(CultureInfo.InvariantCulture));
 
             container.Add(
                 new CuiLabel
