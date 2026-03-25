@@ -585,7 +585,12 @@ async function runWebhook(request: NextRequest, body: unknown) {
     if (!spawnMi.ok) {
       console.error("[tikfinity webhook] maxxinvaders RCON failed:", spawnMi.error);
       audit("tikfinity", "webhook.failed", {
-        reason: spawnMi.step === "rcon_connect" ? "RCON connect failed" : "RCON send failed",
+        reason:
+          spawnMi.step === "rcon_connect"
+            ? "RCON connect failed"
+            : spawnMi.step === "rcon_reply"
+              ? "maxxinvaders.spawn rejected or timeout"
+              : "RCON send failed",
         error: spawnMi.error,
         viewerName: payload.viewerName,
         giftName: payload.giftName,
@@ -593,17 +598,21 @@ async function runWebhook(request: NextRequest, body: unknown) {
         serverId: server.id,
         command: spawnMi.command,
       }).catch(() => {});
+      const replyHint =
+        spawnMi.step === "rcon_reply"
+          ? "Game replied via RCON — see rconResponse. Common: spawn_position (no players online → anchor 0,0; join server or use GUI spawn), RoamingNPCs template missing/disabled, duplicate_viewer/cooldown, or ScientistFallbackEnabled=false with bridge failure."
+          : spawnMi.step === "rcon_connect"
+            ? connectedErrorDebug(server.rcon_host)
+            : "RCON connected but command could not be sent.";
       return withCors(
         NextResponse.json(
           {
             ok: false,
             error: spawnMi.error ?? "Command send failed",
-            debug:
-              spawnMi.step === "rcon_connect"
-                ? connectedErrorDebug(server.rcon_host)
-                : "RCON connected but maxxinvaders.spawn failed. Load MaxxInvaders + RoamingNPCs; check tier/mode and oxide/config/MaxxInvaders.json (ViewerRoamingTemplateKey).",
+            debug: replyHint,
             step: spawnMi.step,
             command: spawnMi.command,
+            rconResponse: spawnMi.step === "rcon_reply" ? spawnMi.error : undefined,
           },
           { status: 502 }
         )
@@ -630,8 +639,9 @@ async function runWebhook(request: NextRequest, body: unknown) {
         mode,
         kit,
         command: spawnMi.command,
+        rconResponse: spawnMi.rconResponse,
         debug:
-          "maxxinvaders.spawn sent. Webhook has no in-game anchor: ViewerRoamingTemplateKey spawns apply; streamer patrol/bodyguard need a player anchor (use in-game GUI spawn for that).",
+          "maxxinvaders.spawn succeeded per game RCON reply. Webhook has no in-game anchor (spawns use world anchor: first online player, or 0,0 if empty — NPC may be far or spawn can fail if no valid position). Use in-game GUI spawn for streamer-anchored patrol.",
       })
     );
   }

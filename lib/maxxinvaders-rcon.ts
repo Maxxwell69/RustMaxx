@@ -1,15 +1,24 @@
 import type { ServerRow } from "@/lib/db";
-import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
+import { ensureConnection, runAndWait } from "@/lib/rcon-manager";
 import { insertRnpcSpawnEvent } from "@/lib/rnpc-spawn-events";
 
 export type MaxxinvadersRconResult =
-  | { ok: true; command: string }
+  | { ok: true; command: string; rconResponse: string }
   | {
       ok: false;
       command: string;
       error: string;
-      step: "rcon_connect" | "rcon_send";
+      step: "rcon_connect" | "rcon_send" | "rcon_reply";
     };
+
+/** Oxide maxxinvaders.spawn replies with OK npcId=… or Error: … */
+function isMaxxInvadersSpawnOkReply(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/^error\b/i.test(t) || /\berror\s*:/i.test(t)) return false;
+  if (/^usage\s*:/i.test(t) || /^invalid\b/i.test(t)) return false;
+  return /^OK\b/i.test(t) || /\bnpcId\s*=/i.test(t);
+}
 
 /** No spaces in tokens RCON passes to Oxide (viewer spawn uses ParseQuotedArgs; we still avoid spaces in unquoted segments). */
 function sanitizeToken(s: string, maxLen: number): string {
@@ -73,8 +82,11 @@ export async function maxxinvadersRconSpawn(params: {
     };
   }
 
-  const result = sendCommand(params.server.id, command);
-  if (!result.ok) {
+  let reply: string;
+  try {
+    reply = (await runAndWait(params.server.id, command, 20000)).trim();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
     await insertRnpcSpawnEvent({
       serverId: params.server.id,
       connectionId: params.connectionId,
@@ -83,13 +95,32 @@ export async function maxxinvadersRconSpawn(params: {
       templateKey,
       command,
       status: "failed",
-      errorMessage: result.error ?? "RCON send failed",
+      errorMessage: msg,
     }).catch(() => {});
     return {
       ok: false,
       command,
-      error: result.error ?? "RCON send failed",
-      step: "rcon_send",
+      error: msg,
+      step: "rcon_reply",
+    };
+  }
+
+  if (!isMaxxInvadersSpawnOkReply(reply)) {
+    await insertRnpcSpawnEvent({
+      serverId: params.server.id,
+      connectionId: params.connectionId,
+      tikfinityEventName: params.tikfinityEventName,
+      viewerName: params.viewerDisplayName,
+      templateKey,
+      command,
+      status: "failed",
+      errorMessage: reply || "empty RCON reply",
+    }).catch(() => {});
+    return {
+      ok: false,
+      command,
+      error: reply || "MaxxInvaders did not confirm spawn (check game console and MaxxInvaders.json).",
+      step: "rcon_reply",
     };
   }
 
@@ -103,5 +134,5 @@ export async function maxxinvadersRconSpawn(params: {
     status: "success",
   }).catch(() => {});
 
-  return { ok: true, command };
+  return { ok: true, command, rconResponse: reply };
 }
