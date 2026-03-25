@@ -45,6 +45,9 @@ namespace Oxide.Plugins
         public Monuments monuments;
         public List<string> visibleAdmins = new();
         public List<string> visibleAdminsStash = new();
+
+        /// <summary>Non-empty display name so the client does not fall back to showing the numeric bot userID as a nameplate.</summary>
+        public const string HiddenNpcNameplate = "\u00A0";
         public static JsonSerializerSettings settingsSerializer = new JsonSerializerSettings
         {
             NullValueHandling = NullValueHandling.Ignore,
@@ -3373,7 +3376,8 @@ namespace Oxide.Plugins
             customPet.UserIDString = data.userID.ToString();
             // Hide vanilla nameplate (Data.DisplayName kept for corpse/UI, and for UI we draw via ddraw).
             // Important: do it after userID assignment so the client doesn't briefly render a `0`.
-            customPet.displayName = "";
+            // Empty string can make the client show the bot userID digits; use a non-printing character instead.
+            customPet.displayName = HiddenNpcNameplate;
             customPet.gameObject.AwakeFromInstantiate();
             customPet.Spawn();
 
@@ -3927,7 +3931,9 @@ namespace Oxide.Plugins
 
             /// <summary>World nameplate may be cleared for MaxxInvaders bridge; use stored Data.DisplayName for UI/logs.</summary>
             public string GetResolvedDisplayName() =>
-                !string.IsNullOrEmpty(displayName) ? displayName : Data?.DisplayName ?? "";
+                !string.IsNullOrEmpty(displayName) && displayName != HiddenNpcNameplate
+                    ? displayName
+                    : Data?.DisplayName ?? "";
 
             private Brain customBrain;
             private MoveController moveController;
@@ -4221,7 +4227,8 @@ namespace Oxide.Plugins
                             nPCPlayerCorpse.CreateEmptyContainer(inventory.containerMain.capacity);
                         }
 
-                        nPCPlayerCorpse.playerName = string.IsNullOrEmpty(displayName) && Data != null
+                        nPCPlayerCorpse.playerName = (string.IsNullOrEmpty(displayName) || displayName == HiddenNpcNameplate) &&
+                            Data != null
                             ? Data.DisplayName
                             : displayName;
                         nPCPlayerCorpse.playerSteamID = userID;
@@ -4265,7 +4272,8 @@ namespace Oxide.Plugins
                             playerCorpse.TakeFrom(this, inventory.containerMain, inventory.containerWear, inventory.containerBelt);
                         }
 
-                        playerCorpse.playerName = string.IsNullOrEmpty(displayName) && Data != null
+                        playerCorpse.playerName = (string.IsNullOrEmpty(displayName) || displayName == HiddenNpcNameplate) &&
+                            Data != null
                             ? Data.DisplayName
                             : displayName;
                         playerCorpse.playerSteamID = userID;

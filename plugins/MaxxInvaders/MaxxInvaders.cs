@@ -767,6 +767,10 @@ namespace Oxide.Plugins
             if (string.IsNullOrWhiteSpace(viewerName) || string.IsNullOrWhiteSpace(viewerId))
                 return SpawnResult.Fail("missing_viewer");
 
+            viewerName = viewerName.Trim();
+            if (IsUnexpandedWebhookPlaceholder(viewerName))
+                viewerName = "Viewer";
+
             if (!IsBehaviorAllowed(mode))
                 return SpawnResult.Fail("invalid_mode");
 
@@ -1995,8 +1999,29 @@ namespace Oxide.Plugins
         {
             if (string.IsNullOrWhiteSpace(raw)) return null;
             var s = raw.Trim().Replace("<", "").Replace(">", "");
+            if (IsUnexpandedWebhookPlaceholder(s)) return null;
             if (s.Length > 24) s = s.Substring(0, 24);
             return string.IsNullOrWhiteSpace(s) ? null : s;
+        }
+
+        /// <summary>TikFinity sometimes sends literal tokens if the action URL/body did not substitute variables.</summary>
+        private static bool IsUnexpandedWebhookPlaceholder(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            var t = s.Trim();
+            return t.Equals("%nickname%", StringComparison.OrdinalIgnoreCase) ||
+                   t.Equals("%username%", StringComparison.OrdinalIgnoreCase) ||
+                   t.Equals("%displayname%", StringComparison.OrdinalIgnoreCase) ||
+                   t.Equals("%name%", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolveViewerNameForWorldTag(InvaderRuntime r)
+        {
+            if (r == null) return "?";
+            var vn = r.ViewerName?.Trim();
+            if (!string.IsNullOrWhiteSpace(vn) && !IsUnexpandedWebhookPlaceholder(vn))
+                return vn;
+            return string.IsNullOrWhiteSpace(r.NpcId) ? "?" : r.NpcId;
         }
 
         private bool TryFindInvader(string token, out InvaderRuntime runtime)
@@ -2235,7 +2260,7 @@ namespace Oxide.Plugins
                     if (npc == null) continue;
                     var dist = Vector3.Distance(player.transform.position, npc.transform.position);
                     if (dist > maxD) continue;
-                    DrawInvaderWorldTag(player, npc, r.ViewerName ?? r.NpcId, dist);
+                    DrawInvaderWorldTag(player, npc, ResolveViewerNameForWorldTag(r), dist);
                 }
             }
         }
@@ -2252,7 +2277,7 @@ namespace Oxide.Plugins
                     var npc = r.NpcPlayer;
                     var dist = Vector3.Distance(player.transform.position, npc.transform.position);
                     var hpPct = GetHealthPercentDisplay(npc);
-                    var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(r.ViewerName) ? r.NpcId : r.ViewerName.Trim());
+                    var nm = StripCuiMarkup(ResolveViewerNameForWorldTag(r));
                     sb.Append("<color=#ffee55>");
                     sb.Append(nm);
                     sb.Append("</color> - <color=#55ff88>");
@@ -3582,7 +3607,7 @@ namespace Oxide.Plugins
                     });
 
                 var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
-                var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(r.ViewerName) ? "?" : r.ViewerName.Trim());
+                var nm = StripCuiMarkup(ResolveViewerNameForWorldTag(r));
                 var tmpl = r.IsRoamingNpc
                     ? StripCuiMarkup(r.RoamingTemplateKey ?? _cfg.DefaultRoamingTemplateKey ?? "")
                     : "(scientist)";
