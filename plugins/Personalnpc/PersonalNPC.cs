@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using System.Collections;
 using System;
-using System.Linq;
 using Oxide.Game.Rust.Cui;
 using UnityEngine.Events;
 using Oxide.Core.Plugins;
@@ -2289,7 +2288,15 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var newName = string.Join(" ", args.Skip(1).ToArray());
+                string newName;
+                if (args.Length == 2)
+                    newName = args[1];
+                else
+                {
+                    var parts = new string[args.Length - 1];
+                    Array.Copy(args, 1, parts, 0, args.Length - 1);
+                    newName = string.Join(" ", parts);
+                }
                 var sanitized = SanitizePersonalNpcName(newName.Replace("%OWNER_NAME%", player.displayName ?? ""));
                 if (sanitized == null)
                 {
@@ -7034,7 +7041,7 @@ namespace Oxide.Plugins
             {
                 try
                 {
-                    _collectibleEntities = new(BaseNetworkable.serverEntities.OfType<CollectibleEntity>());
+                    _collectibleEntities = new(System.Linq.Enumerable.OfType<CollectibleEntity>(BaseNetworkable.serverEntities));
                 }
                 finally
                 {
