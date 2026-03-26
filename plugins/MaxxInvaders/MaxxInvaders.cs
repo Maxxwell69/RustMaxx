@@ -36,6 +36,7 @@ namespace Oxide.Plugins
         private const string UiName = "MaxxInvaders.AdminUI";
         private const string HudOverlayUiName = "MaxxInvaders.HudOverlay";
         private const int GuiSchemaCurrent = 2;
+        private const float InvaderOverlayDrawDuration = 0.45f;
 
         private static readonly string[] BuiltinScientistPrefabFallbacks =
         {
@@ -2282,6 +2283,16 @@ namespace Oxide.Plugins
                     _lastHudContentByUser.Remove(player.userID);
                     CuiHelper.DestroyUi(player, HudOverlayUiName);
                 }
+
+                // Keep the viewer name visible for the whole session (engine nameplates fade with distance).
+                // Health% and distance stay in the INVADERS HUD panel; here we only draw the name, green/yellow/red by HP.
+                foreach (var r in bots)
+                {
+                    var npc = r.NpcPlayer;
+                    if (npc == null) continue;
+                    var dist = Vector3.Distance(player.transform.position, npc.transform.position);
+                    DrawInvaderNameOnly(player, r, dist);
+                }
             }
         }
 
@@ -2385,6 +2396,34 @@ namespace Oxide.Plugins
         {
             if (string.IsNullOrEmpty(s)) return "";
             return s.Replace("<", "").Replace(">", "").Trim();
+        }
+
+        /// <summary>
+        /// Draw name above the bot head that stays visible at distance.
+        /// Uses HP% thresholds to color the name (green/yellow/red).
+        /// </summary>
+        private static void DrawInvaderNameOnly(BasePlayer viewer, InvaderRuntime r, float distMeters)
+        {
+            if (viewer == null || r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed) return;
+
+            var hpPct = GetHealthPercentDisplay(r.NpcPlayer);
+            var color = hpPct >= 85f ? new Color(0.4f, 1f, 0.4f) :
+                hpPct >= 50f ? new Color(1f, 0.93f, 0.3f) :
+                new Color(1f, 0.55f, 0.35f);
+
+            var nameRaw = ResolveViewerNameForWorldTag(r);
+            nameRaw = StripCuiMarkup(nameRaw);
+            if (string.IsNullOrWhiteSpace(nameRaw)) nameRaw = "?";
+
+            // Shrink when you are very close; grow a bit when farther away.
+            var closeT = Mathf.Clamp01(distMeters / 6f); // 0 at close, 1 at >=6m
+            var sz = Mathf.RoundToInt(Mathf.Lerp(10f, 14f, closeT));
+            sz = Mathf.Clamp(sz, 8, 18);
+
+            const float NoFade = 0f;
+            var root = r.NpcPlayer.transform.position + Vector3.up * 2.15f;
+            var txt = $"<size={sz}>{nameRaw}</size>";
+            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, color, root, txt, NoFade);
         }
 
         #endregion
