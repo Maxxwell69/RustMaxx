@@ -7033,6 +7033,10 @@ namespace Oxide.Plugins
             return false;
         }
 
+        /// <summary>Optional API for RoamingNPCs (target filtering): true if this entity is a PersonalNPC bot.</summary>
+        [HookMethod("IsPersonalNPCPlayer")]
+        public object IsPersonalNPCPlayer(BasePlayer player) => player != null && IsPersonalNPC(player) ? true : null;
+
         #endregion
     
         #region HelperClasses

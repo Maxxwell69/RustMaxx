@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.20")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.21")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -1660,6 +1660,11 @@ namespace Oxide.Plugins
             public bool _ignoreNPCs = false;
 
             [JsonProperty(RU
+                ? "Игнорировать PersonalNPC (компаньоны игроков)? RoamingNPCs не будет целить их."
+                : "Ignore PersonalNPC player bots? RoamingNPCs will not target them (optional PersonalNPC plugin hook).")]
+            public bool _ignorePersonalNpcBots = true;
+
+            [JsonProperty(RU
                 ? "MaxxInvaders: защищать якорного игрока (стример)? Бот не атакует его и атакует того, кто его ранил (нужен Steam ID с моста)."
                 : "MaxxInvaders: protect anchor streamer? Bot won't attack them and fights players who damage them (requires bridge anchor Steam ID).")]
             public bool _protectBridgeAnchorPlayer = false;
@@ -2340,6 +2345,7 @@ namespace Oxide.Plugins
             [JsonIgnore] public bool IgnoreRealPlayers => Setup?.BattleState?._ignoreRealPlayers ?? true;
             [JsonIgnore] public bool IgnoreRNPCs => Setup?.BattleState?._ignoreRNPC ?? true;
             [JsonIgnore] public bool IgnoreNPCs => Setup?.BattleState?._ignoreNPCs ?? true;
+            [JsonIgnore] public bool IgnorePersonalNpcBots => Setup?.BattleState?._ignorePersonalNpcBots ?? true;
             [JsonIgnore] public List<ItemSetup> DeathItemsBlacklist => Setup?.deathItemsBlacklist ?? null;
             public Vector3 lastPosition;
             public string NameSetup;
@@ -5151,6 +5157,12 @@ namespace Oxide.Plugins
                     {
                         if (entity?.IsValid() == true && entity != owner && !ignores.Contains(entity) && !entity.InSafeZone() && !(entity is NPCShopKeeper) && entity is BaseCorpse or BasePlayer or BaseNpc or BaseNPC2 or ResourceEntity or CollectibleEntity or DroppedItem or DroppedItemContainer or LootContainer)
                         {
+                            // MaxxInvaders bridge: never track streamer anchor in brain buffer (stops initial aggro on them when real players are not ignored).
+                            if (entity is BasePlayer bpSkipAnchor && owner?.Data?.SpawnedFromMaxxInvadersBridge == true &&
+                                owner.Data.BridgeProtectAnchorUserId != 0UL &&
+                                bpSkipAnchor.userID == owner.Data.BridgeProtectAnchorUserId)
+                                continue;
+
                             if ((owner?.Data?.IgnoreBotsInVehicles ?? false) || (owner?.Data?.IgnoreSleepingPlayers ?? false) || (owner?.Data?.IgnoreRNPCs ?? false) || (owner?.Data?.IgnoreNPCs ?? false) || (owner?.Data.IgnoreRealPlayers ?? false) || (owner?.Data.IgnorePVEPlayer ?? false))
                             {
                                 if(entity is BasePlayer player)
@@ -5186,25 +5198,37 @@ namespace Oxide.Plugins
                                             continue;
                                         }
                                     }
-
-                                    if(owner?.Data.IgnoreRNPCs ?? false)
-                                    {
-                                        if(player is CustomPet)
-                                        {
-                                            continue;
-                                        }
-                                    }
-
-                                    if(owner?.Data.IgnoreNPCs ?? false)
-                                    {
-                                        if(player.IsNpc || !player.userID.IsSteamId())
-                                        {
-                                            continue;
-                                        }
-                                    }
                                 }
                             }
-                            
+
+                            // RNPC / PersonalNPC / broad NPC filter (runs for every BasePlayer so templates cannot skip it when other ignore flags are off).
+                            if (entity is BasePlayer playerGuard)
+                            {
+                                if ((owner?.Data?.IgnoreRNPCs ?? true) && playerGuard is CustomPet)
+                                    continue;
+                                if (owner?.Data?.IgnorePersonalNpcBots ?? true)
+                                {
+                                    try
+                                    {
+                                        var pn = Interface.Call("IsPersonalNPCPlayer", playerGuard);
+                                        if (pn is bool pnb && pnb)
+                                            continue;
+                                    }
+                                    catch
+                                    {
+                                        /* optional PersonalNPC */
+                                    }
+                                }
+
+                                if (owner?.Data?.IgnoreNPCs ?? false)
+                                {
+                                    if (!playerGuard.userID.IsSteamId())
+                                        continue;
+                                    if (playerGuard.IsNpc && playerGuard is not ScientistNPC && playerGuard is not HumanNPC)
+                                        continue;
+                                }
+                            }
+
                             bufferEntity.Add(entity);
                         }
                     }
@@ -8890,6 +8914,10 @@ namespace Oxide.Plugins
 
                 setup.BattleState ??= new SetupBattle();
                 if (!setup.BattleState._protectBridgeAnchorPlayer) setup.BattleState._protectBridgeAnchorPlayer = true;
+                // Fight world NPCs (scientists, etc.); never other Roaming CustomPet or PersonalNPC companions.
+                setup.BattleState._ignoreNPCs = false;
+                setup.BattleState._ignoreRNPC = true;
+                setup.BattleState._ignorePersonalNpcBots = true;
             }
 
             string uniqueKey = $"{key}_{suffix}";
@@ -8931,7 +8959,12 @@ namespace Oxide.Plugins
                     return true;
 
                 if (pet.Data.Setup.BattleState != null)
+                {
                     pet.Data.Setup.BattleState._protectBridgeAnchorPlayer = true;
+                    pet.Data.Setup.BattleState._ignoreNPCs = false;
+                    pet.Data.Setup.BattleState._ignoreRNPC = true;
+                    pet.Data.Setup.BattleState._ignorePersonalNpcBots = true;
+                }
 
                 pet.Data.Setup.BridgePatrol ??= new SetupBridgePatrol();
                 pet.Data.Setup.BridgePatrol.Enable = true;
