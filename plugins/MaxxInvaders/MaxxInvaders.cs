@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.1")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.2")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1244,6 +1244,31 @@ namespace Oxide.Plugins
             return true;
         }
 
+        /// <summary>
+        /// All active invaders path toward the issuer and use them as the moving leash center (<see cref="InvaderRuntime.AnchorSteamId"/>).
+        /// Does not edit RoamingNPCs JSON templates.
+        /// </summary>
+        private void ApplyFollowAnchorToAllActive(BasePlayer issuer)
+        {
+            if (issuer == null) return;
+            var pos = issuer.transform.position;
+            var uid = issuer.userID;
+            var n = 0;
+            foreach (var r in _registry.All().ToArray())
+            {
+                if (r.NpcPlayer == null || r.NpcPlayer.IsDestroyed) continue;
+                r.AnchorPosition = pos;
+                r.AnchorSteamId = uid;
+                r.ReturnRunActive = true;
+                n++;
+            }
+
+            issuer.ChatMessage(
+                n > 0
+                    ? $"[MaxxInvaders] {n} bot(s) following you (leash anchor → you; pathing, not teleport). Roaming templates unchanged."
+                    : "[MaxxInvaders] No active invaders.");
+        }
+
         private void BehaviorTick()
         {
             foreach (var r in _registry.All().ToArray())
@@ -1824,7 +1849,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | maxx | roaming | anchor <Steam64> | list | spawn | …");
+                    "Usage: /maxxinvaders ui | maxx | roaming | anchor <Steam64> | follow | list | spawn | …");
                 return;
             }
 
@@ -1935,6 +1960,17 @@ namespace Oxide.Plugins
                     if (!CanAdmin(player)) return;
                     _registry.DespawnAll(this, "chat_clear");
                     player.ChatMessage("Cleared all invaders.");
+                    break;
+                case "follow":
+                case "followme":
+                case "returnall":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    ApplyFollowAnchorToAllActive(player);
                     break;
                 case "debug":
                     if (!permission.UserHasPermission(player.UserIDString, PermDebug) && !player.IsAdmin)
@@ -4146,10 +4182,21 @@ namespace Oxide.Plugins
                 AddCuiButtonWithText(
                     container,
                     botsOuter,
+                    "maxxinvaders.gui returnrun all",
+                    "0.12 0.55 0.22 0.95",
+                    "FOLLOW ALL",
+                    "0.62 0.87",
+                    "0.79 0.98",
+                    11,
+                    TextAnchor.MiddleCenter,
+                    "0.95 0.97 1 1");
+                AddCuiButtonWithText(
+                    container,
+                    botsOuter,
                     "maxxinvaders.gui tpall",
                     _cfg.Gui.AccentColor,
                     "TP ALL TO ME",
-                    "0.62 0.87",
+                    "0.80 0.87",
                     "0.98 0.98",
                     11,
                     TextAnchor.MiddleCenter,
@@ -4311,7 +4358,9 @@ namespace Oxide.Plugins
             if (args[0] == "returnrun" && args.Length > 1)
             {
                 var nid = args[1].Trim();
-                if (!TryFindInvader(nid, out var rr))
+                if (nid.Equals("all", StringComparison.OrdinalIgnoreCase))
+                    ApplyFollowAnchorToAllActive(player);
+                else if (!TryFindInvader(nid, out var rr))
                     player.ChatMessage("[MaxxInvaders] NPC not found.");
                 else
                 {
