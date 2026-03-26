@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.21")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.22")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8954,6 +8954,13 @@ namespace Oxide.Plugins
 
                 pet.Data.SpawnedFromMaxxInvadersBridge = true;
                 pet.Data.BridgeProtectAnchorUserId = anchorSteamId;
+
+                // Friendly personality keeps bots passive (run away / no combat). MaxxInvaders bridge bodyguards need Defensive.
+                if (anchorSteamId != 0UL)
+                {
+                    pet.Data.Setup.EnableRandomPersonality = false;
+                    pet.Data.Setup.Personality = PersonalityBot.Defensive;
+                }
 
                 if (!enableGatherProtectDeposit)
                     return true;

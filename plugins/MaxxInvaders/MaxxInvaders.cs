@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.4")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.5")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1291,6 +1291,51 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// Re-runs RoamingNPCs bridge companion (Defensive personality + bodyguard flags) without starting a new follow pathing pulse.
+        /// Use after <see cref="ApplyFollowAnchorToAllActive"/> if bots went passive (Friendly template).
+        /// </summary>
+        private void ApplyProtectionModeToAllActive(BasePlayer issuer)
+        {
+            if (issuer == null) return;
+            var uid = issuer.userID;
+            var n = 0;
+            var roaming = 0;
+            foreach (var r in _registry.All().ToArray())
+            {
+                if (r.NpcPlayer == null || r.NpcPlayer.IsDestroyed) continue;
+                r.AnchorSteamId = uid;
+                r.AnchorPosition = issuer.transform.position;
+                n++;
+                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, uid))
+                    roaming++;
+            }
+
+            issuer.ChatMessage(
+                roaming > 0
+                    ? $"[MaxxInvaders] Protection mode restored on {roaming} RoamingNPCs bot(s) (Defensive + streamer bodyguard). Anchor = you."
+                    : n > 0
+                        ? "[MaxxInvaders] No RoamingNPCs bots — protection applies to Roaming bridge bots only."
+                        : "[MaxxInvaders] No active invaders.");
+        }
+
+        private void ApplyProtectionModeSingle(BasePlayer issuer, InvaderRuntime r)
+        {
+            if (issuer == null || r == null) return;
+            if (!r.IsRoamingNpc)
+            {
+                issuer.ChatMessage("[MaxxInvaders] Protection restore is for RoamingNPCs bots only.");
+                return;
+            }
+
+            r.AnchorSteamId = issuer.userID;
+            r.AnchorPosition = issuer.transform.position;
+            if (TryRoamingApplySquadCompanion(r, issuer.userID))
+                issuer.ChatMessage("[MaxxInvaders] Protection mode restored for this bot.");
+            else
+                issuer.ChatMessage("[MaxxInvaders] RoamingNPCs.ApplySquadCompanionMode failed (plugin unloaded or bot not tracked).");
+        }
+
+        /// <summary>
         /// Returns stacks moved to anchor-owned storage, or -1 error / not Roaming, -2 no eligible storage near anchor.
         /// </summary>
         private int TryRoamingDepositItemsToAnchorStorage(ulong entityId, ulong anchorSteamId)
@@ -1945,7 +1990,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | maxx | roaming | anchor <Steam64> | follow | deposit [npcId] | list | spawn | …");
+                    "Usage: /maxxinvaders ui | maxx | roaming | anchor <Steam64> | follow | protect [npcId] | deposit [npcId] | list | spawn | …");
                 return;
             }
 
@@ -2067,6 +2112,22 @@ namespace Oxide.Plugins
                     }
 
                     ApplyFollowAnchorToAllActive(player);
+                    break;
+                case "protect":
+                case "guard":
+                case "protection":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    if (args.Length >= 2 && TryFindInvader(args[1], out var protR))
+                        ApplyProtectionModeSingle(player, protR);
+                    else if (args.Length >= 2)
+                        player.ChatMessage("[MaxxInvaders] NPC not found for protect.");
+                    else
+                        ApplyProtectionModeToAllActive(player);
                     break;
                 case "deposit":
                 case "depositall":
@@ -3868,16 +3929,25 @@ namespace Oxide.Plugins
                     uiGreen,
                     "RET",
                     "0.59 0.15",
-                    "0.68 0.88",
+                    "0.66 0.88",
                     9);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui protect {r.NpcId}",
+                    "0.55 0.35 0.15 0.95",
+                    "PRT",
+                    "0.665 0.15",
+                    "0.735 0.88",
+                    8);
                 AddCuiButtonWithText(
                     container,
                     rowName,
                     $"maxxinvaders.gui kill {r.NpcId}",
                     "0.45 0.12 0.12 0.95",
                     "KILL",
-                    "0.685 0.15",
-                    "0.775 0.88",
+                    "0.74 0.15",
+                    "0.825 0.88",
                     9);
                 AddCuiButtonWithText(
                     container,
@@ -3885,7 +3955,7 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui despawn {r.NpcId}",
                     "0.35 0.32 0.15 0.95",
                     "DESPAWN",
-                    "0.78 0.15",
+                    "0.83 0.15",
                     "0.99 0.88",
                     7);
             }
@@ -4306,8 +4376,8 @@ namespace Oxide.Plugins
                     "0.22 0.45 0.55 0.95",
                     "DEPOSIT ALL",
                     "0.62 0.87",
-                    "0.733 0.98",
-                    10,
+                    "0.704 0.98",
+                    9,
                     TextAnchor.MiddleCenter,
                     "0.95 0.97 1 1");
                 AddCuiButtonWithText(
@@ -4316,9 +4386,20 @@ namespace Oxide.Plugins
                     "maxxinvaders.gui returnrun all",
                     "0.12 0.55 0.22 0.95",
                     "FOLLOW ALL",
-                    "0.738 0.87",
-                    "0.851 0.98",
-                    10,
+                    "0.708 0.87",
+                    "0.792 0.98",
+                    9,
+                    TextAnchor.MiddleCenter,
+                    "0.95 0.97 1 1");
+                AddCuiButtonWithText(
+                    container,
+                    botsOuter,
+                    "maxxinvaders.gui protect all",
+                    "0.55 0.35 0.15 0.95",
+                    "PROTECT ALL",
+                    "0.796 0.87",
+                    "0.880 0.98",
+                    9,
                     TextAnchor.MiddleCenter,
                     "0.95 0.97 1 1");
                 AddCuiButtonWithText(
@@ -4327,9 +4408,9 @@ namespace Oxide.Plugins
                     "maxxinvaders.gui tpall",
                     _cfg.Gui.AccentColor,
                     "TP ALL TO ME",
-                    "0.856 0.87",
+                    "0.884 0.87",
                     "0.98 0.98",
-                    10,
+                    9,
                     TextAnchor.MiddleCenter,
                     "0.95 0.97 1 1");
             }
@@ -4717,6 +4798,20 @@ namespace Oxide.Plugins
                     player.ChatMessage("[MaxxInvaders] NPC not found for deposit.");
 
                 LogIf(_cfg.Logging.LogGui, $"gui deposit {player.displayName} {nid}", false);
+                return;
+            }
+
+            if (args[0] == "protect" && args.Length > 1)
+            {
+                var nid = args[1].Trim();
+                if (nid.Equals("all", StringComparison.OrdinalIgnoreCase))
+                    ApplyProtectionModeToAllActive(player);
+                else if (TryFindInvader(nid, out var protR))
+                    ApplyProtectionModeSingle(player, protR);
+                else
+                    player.ChatMessage("[MaxxInvaders] NPC not found for protect.");
+
+                LogIf(_cfg.Logging.LogGui, $"gui protect {player.displayName} {nid}", false);
                 return;
             }
 
