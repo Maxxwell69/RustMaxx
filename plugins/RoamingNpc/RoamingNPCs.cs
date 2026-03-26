@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.19")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.20")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -7055,7 +7055,14 @@ namespace Oxide.Plugins
 
                 if (target == null && current != null)
                 {
-                    if (IsAggressiveToOwner(current) || lastSeenTarget < targetMemoryDuration)
+                    // MaxxInvaders: while streamer-defense retaliation is active, do not keep a stale non-attacker target.
+                    if (owner.Data != null && IsBridgeRetaliationActive() &&
+                        owner.Data.BridgeRetaliationTargetUserId != 0UL &&
+                        current.userID != owner.Data.BridgeRetaliationTargetUserId)
+                    {
+                        /* drop current — let retaliation acquire the real attacker */
+                    }
+                    else if (IsAggressiveToOwner(current) || lastSeenTarget < targetMemoryDuration)
                     {
                         target = current;
                     }
@@ -7097,7 +7104,12 @@ namespace Oxide.Plugins
                     return false;
 
                 if (IsBridgeRetaliationActive() && player.userID == owner.Data.BridgeRetaliationTargetUserId)
-                    return true;
+                {
+                    // Slightly looser than normal LOS so defense still engages near cover / doorways.
+                    if (owner.IsVisible(player, layerVisible) || player.IsVisible(owner, layerVisible))
+                        return true;
+                    return owner.Distance(player) < 42f;
+                }
 
                 return IsAggressiveToOwner(player) || owner.GetPersonality() == PersonalityBot.Aggressive;
             }
@@ -7123,10 +7135,14 @@ namespace Oxide.Plugins
                                         Target.userID == owner.Data.BridgeRetaliationTargetUserId;
                         if (owner.GetPersonality() == PersonalityBot.Friendly && !retaliate)
                         {
-                            // Friendly bots use RunAwayCoroutine — fights streamer patrol / leash (constant flee + zip).
+                            // Friendly + MaxxInvaders bridge: old logic nulled target every tick, which blocked
+                            // streamer defense (retaliation never kept a combat target). Skip wipe while defense is active.
                             if (owner.Data?.SpawnedFromMaxxInvadersBridge == true &&
                                 owner.Data.BridgeProtectAnchorUserId != 0UL)
                             {
+                                if (IsBridgeRetaliationActive())
+                                    yield break;
+
                                 SetTargetState<BasePlayer>(null);
                                 yield break;
                             }
