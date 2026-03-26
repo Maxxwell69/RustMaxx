@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.9")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.0")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1228,9 +1228,12 @@ namespace Oxide.Plugins
             if (entity == null || info == null) return null;
             var victim = entity as BasePlayer;
             if (victim == null || victim.IsNpc) return null;
-            var attacker = info.Initiator as BasePlayer;
+            var attacker = info.InitiatorPlayer as BasePlayer ?? info.Initiator as BasePlayer;
             if (attacker == null || !attacker.IsNpc) return null;
             if (!_registry.TryGetByEntity(attacker.net.ID.Value, out var r)) return null;
+            // Never damage the streamer anchor (even in hostile / scientist aggro).
+            if (r.AnchorSteamId != 0UL && victim.userID == r.AnchorSteamId)
+                return true;
             if (ModeAllowsDamageToPlayers(r.Mode)) return null;
             return true;
         }
@@ -1254,6 +1257,7 @@ namespace Oxide.Plugins
                 r.NpcPlayer.health = Mathf.Clamp(r.NpcPlayer.health, 0f, r.NpcPlayer.MaxHealth());
                 var pos = r.NpcPlayer.transform.position;
                 UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
+                UpdateInvaderNameplateDisplay(r);
 
                 // Move leash center with streamer/base anchor (RCON webhook + GUI spawns with anchor player).
                 if (r.AnchorSteamId != 0UL)
@@ -1312,7 +1316,7 @@ namespace Oxide.Plugins
                         break;
                     case "attackplayer":
                     case "hostile":
-                        SteerTowardNearestPlayer(sci, 80f, true);
+                        SteerTowardNearestPlayer(sci, 80f, true, r.AnchorSteamId);
                         break;
                     case "escort":
                         SteerTowardNearestAdmin(sci, 12f);
@@ -1368,7 +1372,7 @@ namespace Oxide.Plugins
             TrySetDestination(npc, target);
         }
 
-        private void SteerTowardNearestPlayer(ScientistNPC npc, float range, bool aggressive)
+        private void SteerTowardNearestPlayer(ScientistNPC npc, float range, bool aggressive, ulong excludeSteamId = 0UL)
         {
             BasePlayer best = null;
             var bestD = range * range;
@@ -1376,6 +1380,7 @@ namespace Oxide.Plugins
             foreach (var p in BasePlayer.activePlayerList)
             {
                 if (p == null || !p.IsValid() || p.IsNpc || p.IsSleeping()) continue;
+                if (excludeSteamId != 0UL && p.userID == excludeSteamId) continue;
                 var d = (p.transform.position - o).sqrMagnitude;
                 if (d < bestD)
                 {
@@ -2016,7 +2021,9 @@ namespace Oxide.Plugins
             return t.Equals("%nickname%", StringComparison.OrdinalIgnoreCase) ||
                    t.Equals("%username%", StringComparison.OrdinalIgnoreCase) ||
                    t.Equals("%displayname%", StringComparison.OrdinalIgnoreCase) ||
-                   t.Equals("%name%", StringComparison.OrdinalIgnoreCase);
+                   t.Equals("%name%", StringComparison.OrdinalIgnoreCase) ||
+                   t.Equals("{nickname}", StringComparison.OrdinalIgnoreCase) ||
+                   t.Equals("{username}", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ResolveViewerNameForWorldTag(InvaderRuntime r)
@@ -2280,7 +2287,7 @@ namespace Oxide.Plugins
                     if (npc == null) continue;
                     var dist = Vector3.Distance(player.transform.position, npc.transform.position);
                     if (dist > maxD) continue;
-                    DrawInvaderWorldTag(player, npc, ResolveViewerNameForWorldTag(r), dist, r.IsRoamingNpc);
+                    DrawInvaderWorldTag(player, npc, dist, r.IsRoamingNpc);
                 }
             }
         }
@@ -2363,45 +2370,55 @@ namespace Oxide.Plugins
             return Mathf.Clamp01(npc.health / mh) * 100f;
         }
 
-        /// <summary>
-        /// 3D tags above invaders. Roaming bridge bots use a real world nameplate (viewer name) — skip duplicate name line.
-        /// Slightly higher anchor + spacing so labels sit clearer when the camera is close.
-        /// </summary>
+        /// <summary>World nameplate: green when healthy, yellow mid, orange/red when low (rich text; client-supported).</summary>
+        private void UpdateInvaderNameplateDisplay(InvaderRuntime r)
+        {
+            if (r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed) return;
+            var vn = NormalizeViewerName(r.ViewerName);
+            if (string.IsNullOrEmpty(vn)) vn = r.ViewerName?.Trim();
+            if (string.IsNullOrEmpty(vn) || IsUnexpandedWebhookPlaceholder(vn)) return;
+            var hpPct = GetHealthPercentDisplay(r.NpcPlayer);
+            var hex = hpPct >= 85f ? "#66ff88" : hpPct >= 50f ? "#ffdd55" : "#ff8866";
+            var safe = StripCuiMarkupForNameplate(vn);
+            if (string.IsNullOrEmpty(safe)) return;
+            if (r.IsRoamingNpc)
+                r.NpcPlayer.displayName = $"<color={hex}>{safe}</color>";
+            else
+                r.NpcPlayer.displayName = $"<color={hex}>[Invader] {safe}</color>";
+        }
+
+        private static string StripCuiMarkupForNameplate(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("<", "").Replace(">", "").Trim();
+        }
+
+        /// <summary>HP% + distance only (viewer name is on the nameplate, colored by <see cref="UpdateInvaderNameplateDisplay"/>).</summary>
         private static void DrawInvaderWorldTag(
             BasePlayer viewer,
             BasePlayer npc,
-            string rawName,
             float distMeters,
             bool isRoamingBridgeBot)
         {
-            const string SzName = "<size=12>";
-            const string SzOther = "<size=10>";
-            const string SzEnd = "</size>";
             const float NoFade = 0f;
             var hpPct = GetHealthPercentDisplay(npc);
-            // Lift stack above head; roaming uses two lines only (name is on vanilla plate).
-            var root = npc.transform.position + Vector3.up * (isRoamingBridgeBot ? 2.25f : 2.12f);
-            var yel = new Color(1f, 0.93f, 0.18f);
+            var root = npc.transform.position + Vector3.up * (isRoamingBridgeBot ? 2.18f : 2.05f);
             var grn = new Color(0.35f, 1f, 0.5f);
-            var line = 0.40f;
-
-            if (!isRoamingBridgeBot)
-            {
-                var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(rawName) ? "?" : rawName.Trim());
-                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, yel, root + Vector3.up * line,
-                    $"{SzName}{nm}{SzEnd}", NoFade);
-                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root,
-                    $"{SzOther}{hpPct:F0}%{SzEnd}", NoFade);
-                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * line,
-                    $"{SzOther}{distMeters:F0} m{SzEnd}", NoFade);
-            }
-            else
-            {
-                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root + Vector3.up * (line * 0.55f),
-                    $"{SzOther}{hpPct:F0}%{SzEnd}", NoFade);
-                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * (line * 0.55f),
-                    $"{SzOther}{distMeters:F0} m{SzEnd}", NoFade);
-            }
+            // Larger when farther; shrinks when camera is very close so labels do not cover the face.
+            var farMul = Mathf.Clamp01(distMeters / 22f);
+            var baseSz = Mathf.RoundToInt(Mathf.Lerp(10f, 15f, farMul));
+            var closeT = Mathf.Clamp01(distMeters / 6f);
+            var sz = Mathf.Clamp(
+                Mathf.RoundToInt(Mathf.Lerp(baseSz * 0.72f, baseSz * 1.08f, closeT)),
+                8,
+                18);
+            var szTag = $"<size={sz}>";
+            const string SzEnd = "</size>";
+            var line = 0.35f + sz / 200f;
+            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root + Vector3.up * line,
+                $"{szTag}{hpPct:F0}%{SzEnd}", NoFade);
+            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * line,
+                $"{szTag}{distMeters:F0} m{SzEnd}", NoFade);
         }
 
         #endregion

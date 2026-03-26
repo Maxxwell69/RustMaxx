@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.16")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.17")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -5296,6 +5296,13 @@ namespace Oxide.Plugins
             public void OnNpcTarget(BaseCombatEntity initiator)
             {
                 if (initiator == null) return;
+
+                // MaxxInvaders bridge: streamer anchor damaging this bot must not add them to the combat buffer / aggro list.
+                if (initiator is BasePlayer bp &&
+                    owner?.Data?.SpawnedFromMaxxInvadersBridge == true &&
+                    owner.Data.BridgeProtectAnchorUserId != 0UL &&
+                    bp.userID == owner.Data.BridgeProtectAnchorUserId)
+                    return;
 
                 object hookResult = Interface.CallHook("CanRoamingNPCTarget", owner, initiator);
                 if (hookResult != null) return;
