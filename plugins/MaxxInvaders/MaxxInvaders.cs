@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.2")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.3")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1246,7 +1246,7 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// All active invaders path toward the issuer and use them as the moving leash center (<see cref="InvaderRuntime.AnchorSteamId"/>).
-        /// Does not edit RoamingNPCs JSON templates.
+        /// RoamingNPCs bots also get runtime companion flags (protect, gather/loot, deposit to your storage) via <c>ApplySquadCompanionMode</c>; JSON on disk is unchanged.
         /// </summary>
         private void ApplyFollowAnchorToAllActive(BasePlayer issuer)
         {
@@ -1254,6 +1254,7 @@ namespace Oxide.Plugins
             var pos = issuer.transform.position;
             var uid = issuer.userID;
             var n = 0;
+            var roaming = 0;
             foreach (var r in _registry.All().ToArray())
             {
                 if (r.NpcPlayer == null || r.NpcPlayer.IsDestroyed) continue;
@@ -1261,12 +1262,32 @@ namespace Oxide.Plugins
                 r.AnchorSteamId = uid;
                 r.ReturnRunActive = true;
                 n++;
+                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, uid))
+                    roaming++;
             }
 
             issuer.ChatMessage(
                 n > 0
-                    ? $"[MaxxInvaders] {n} bot(s) following you (leash anchor → you; pathing, not teleport). Roaming templates unchanged."
+                    ? roaming > 0
+                        ? $"[MaxxInvaders] {n} bot(s) following you. RoamingNPCs ({roaming}): protect, gather/loot, deposit to your nearby boxes/cupboards (your OwnerID). Pathing, not teleport. Config files unchanged."
+                        : $"[MaxxInvaders] {n} bot(s) following you (leash). Vanilla scientists have no Roaming gather/deposit AI — use RoamingNPCs bridge bots for that."
                     : "[MaxxInvaders] No active invaders.");
+        }
+
+        /// <summary>Enables RoamingNPCs bridge companion behavior for this entity (protect anchor, mining/loot, deposit to anchor-owned storage).</summary>
+        private bool TryRoamingApplySquadCompanion(InvaderRuntime r, ulong anchorSteamId)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return false;
+            try
+            {
+                var raw = RoamingNPCs.Call("ApplySquadCompanionMode", r.EntityId, anchorSteamId, true);
+                return raw is bool ok && ok;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} RoamingNPCs.ApplySquadCompanionMode: {ex.Message}");
+                return false;
+            }
         }
 
         private void BehaviorTick()

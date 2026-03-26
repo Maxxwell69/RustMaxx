@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.17")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.18")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8894,6 +8894,63 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>
+        /// MaxxInvaders: align bridge anchor and enable companion behavior (protect anchor player, gather/loot, deposit to anchor-owned storage) on an already-spawned bot.
+        /// Runtime-only; does not write JSON. Vanilla ScientistNPC spawns are not tracked here — returns false.
+        /// </summary>
+        [HookMethod("ApplySquadCompanionMode")]
+        public object ApplySquadCompanionMode(ulong entityNetId, ulong anchorSteamId, bool enableGatherProtectDeposit)
+        {
+            try
+            {
+                if (listNpcPlayers == null || !listNpcPlayers.TryGetValue(entityNetId, out var pet) || pet == null ||
+                    pet.IsDestroyed)
+                    return false;
+                if (pet.Data?.Setup == null) return false;
+
+                pet.Data.SpawnedFromMaxxInvadersBridge = true;
+                pet.Data.BridgeProtectAnchorUserId = anchorSteamId;
+
+                if (!enableGatherProtectDeposit)
+                    return true;
+
+                if (pet.Data.Setup.BattleState != null)
+                    pet.Data.Setup.BattleState._protectBridgeAnchorPlayer = true;
+
+                pet.Data.Setup.BridgePatrol ??= new SetupBridgePatrol();
+                pet.Data.Setup.BridgePatrol.Enable = true;
+                if (pet.Data.Setup.BridgePatrol.RadiusMeters < 8f) pet.Data.Setup.BridgePatrol.RadiusMeters = 28f;
+
+                if (pet.Data.Setup.FullState != null)
+                {
+                    pet.Data.Setup.FullState.BridgeUseAnchorOwnedStorage = true;
+                    if (pet.Data.Setup.FullState.BridgeAnchorStorageSearchRadius <= 0f)
+                        pet.Data.Setup.FullState.BridgeAnchorStorageSearchRadius = 18f;
+                }
+
+                var miner = pet.Data.Setup.MinerState;
+                if (miner != null)
+                {
+                    miner.CanMiningWood = true;
+                    miner.CanMiningOre = true;
+                    miner.CanFuelUseFromChainsaw = true;
+                    miner.CanMiningBarrel = true;
+                    miner.CanMiningRoadSign = true;
+                    miner.CanPickupCollectibleItems = true;
+                    miner.CanPickupDroppedItems = true;
+                    miner.CanLootedContainer = true;
+                    miner.CanLootedCorpse = true;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] ApplySquadCompanionMode: {ex}");
+                return false;
+            }
+        }
+
         [HookMethod("IsBridgeTemplateReady")]
         public object IsBridgeTemplateReady(string templateKey)
         {
@@ -8922,7 +8979,8 @@ namespace Oxide.Plugins
                 sb.AppendLine("<b>RoamingNPCs</b>  oxide/config/RoamingNPCs.json");
                 sb.AppendLine();
                 sb.AppendLine($"Version: {Version}");
-                sb.AppendLine("Bridge API: SpawnFromTemplateForBridge, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
+                sb.AppendLine(
+                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
                 sb.AppendLine();
                 if (config?.bots == null)
                 {
