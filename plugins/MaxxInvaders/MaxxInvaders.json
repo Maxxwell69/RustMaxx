@@ -1,6 +1,6 @@
 {
   "EnablePlugin": true,
-  "GuiSchemaVersion": 1,
+  "GuiSchemaVersion": 2,
   "MaxActiveNPCs": 24,
   "PreventDuplicateViewerNPCs": true,
   "MinimumSpawnRadiusFromAnchor": 5.0,
@@ -70,7 +70,7 @@
     "AccentColor": "0.2 0.75 0.85 0.9",
     "InvadersTitleSize": 18,
     "InvadersVersionSize": 11,
-    "ShowInvaderWorldTags": true,
+    "ShowInvaderWorldTags": false,
     "ShowInvaderHudList": true,
     "InvaderWorldTagMaxDistance": 150.0
   },

@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.0")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.1")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -35,8 +35,7 @@ namespace Oxide.Plugins
         private const string DataFile = "MaxxInvaders/MaxxInvadersData";
         private const string UiName = "MaxxInvaders.AdminUI";
         private const string HudOverlayUiName = "MaxxInvaders.HudOverlay";
-        private const float InvaderOverlayDrawDuration = 0.45f;
-        private const int GuiSchemaCurrent = 1;
+        private const int GuiSchemaCurrent = 2;
 
         private static readonly string[] BuiltinScientistPrefabFallbacks =
         {
@@ -273,7 +272,7 @@ namespace Oxide.Plugins
             };
 
             /// <summary>Bump when new Gui defaults must apply to legacy configs (see EnsureConfigDefaults).</summary>
-            public int GuiSchemaVersion { get; set; } = 1;
+            public int GuiSchemaVersion { get; set; } = 2;
 
             public GuiSettings Gui { get; set; } = new();
             public LoggingSettings Logging { get; set; } = new();
@@ -321,8 +320,8 @@ namespace Oxide.Plugins
                 "alfred_hunter",
             };
 
-            /// <summary>3D ddraw above each bot (yellow name, green HP%, white distance). Admin clients only.</summary>
-            public bool ShowInvaderWorldTags { get; set; } = true;
+            /// <summary>Legacy config key; 3D overhead tags are disabled (HP/distance use INVADERS panel only).</summary>
+            public bool ShowInvaderWorldTags { get; set; } = false;
 
             /// <summary>Right-side CUI list of alive invaders. Admin clients only.</summary>
             public bool ShowInvaderHudList { get; set; } = true;
@@ -400,6 +399,12 @@ namespace Oxide.Plugins
                     _cfg.Gui.ShowInvaderHudList = true;
                     if (_cfg.Gui.InvaderWorldTagMaxDistance <= 0f)
                         _cfg.Gui.InvaderWorldTagMaxDistance = 150f;
+                }
+
+                if (_cfg.GuiSchemaVersion < 2)
+                {
+                    // NPC world nameplates do not parse rich-text color tags (literal text + truncation). HP/distance: INVADERS panel only.
+                    _cfg.Gui.ShowInvaderWorldTags = false;
                 }
 
                 _cfg.GuiSchemaVersion = GuiSchemaCurrent;
@@ -2277,18 +2282,6 @@ namespace Oxide.Plugins
                     _lastHudContentByUser.Remove(player.userID);
                     CuiHelper.DestroyUi(player, HudOverlayUiName);
                 }
-
-                if (!_cfg.Gui.ShowInvaderWorldTags) continue;
-
-                var maxD = Mathf.Clamp(_cfg.Gui.InvaderWorldTagMaxDistance, 5f, 500f);
-                foreach (var r in bots)
-                {
-                    var npc = r.NpcPlayer;
-                    if (npc == null) continue;
-                    var dist = Vector3.Distance(player.transform.position, npc.transform.position);
-                    if (dist > maxD) continue;
-                    DrawInvaderWorldTag(player, npc, dist, r.IsRoamingNpc);
-                }
             }
         }
 
@@ -2352,7 +2345,8 @@ namespace Oxide.Plugins
                 {
                     Text =
                     {
-                        Text = $"<size=12><color=#ccddee><b>INVADERS</b></color></size>\n\n{body}",
+                        Text =
+                            $"<size=12><color=#ccddee><b>INVADERS</b></color></size>\n<size=9><color=#8899aa>name — HP% — distance</color></size>\n\n{body}",
                         FontSize = 11,
                         Align = TextAnchor.UpperLeft,
                     },
@@ -2370,55 +2364,27 @@ namespace Oxide.Plugins
             return Mathf.Clamp01(npc.health / mh) * 100f;
         }
 
-        /// <summary>World nameplate: green when healthy, yellow mid, orange/red when low (rich text; client-supported).</summary>
+        /// <summary>
+        /// NPC <see cref="BasePlayer.displayName"/> does not support Unity rich text (tags show as literal garbled text). Plain name only; HP% and distance are in the INVADERS HUD panel.
+        /// </summary>
         private void UpdateInvaderNameplateDisplay(InvaderRuntime r)
         {
             if (r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed) return;
             var vn = NormalizeViewerName(r.ViewerName);
             if (string.IsNullOrEmpty(vn)) vn = r.ViewerName?.Trim();
             if (string.IsNullOrEmpty(vn) || IsUnexpandedWebhookPlaceholder(vn)) return;
-            var hpPct = GetHealthPercentDisplay(r.NpcPlayer);
-            var hex = hpPct >= 85f ? "#66ff88" : hpPct >= 50f ? "#ffdd55" : "#ff8866";
             var safe = StripCuiMarkupForNameplate(vn);
             if (string.IsNullOrEmpty(safe)) return;
             if (r.IsRoamingNpc)
-                r.NpcPlayer.displayName = $"<color={hex}>{safe}</color>";
+                r.NpcPlayer.displayName = safe;
             else
-                r.NpcPlayer.displayName = $"<color={hex}>[Invader] {safe}</color>";
+                r.NpcPlayer.displayName = $"[Invader] {safe}";
         }
 
         private static string StripCuiMarkupForNameplate(string s)
         {
             if (string.IsNullOrEmpty(s)) return "";
             return s.Replace("<", "").Replace(">", "").Trim();
-        }
-
-        /// <summary>HP% + distance only (viewer name is on the nameplate, colored by <see cref="UpdateInvaderNameplateDisplay"/>).</summary>
-        private static void DrawInvaderWorldTag(
-            BasePlayer viewer,
-            BasePlayer npc,
-            float distMeters,
-            bool isRoamingBridgeBot)
-        {
-            const float NoFade = 0f;
-            var hpPct = GetHealthPercentDisplay(npc);
-            var root = npc.transform.position + Vector3.up * (isRoamingBridgeBot ? 2.18f : 2.05f);
-            var grn = new Color(0.35f, 1f, 0.5f);
-            // Larger when farther; shrinks when camera is very close so labels do not cover the face.
-            var farMul = Mathf.Clamp01(distMeters / 22f);
-            var baseSz = Mathf.RoundToInt(Mathf.Lerp(10f, 15f, farMul));
-            var closeT = Mathf.Clamp01(distMeters / 6f);
-            var sz = Mathf.Clamp(
-                Mathf.RoundToInt(Mathf.Lerp(baseSz * 0.72f, baseSz * 1.08f, closeT)),
-                8,
-                18);
-            var szTag = $"<size={sz}>";
-            const string SzEnd = "</size>";
-            var line = 0.35f + sz / 200f;
-            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root + Vector3.up * line,
-                $"{szTag}{hpPct:F0}%{SzEnd}", NoFade);
-            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * line,
-                $"{szTag}{distMeters:F0} m{SzEnd}", NoFade);
         }
 
         #endregion
@@ -2668,9 +2634,6 @@ namespace Oxide.Plugins
                 case nameof(InvaderConfig.DespawnOnUnload):
                     _cfg.DespawnOnUnload = !_cfg.DespawnOnUnload;
                     break;
-                case "ShowInvaderWorldTags":
-                    _cfg.Gui.ShowInvaderWorldTags = !_cfg.Gui.ShowInvaderWorldTags;
-                    break;
                 case "ShowInvaderHudList":
                     _cfg.Gui.ShowInvaderHudList = !_cfg.Gui.ShowInvaderHudList;
                     break;
@@ -2774,14 +2737,6 @@ namespace Oxide.Plugins
                     if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var cd))
                     {
                         _cfg.PerViewerCooldownSeconds = Mathf.Clamp(cd, 0f, 3600f);
-                        SaveConfig();
-                    }
-
-                    break;
-                case "InvaderWorldTagMaxDistance":
-                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var tagMax))
-                    {
-                        _cfg.Gui.InvaderWorldTagMaxDistance = Mathf.Clamp(tagMax, 5f, 500f);
                         SaveConfig();
                     }
 
@@ -2965,11 +2920,17 @@ namespace Oxide.Plugins
             RowToggle("DespawnOnUnload", _cfg.DespawnOnUnload, nameof(InvaderConfig.DespawnOnUnload));
 
             RowLabel("<b>Streamer HUD</b> (maxxinvaders.admin)", 0.028f);
-            RowToggle("ShowInvaderWorldTags (3D: yellow name / green HP / white m)", _cfg.Gui.ShowInvaderWorldTags,
-                "ShowInvaderWorldTags");
-            RowToggle("ShowInvaderHudList (right panel)", _cfg.Gui.ShowInvaderHudList, "ShowInvaderHudList");
-            RowNum("InvaderWorldTagMaxDistance", "InvaderWorldTagMaxDistance",
-                _cfg.Gui.InvaderWorldTagMaxDistance.ToString(CultureInfo.InvariantCulture));
+            AddCuiText(
+                container,
+                inner,
+                "<size=9><color=#8899aa>Name above bot = plain text. HP% and distance: INVADERS panel (no 3D overhead).</color></size>",
+                $"0.03 {y - 0.034f}",
+                $"0.97 {y}",
+                9,
+                TextAnchor.LowerLeft,
+                "0.7 0.76 0.86 1");
+            y -= 0.038f;
+            RowToggle("ShowInvaderHudList (right INVADERS panel)", _cfg.Gui.ShowInvaderHudList, "ShowInvaderHudList");
 
             RowLabel("<b>Webhook / RCON default anchor</b>", 0.026f);
             container.Add(
