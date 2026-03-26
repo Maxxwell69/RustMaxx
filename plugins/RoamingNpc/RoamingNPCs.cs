@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.18")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.19")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8951,6 +8951,58 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>
+        /// MaxxInvaders: move items from the bot main inventory into the nearest non-full <see cref="StorageContainer"/>
+        /// owned by <paramref name="anchorSteamId"/> (same rules as automatic bridge deposit). Returns item stacks moved, or -1 not found, -2 no storage.
+        /// </summary>
+        [HookMethod("DepositItemsToAnchorOwnedStorage")]
+        public object DepositItemsToAnchorOwnedStorage(ulong entityNetId, ulong anchorSteamId)
+        {
+            try
+            {
+                if (listNpcPlayers == null || !listNpcPlayers.TryGetValue(entityNetId, out var pet) || pet == null ||
+                    pet.IsDestroyed)
+                    return -1;
+                var setup = pet.Data?.Setup;
+                if (setup?.FullState == null) return -1;
+
+                if (anchorSteamId != 0UL)
+                {
+                    pet.Data.SpawnedFromMaxxInvadersBridge = true;
+                    pet.Data.BridgeProtectAnchorUserId = anchorSteamId;
+                    setup.FullState.BridgeUseAnchorOwnedStorage = true;
+                    if (setup.FullState.BridgeAnchorStorageSearchRadius <= 0f)
+                        setup.FullState.BridgeAnchorStorageSearchRadius = 18f;
+                }
+
+                if (!TryFindAnchorOwnedStorageForBridge(pet, out var container))
+                    return -2;
+
+                var inv = pet.inventory?.containerMain;
+                if (inv == null) return -1;
+
+                var items = Pool.Get<List<Item>>();
+                items.AddRange(inv.itemList);
+                var moved = 0;
+                for (var i = 0; i < items.Count && container != null; i++)
+                {
+                    var item = items[i];
+                    if (item == null || item.amount <= 0) continue;
+                    if (setup.ContainsItem(item)) continue;
+                    if (item.MoveToContainer(container.inventory)) moved++;
+                    else break;
+                }
+
+                Pool.FreeUnmanaged(ref items);
+                return moved;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] DepositItemsToAnchorOwnedStorage: {ex}");
+                return -1;
+            }
+        }
+
         [HookMethod("IsBridgeTemplateReady")]
         public object IsBridgeTemplateReady(string templateKey)
         {
@@ -8980,7 +9032,7 @@ namespace Oxide.Plugins
                 sb.AppendLine();
                 sb.AppendLine($"Version: {Version}");
                 sb.AppendLine(
-                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
+                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, DepositItemsToAnchorOwnedStorage, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
                 sb.AppendLine();
                 if (config?.bots == null)
                 {

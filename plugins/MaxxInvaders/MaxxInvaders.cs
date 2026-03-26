@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.3")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.4")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1290,6 +1290,81 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>
+        /// Returns stacks moved to anchor-owned storage, or -1 error / not Roaming, -2 no eligible storage near anchor.
+        /// </summary>
+        private int TryRoamingDepositItemsToAnchorStorage(ulong entityId, ulong anchorSteamId)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return -1;
+            try
+            {
+                var raw = RoamingNPCs.Call("DepositItemsToAnchorOwnedStorage", entityId, anchorSteamId);
+                if (raw == null) return -1;
+                if (raw is int i) return i;
+                if (raw is long l) return (int)l;
+                return Convert.ToInt32(raw, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} RoamingNPCs.DepositItemsToAnchorOwnedStorage: {ex.Message}");
+                return -1;
+            }
+        }
+
+        private void DepositAllRoamingBotsToAnchor(BasePlayer issuer)
+        {
+            if (issuer == null) return;
+            var uid = issuer.userID;
+            var total = 0;
+            var tried = 0;
+            var noRoam = 0;
+            foreach (var r in _registry.All().ToArray())
+            {
+                if (r.NpcPlayer == null || r.NpcPlayer.IsDestroyed) continue;
+                if (!r.IsRoamingNpc)
+                {
+                    noRoam++;
+                    continue;
+                }
+
+                tried++;
+                var m = TryRoamingDepositItemsToAnchorStorage(r.EntityId, uid);
+                if (m >= 0) total += m;
+            }
+
+            if (tried == 0 && noRoam > 0)
+                issuer.ChatMessage(
+                    "[MaxxInvaders] Deposit only applies to RoamingNPCs bots (not vanilla scientists).");
+            else if (tried == 0)
+                issuer.ChatMessage("[MaxxInvaders] No active bots to deposit.");
+            else if (total == 0)
+                issuer.ChatMessage(
+                    "[MaxxInvaders] Deposit: 0 stacks moved (empty bot bags, or stand near a non-full box/cupboard you own).");
+            else
+                issuer.ChatMessage(
+                    $"[MaxxInvaders] Deposit: moved {total} stack(s) into your storage from {tried} bot(s).");
+        }
+
+        private void DepositSingleRoamingBot(BasePlayer issuer, InvaderRuntime r)
+        {
+            if (issuer == null || r == null) return;
+            if (!r.IsRoamingNpc)
+            {
+                issuer.ChatMessage("[MaxxInvaders] Deposit only works on RoamingNPCs bots.");
+                return;
+            }
+
+            var m = TryRoamingDepositItemsToAnchorStorage(r.EntityId, issuer.userID);
+            if (m == -1)
+                issuer.ChatMessage(
+                    "[MaxxInvaders] Deposit failed (RoamingNPCs not loaded, or that NPC is not a tracked Roaming bot).");
+            else if (m == -2)
+                issuer.ChatMessage(
+                    "[MaxxInvaders] No non-full storage found — stand near a box/cupboard you own (same OwnerID as you).");
+            else
+                issuer.ChatMessage($"[MaxxInvaders] Deposit: moved {m} stack(s) to your storage.");
+        }
+
         private void BehaviorTick()
         {
             foreach (var r in _registry.All().ToArray())
@@ -1870,7 +1945,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | maxx | roaming | anchor <Steam64> | follow | list | spawn | …");
+                    "Usage: /maxxinvaders ui | maxx | roaming | anchor <Steam64> | follow | deposit [npcId] | list | spawn | …");
                 return;
             }
 
@@ -1992,6 +2067,21 @@ namespace Oxide.Plugins
                     }
 
                     ApplyFollowAnchorToAllActive(player);
+                    break;
+                case "deposit":
+                case "depositall":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    if (args.Length >= 2 && TryFindInvader(args[1], out var depR))
+                        DepositSingleRoamingBot(player, depR);
+                    else if (args.Length >= 2)
+                        player.ChatMessage("[MaxxInvaders] NPC not found for deposit.");
+                    else
+                        DepositAllRoamingBotsToAnchor(player);
                     break;
                 case "debug":
                     if (!permission.UserHasPermission(player.UserIDString, PermDebug) && !player.IsAdmin)
@@ -3748,7 +3838,7 @@ namespace Oxide.Plugins
                     rowName,
                     line1 + "\n" + line2,
                     "0.02 0.18",
-                    "0.55 0.92",
+                    "0.41 0.92",
                     11,
                     TextAnchor.UpperLeft,
                     "1 1 1 1");
@@ -3759,17 +3849,26 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui tp {r.NpcId}",
                     _cfg.Gui.AccentColor,
                     "TO ME",
-                    "0.56 0.15",
-                    "0.66 0.88",
+                    "0.42 0.15",
+                    "0.51 0.88",
                     9);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui deposit {r.NpcId}",
+                    "0.22 0.45 0.55 0.95",
+                    "DEP",
+                    "0.515 0.15",
+                    "0.585 0.88",
+                    8);
                 AddCuiButtonWithText(
                     container,
                     rowName,
                     $"maxxinvaders.gui returnrun {r.NpcId}",
                     uiGreen,
                     "RET",
-                    "0.665 0.15",
-                    "0.76 0.88",
+                    "0.59 0.15",
+                    "0.68 0.88",
                     9);
                 AddCuiButtonWithText(
                     container,
@@ -3777,8 +3876,8 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui kill {r.NpcId}",
                     "0.45 0.12 0.12 0.95",
                     "KILL",
-                    "0.77 0.15",
-                    "0.855 0.88",
+                    "0.685 0.15",
+                    "0.775 0.88",
                     9);
                 AddCuiButtonWithText(
                     container,
@@ -3786,7 +3885,7 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui despawn {r.NpcId}",
                     "0.35 0.32 0.15 0.95",
                     "DESPAWN",
-                    "0.86 0.15",
+                    "0.78 0.15",
                     "0.99 0.88",
                     7);
             }
@@ -4203,12 +4302,23 @@ namespace Oxide.Plugins
                 AddCuiButtonWithText(
                     container,
                     botsOuter,
+                    "maxxinvaders.gui deposit all",
+                    "0.22 0.45 0.55 0.95",
+                    "DEPOSIT ALL",
+                    "0.62 0.87",
+                    "0.733 0.98",
+                    10,
+                    TextAnchor.MiddleCenter,
+                    "0.95 0.97 1 1");
+                AddCuiButtonWithText(
+                    container,
+                    botsOuter,
                     "maxxinvaders.gui returnrun all",
                     "0.12 0.55 0.22 0.95",
                     "FOLLOW ALL",
-                    "0.62 0.87",
-                    "0.79 0.98",
-                    11,
+                    "0.738 0.87",
+                    "0.851 0.98",
+                    10,
                     TextAnchor.MiddleCenter,
                     "0.95 0.97 1 1");
                 AddCuiButtonWithText(
@@ -4217,9 +4327,9 @@ namespace Oxide.Plugins
                     "maxxinvaders.gui tpall",
                     _cfg.Gui.AccentColor,
                     "TP ALL TO ME",
-                    "0.80 0.87",
+                    "0.856 0.87",
                     "0.98 0.98",
-                    11,
+                    10,
                     TextAnchor.MiddleCenter,
                     "0.95 0.97 1 1");
             }
@@ -4593,6 +4703,20 @@ namespace Oxide.Plugins
                     ? $"[MaxxInvaders] Pulled {moved} bot(s) to you in a ring (no overlap)."
                     : "[MaxxInvaders] No active bots to move.");
                 LogIf(_cfg.Logging.LogGui, $"gui tpall {player.displayName} moved={moved}", false);
+                return;
+            }
+
+            if (args[0] == "deposit" && args.Length > 1)
+            {
+                var nid = args[1].Trim();
+                if (nid.Equals("all", StringComparison.OrdinalIgnoreCase))
+                    DepositAllRoamingBotsToAnchor(player);
+                else if (TryFindInvader(nid, out var depR))
+                    DepositSingleRoamingBot(player, depR);
+                else
+                    player.ChatMessage("[MaxxInvaders] NPC not found for deposit.");
+
+                LogIf(_cfg.Logging.LogGui, $"gui deposit {player.displayName} {nid}", false);
                 return;
             }
 
