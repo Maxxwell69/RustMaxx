@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.6.8")]
+    [Info("MaxxInvaders", "RustMaxx", "1.6.9")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -68,6 +68,8 @@ namespace Oxide.Plugins
         private Timer _overlayTimer;
         private bool _debugRuntime;
         private readonly Dictionary<ulong, string> _lastHudContentByUser = new();
+        /// <summary>Admin has main MaxxInvaders CUI open — hide right INVADERS overlay so it does not stack on the GUI.</summary>
+        private readonly HashSet<ulong> _adminMainGuiOpen = new HashSet<ulong>();
         private DateTime _lastRoamingSpawnFailWarnUtc;
         private string _lastRoamingSpawnFailTemplate;
 
@@ -88,6 +90,7 @@ namespace Oxide.Plugins
         {
             if (player == null) return;
             _lastHudContentByUser.Remove(player.userID);
+            _adminMainGuiOpen.Remove(player.userID);
             CuiHelper.DestroyUi(player, HudOverlayUiName);
         }
 
@@ -114,6 +117,7 @@ namespace Oxide.Plugins
 
             _spawnDrafts.Clear();
             _lastHudContentByUser.Clear();
+            _adminMainGuiOpen.Clear();
 
             if (_cfg?.DespawnOnUnload == true)
                 _registry.DespawnAll(this, "plugin_unload");
@@ -2243,7 +2247,12 @@ namespace Oxide.Plugins
                 if (player == null || player.IsNpc || player.IsDestroyed) continue;
                 if (!CanAdmin(player)) continue;
 
-                if (_cfg.Gui.ShowInvaderHudList)
+                if (_adminMainGuiOpen.Contains(player.userID))
+                {
+                    _lastHudContentByUser.Remove(player.userID);
+                    CuiHelper.DestroyUi(player, HudOverlayUiName);
+                }
+                else if (_cfg.Gui.ShowInvaderHudList)
                 {
                     // Right-side INVADERS list overlaps Rust's loot / NPC inventory UI — hide while loot is open.
                     if (IsPlayerLootInventoryUiOpen(player))
@@ -2271,7 +2280,7 @@ namespace Oxide.Plugins
                     if (npc == null) continue;
                     var dist = Vector3.Distance(player.transform.position, npc.transform.position);
                     if (dist > maxD) continue;
-                    DrawInvaderWorldTag(player, npc, ResolveViewerNameForWorldTag(r), dist);
+                    DrawInvaderWorldTag(player, npc, ResolveViewerNameForWorldTag(r), dist, r.IsRoamingNpc);
                 }
             }
         }
@@ -2354,26 +2363,45 @@ namespace Oxide.Plugins
             return Mathf.Clamp01(npc.health / mh) * 100f;
         }
 
-        /// <summary>3D tags (RoamingNPCs 0.5.15+ clears vanilla nameplate for MaxxInvaders bridge bots). distanceFade 0 = stay visible at range.</summary>
-        private static void DrawInvaderWorldTag(BasePlayer viewer, BasePlayer npc, string rawName, float distMeters)
+        /// <summary>
+        /// 3D tags above invaders. Roaming bridge bots use a real world nameplate (viewer name) — skip duplicate name line.
+        /// Slightly higher anchor + spacing so labels sit clearer when the camera is close.
+        /// </summary>
+        private static void DrawInvaderWorldTag(
+            BasePlayer viewer,
+            BasePlayer npc,
+            string rawName,
+            float distMeters,
+            bool isRoamingBridgeBot)
         {
-            // Make the bot name tag slightly larger than the health/distance parts.
             const string SzName = "<size=12>";
             const string SzOther = "<size=10>";
             const string SzEnd = "</size>";
             const float NoFade = 0f;
             var hpPct = GetHealthPercentDisplay(npc);
-            var root = npc.transform.position + Vector3.up * 1.95f;
+            // Lift stack above head; roaming uses two lines only (name is on vanilla plate).
+            var root = npc.transform.position + Vector3.up * (isRoamingBridgeBot ? 2.25f : 2.12f);
             var yel = new Color(1f, 0.93f, 0.18f);
             var grn = new Color(0.35f, 1f, 0.5f);
+            var line = 0.40f;
 
-            var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(rawName) ? "?" : rawName.Trim());
-            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, yel, root + Vector3.up * 0.32f,
-                $"{SzName}{nm}{SzEnd}", NoFade);
-            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root, $"{SzOther}{hpPct:F0}%{SzEnd}",
-                NoFade);
-            viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * 0.32f,
-                $"{SzOther}{distMeters:F0} m{SzEnd}", NoFade);
+            if (!isRoamingBridgeBot)
+            {
+                var nm = StripCuiMarkup(string.IsNullOrWhiteSpace(rawName) ? "?" : rawName.Trim());
+                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, yel, root + Vector3.up * line,
+                    $"{SzName}{nm}{SzEnd}", NoFade);
+                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root,
+                    $"{SzOther}{hpPct:F0}%{SzEnd}", NoFade);
+                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * line,
+                    $"{SzOther}{distMeters:F0} m{SzEnd}", NoFade);
+            }
+            else
+            {
+                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, grn, root + Vector3.up * (line * 0.55f),
+                    $"{SzOther}{hpPct:F0}%{SzEnd}", NoFade);
+                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, Color.white, root - Vector3.up * (line * 0.55f),
+                    $"{SzOther}{distMeters:F0} m{SzEnd}", NoFade);
+            }
         }
 
         #endregion
@@ -3693,6 +3721,9 @@ namespace Oxide.Plugins
         private void OpenGui(BasePlayer player, int page)
         {
             if (player == null) return;
+            _adminMainGuiOpen.Add(player.userID);
+            _lastHudContentByUser.Remove(player.userID);
+            CuiHelper.DestroyUi(player, HudOverlayUiName);
             CuiHelper.DestroyUi(player, UiName);
             _guiPage[player.userID] = page;
             if (!_guiMainTab.TryGetValue(player.userID, out var mainTab)) mainTab = 0;
@@ -4424,6 +4455,7 @@ namespace Oxide.Plugins
 
             if (args[0] == "action" && args.Length > 1 && args[1] == "close")
             {
+                _adminMainGuiOpen.Remove(player.userID);
                 CuiHelper.DestroyUi(player, UiName);
                 LogIf(_cfg.Logging.LogGui, $"gui close {player.displayName}", false);
                 return;

@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.15")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.16")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3374,10 +3374,19 @@ namespace Oxide.Plugins
 
             customPet.userID = data.userID;
             customPet.UserIDString = data.userID.ToString();
-            // Hide vanilla nameplate (Data.DisplayName kept for corpse/UI, and for UI we draw via ddraw).
-            // Important: do it after userID assignment so the client doesn't briefly render a `0`.
-            // Empty string can make the client show the bot userID digits; use a non-printing character instead.
-            customPet.displayName = HiddenNpcNameplate;
+            // Hide vanilla nameplate for normal bots (ddraw / admin markers). MaxxInvaders bridge: show viewer
+            // DisplayName on the plate — HiddenNpcNameplate still lets some clients render the numeric bot userID.
+            // Important: set after userID assignment so the client doesn't briefly render a `0`.
+            if (data.SpawnedFromMaxxInvadersBridge && !string.IsNullOrWhiteSpace(data.DisplayName))
+            {
+                var dn = data.DisplayName.Trim().Replace("<", "").Replace(">", "");
+                if (dn.Length > 24) dn = dn.Substring(0, 24);
+                customPet.displayName = string.IsNullOrEmpty(dn) ? HiddenNpcNameplate : dn;
+            }
+            else
+            {
+                customPet.displayName = HiddenNpcNameplate;
+            }
             customPet.gameObject.AwakeFromInstantiate();
             customPet.Spawn();
 
