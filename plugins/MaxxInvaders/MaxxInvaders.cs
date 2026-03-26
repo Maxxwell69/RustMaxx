@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.5")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.6")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -68,6 +68,8 @@ namespace Oxide.Plugins
         private Timer _overlayTimer;
         private bool _debugRuntime;
         private readonly Dictionary<ulong, string> _lastHudContentByUser = new();
+        /// <summary>Streamer/admin hid the right INVADERS panel via <c>maxxinvaders.hudtoggle</c> (e.g. bind F9).</summary>
+        private readonly HashSet<ulong> _hudOverlayHiddenByUser = new HashSet<ulong>();
         /// <summary>Admin has main MaxxInvaders CUI open — hide right INVADERS overlay so it does not stack on the GUI.</summary>
         private readonly HashSet<ulong> _adminMainGuiOpen = new HashSet<ulong>();
         private DateTime _lastRoamingSpawnFailWarnUtc;
@@ -91,6 +93,7 @@ namespace Oxide.Plugins
             if (player == null) return;
             _lastHudContentByUser.Remove(player.userID);
             _adminMainGuiOpen.Remove(player.userID);
+            _hudOverlayHiddenByUser.Remove(player.userID);
             CuiHelper.DestroyUi(player, HudOverlayUiName);
         }
 
@@ -118,6 +121,7 @@ namespace Oxide.Plugins
             _spawnDrafts.Clear();
             _lastHudContentByUser.Clear();
             _adminMainGuiOpen.Clear();
+            _hudOverlayHiddenByUser.Clear();
 
             if (_cfg?.DespawnOnUnload == true)
                 _registry.DespawnAll(this, "plugin_unload");
@@ -1923,6 +1927,42 @@ namespace Oxide.Plugins
             arg.ReplyWith("OK");
         }
 
+        /// <summary>Toggle right INVADERS panel for this client. Bind: <c>bind f9 maxxinvaders.hudtoggle</c></summary>
+        [ConsoleCommand("maxxinvaders.hudtoggle")]
+        private void CmdHudToggle(ConsoleSystem.Arg arg)
+        {
+            var player = arg.Connection?.player as BasePlayer;
+            if (player == null) return;
+            ToggleInvadersHudPanelForPlayer(player);
+        }
+
+        private void ToggleInvadersHudPanelForPlayer(BasePlayer player)
+        {
+            if (player == null || !CanAdmin(player)) return;
+
+            if (_hudOverlayHiddenByUser.Contains(player.userID))
+            {
+                _hudOverlayHiddenByUser.Remove(player.userID);
+                player.ChatMessage("[MaxxInvaders] INVADERS panel ON.");
+            }
+            else
+            {
+                _hudOverlayHiddenByUser.Add(player.userID);
+                _lastHudContentByUser.Remove(player.userID);
+                CuiHelper.DestroyUi(player, HudOverlayUiName);
+                player.ChatMessage("[MaxxInvaders] INVADERS panel OFF. /maxxinvaders hud  or  bind f9 maxxinvaders.hudtoggle");
+            }
+        }
+
+        /// <summary>FOLLOW = pathing to anchor; PROTECT = leashed / guarding anchor (not in return run).</summary>
+        private static string GetInvaderHudSquadModeLabel(InvaderRuntime r)
+        {
+            if (r == null) return "—";
+            if (r.ReturnRunActive) return "FOLLOW";
+            if (r.AnchorSteamId != 0UL) return "PROTECT";
+            return "—";
+        }
+
         private static List<string> ParseQuotedArgs(ConsoleSystem.Arg arg)
         {
             string line = null;
@@ -1990,7 +2030,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | maxx | roaming | anchor <Steam64> | follow | protect [npcId] | deposit [npcId] | list | spawn | …");
+                    "Usage: /maxxinvaders ui | hud | maxx | roaming | anchor <Steam64> | follow | protect [npcId] | deposit [npcId] | list | spawn | …");
                 return;
             }
 
@@ -2000,6 +2040,15 @@ namespace Oxide.Plugins
                 case "ui":
                     if (!CanAdmin(player)) return;
                     OpenGui(player, 0);
+                    break;
+                case "hud":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    ToggleInvadersHudPanelForPlayer(player);
                     break;
                 case "setup":
                 case "config":
@@ -2473,6 +2522,11 @@ namespace Oxide.Plugins
                     _lastHudContentByUser.Remove(player.userID);
                     CuiHelper.DestroyUi(player, HudOverlayUiName);
                 }
+                else if (_hudOverlayHiddenByUser.Contains(player.userID))
+                {
+                    _lastHudContentByUser.Remove(player.userID);
+                    CuiHelper.DestroyUi(player, HudOverlayUiName);
+                }
                 else if (_cfg.Gui.ShowInvaderHudList)
                 {
                     // Right-side INVADERS list overlaps Rust's loot / NPC inventory UI — hide while loot is open.
@@ -2533,11 +2587,16 @@ namespace Oxide.Plugins
                     var dist = Vector3.Distance(player.transform.position, npc.transform.position);
                     var hpPct = GetHealthPercentDisplay(npc);
                     var nm = StripCuiMarkup(ResolveViewerNameForWorldTag(r));
-                    sb.Append("<color=#ffee55>");
+                    var mode = GetInvaderHudSquadModeLabel(r);
+                    sb.Append("<color=#99ccff>T");
+                    sb.Append(r.Tier.ToString(CultureInfo.InvariantCulture));
+                    sb.Append("</color> <color=#ffcc66>");
+                    sb.Append(mode);
+                    sb.Append("</color> <color=#ffee55>");
                     sb.Append(nm);
-                    sb.Append("</color> - <color=#55ff88>");
+                    sb.Append("</color> — <color=#55ff88>");
                     sb.Append(hpPct.ToString("F0", CultureInfo.InvariantCulture));
-                    sb.Append("%</color> - <color=#ffffff>");
+                    sb.Append("%</color> — <color=#ffffff>");
                     sb.Append(dist.ToString("F0", CultureInfo.InvariantCulture));
                     sb.Append(" m</color>\n");
                 }
@@ -2565,7 +2624,7 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text =
-                            $"<size=12><color=#ccddee><b>INVADERS</b></color></size>\n<size=9><color=#8899aa>name — HP% — distance</color></size>\n\n{body}",
+                            $"<size=12><color=#ccddee><b>INVADERS</b></color></size>\n<size=9><color=#8899aa>level · squad · name — HP% — distance</color></size>\n<size=8><color=#667788>F9: bind f9 maxxinvaders.hudtoggle</color></size>\n\n{body}",
                         FontSize = 11,
                         Align = TextAnchor.UpperLeft,
                     },
