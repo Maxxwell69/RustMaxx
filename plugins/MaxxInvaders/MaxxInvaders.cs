@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.6")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.7")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -155,6 +155,15 @@ namespace Oxide.Plugins
             public float BehaviorTickSeconds { get; set; } = 1.5f;
             public bool DespawnOnUnload { get; set; } = true;
             public float PersistIntervalSeconds { get; set; } = 60f;
+
+            /// <summary>When true, last display name, tier, kit, mode, and roaming template are stored per <c>viewerId</c> in the data file.</summary>
+            public bool PersistViewerIdentity { get; set; } = true;
+
+            /// <summary>When true, incoming spawns merge saved fields when the relay sends placeholders or empty kit/template, or invalid tier/mode.</summary>
+            public bool MergeSavedViewerOnSpawn { get; set; } = true;
+
+            /// <summary>Internal: bumps when new viewer-persistence defaults must apply to legacy configs.</summary>
+            public int ViewerPersistenceSchemaVersion { get; set; } = 0;
 
             /// <summary>
             /// When TikFinity/RCON omits the 7th <c>maxxinvaders.spawn</c> arg, use this Steam64 (online or sleeping) for
@@ -421,6 +430,13 @@ namespace Oxide.Plugins
 
             _cfg.Gui.InvadersTitleSize = Mathf.Clamp(_cfg.Gui.InvadersTitleSize, 8, 40);
             _cfg.Gui.InvadersVersionSize = Mathf.Clamp(_cfg.Gui.InvadersVersionSize, 6, 28);
+
+            if (_cfg.ViewerPersistenceSchemaVersion < 1)
+            {
+                _cfg.PersistViewerIdentity = true;
+                _cfg.MergeSavedViewerOnSpawn = true;
+                _cfg.ViewerPersistenceSchemaVersion = 1;
+            }
         }
 
         /// <summary>Ensure streamer_patrol appears in the Invaders GUI slot list (defaults + one-time migration).</summary>
@@ -472,6 +488,20 @@ namespace Oxide.Plugins
         {
             public List<InvaderRecord> History { get; set; } = new();
             public int NextNumericId { get; set; } = 1;
+
+            /// <summary>Keyed by normalized viewer id (lowercase); last-known character settings for TikFinity/relay spawns.</summary>
+            public Dictionary<string, ViewerSavedProfile> ViewerProfiles { get; set; } =
+                new Dictionary<string, ViewerSavedProfile>(StringComparer.Ordinal);
+        }
+
+        private class ViewerSavedProfile
+        {
+            public string LastViewerName { get; set; } = "";
+            public int LastTier { get; set; } = 1;
+            public string LastKitName { get; set; } = "";
+            public string LastMode { get; set; } = "";
+            public string LastRoamingTemplateKey { get; set; } = "";
+            public DateTime UpdatedAtUtc { get; set; }
         }
 
         private class InvaderRecord
@@ -492,6 +522,9 @@ namespace Oxide.Plugins
             public DateTime? RemovedAtUtc { get; set; }
         }
 
+        private static string ViewerProfileKey(string viewerId) =>
+            string.IsNullOrWhiteSpace(viewerId) ? "" : viewerId.Trim().ToLowerInvariant();
+
         private void LoadDataFile()
         {
             try
@@ -500,6 +533,20 @@ namespace Oxide.Plugins
                 if (_data == null) _data = new InvaderDataStore();
                 if (_data.History == null) _data.History = new List<InvaderRecord>();
                 if (_data.NextNumericId < 1) _data.NextNumericId = 1;
+                if (_data.ViewerProfiles == null)
+                    _data.ViewerProfiles = new Dictionary<string, ViewerSavedProfile>(StringComparer.Ordinal);
+                else if (_data.ViewerProfiles.Count > 0)
+                {
+                    var normalized = new Dictionary<string, ViewerSavedProfile>(StringComparer.Ordinal);
+                    foreach (var kv in _data.ViewerProfiles)
+                    {
+                        var nk = ViewerProfileKey(kv.Key);
+                        if (string.IsNullOrEmpty(nk)) continue;
+                        normalized[nk] = kv.Value ?? new ViewerSavedProfile();
+                    }
+
+                    _data.ViewerProfiles = normalized;
+                }
             }
             catch
             {
@@ -518,6 +565,48 @@ namespace Oxide.Plugins
             {
                 PrintError($"{LogPrefix} Data save failed: {ex.Message}");
             }
+        }
+
+        private bool TryGetViewerSavedProfile(string viewerId, out ViewerSavedProfile prof)
+        {
+            prof = null;
+            if (_data?.ViewerProfiles == null || string.IsNullOrWhiteSpace(viewerId)) return false;
+            var key = ViewerProfileKey(viewerId);
+            if (string.IsNullOrEmpty(key)) return false;
+            return _data.ViewerProfiles.TryGetValue(key, out prof) && prof != null;
+        }
+
+        private void UpsertViewerSavedProfile(string viewerId, string viewerName, int tier, string kitName, string mode,
+            string roamingTemplateKey)
+        {
+            if (!_cfg.PersistViewerIdentity || _data == null) return;
+            _data.ViewerProfiles ??= new Dictionary<string, ViewerSavedProfile>(StringComparer.Ordinal);
+            var key = ViewerProfileKey(viewerId);
+            if (string.IsNullOrEmpty(key)) return;
+            _data.ViewerProfiles[key] = new ViewerSavedProfile
+            {
+                LastViewerName = viewerName?.Trim() ?? "",
+                LastTier = tier,
+                LastKitName = kitName?.Trim() ?? "",
+                LastMode = string.IsNullOrWhiteSpace(mode) ? "" : mode.Trim().ToLowerInvariant(),
+                LastRoamingTemplateKey = roamingTemplateKey?.Trim() ?? "",
+                UpdatedAtUtc = DateTime.UtcNow
+            };
+            SaveDataFile();
+        }
+
+        private void PatchSavedViewerDisplayName(string viewerId, string newDisplayName)
+        {
+            if (!_cfg.PersistViewerIdentity || _data == null) return;
+            _data.ViewerProfiles ??= new Dictionary<string, ViewerSavedProfile>(StringComparer.Ordinal);
+            var key = ViewerProfileKey(viewerId);
+            if (string.IsNullOrEmpty(key)) return;
+            if (!_data.ViewerProfiles.TryGetValue(key, out var prof) || prof == null)
+                prof = new ViewerSavedProfile();
+            prof.LastViewerName = newDisplayName?.Trim() ?? "";
+            prof.UpdatedAtUtc = DateTime.UtcNow;
+            _data.ViewerProfiles[key] = prof;
+            SaveDataFile();
         }
 
         #endregion
@@ -782,6 +871,32 @@ namespace Oxide.Plugins
                 return SpawnResult.Fail("missing_viewer");
 
             viewerName = viewerName.Trim();
+            viewerId = viewerId.Trim();
+
+            if (_cfg.MergeSavedViewerOnSpawn && TryGetViewerSavedProfile(viewerId, out var savedMerge))
+            {
+                if (!string.IsNullOrWhiteSpace(savedMerge.LastViewerName))
+                {
+                    if (IsUnexpandedWebhookPlaceholder(viewerName) ||
+                        string.Equals(viewerName, "Viewer", StringComparison.OrdinalIgnoreCase))
+                        viewerName = savedMerge.LastViewerName.Trim();
+                }
+
+                if (string.IsNullOrWhiteSpace(roamingTemplateOverride) &&
+                    !string.IsNullOrWhiteSpace(savedMerge.LastRoamingTemplateKey))
+                    roamingTemplateOverride = savedMerge.LastRoamingTemplateKey.Trim();
+
+                if (string.IsNullOrWhiteSpace(kitName) && !string.IsNullOrWhiteSpace(savedMerge.LastKitName))
+                    kitName = savedMerge.LastKitName.Trim();
+
+                if (!TryGetTier(tier, out _) && TryGetTier(savedMerge.LastTier, out _))
+                    tier = savedMerge.LastTier;
+
+                if (!IsBehaviorAllowed(mode) && !string.IsNullOrWhiteSpace(savedMerge.LastMode) &&
+                    IsBehaviorAllowed(savedMerge.LastMode))
+                    mode = savedMerge.LastMode;
+            }
+
             if (IsUnexpandedWebhookPlaceholder(viewerName))
                 viewerName = "Viewer";
 
@@ -978,6 +1093,9 @@ namespace Oxide.Plugins
             };
             _data.History.Add(record);
             TrimHistory();
+
+            UpsertViewerSavedProfile(runtime.ViewerId, runtime.ViewerName, tier, kitResolved ?? "", runtime.Mode,
+                runtime.RoamingTemplateKey);
 
             LogIf(_cfg.Logging.LogSpawn,
                 $"spawned npc={npcId} viewer={viewerName} id={viewerId} tier={tier} mode={mode} roaming={isRoaming} template={roamingTemplate} kit={kitResolved} src={source}",
@@ -2357,6 +2475,8 @@ namespace Oxide.Plugins
             if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
                 r.NpcPlayer.displayName = normalized;
 
+            PatchSavedViewerDisplayName(r.ViewerId, normalized);
+
             LogIf(true, $"rename npc={r.NpcId} viewer={r.ViewerId} -> {normalized}", false);
             return true;
         }
@@ -2940,6 +3060,12 @@ namespace Oxide.Plugins
                 case nameof(InvaderConfig.DespawnOnUnload):
                     _cfg.DespawnOnUnload = !_cfg.DespawnOnUnload;
                     break;
+                case nameof(InvaderConfig.PersistViewerIdentity):
+                    _cfg.PersistViewerIdentity = !_cfg.PersistViewerIdentity;
+                    break;
+                case nameof(InvaderConfig.MergeSavedViewerOnSpawn):
+                    _cfg.MergeSavedViewerOnSpawn = !_cfg.MergeSavedViewerOnSpawn;
+                    break;
                 case "ShowInvaderHudList":
                     _cfg.Gui.ShowInvaderHudList = !_cfg.Gui.ShowInvaderHudList;
                     break;
@@ -3224,6 +3350,10 @@ namespace Oxide.Plugins
             RowToggle("BlockSpawnInMonuments", _cfg.BlockSpawnInMonuments,
                 nameof(InvaderConfig.BlockSpawnInMonuments));
             RowToggle("DespawnOnUnload", _cfg.DespawnOnUnload, nameof(InvaderConfig.DespawnOnUnload));
+            RowToggle("PersistViewerIdentity (save tier/kit/template per viewerId)", _cfg.PersistViewerIdentity,
+                nameof(InvaderConfig.PersistViewerIdentity));
+            RowToggle("MergeSavedViewerOnSpawn (relay placeholders → restore last)", _cfg.MergeSavedViewerOnSpawn,
+                nameof(InvaderConfig.MergeSavedViewerOnSpawn));
 
             RowLabel("<b>Streamer HUD</b> (maxxinvaders.admin)", 0.028f);
             AddCuiText(

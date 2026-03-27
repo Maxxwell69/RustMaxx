@@ -104,6 +104,17 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 - **Config:** `oxide/config/MaxxInvaders.json`
 - **Persisted history / counters:** `oxide/data/MaxxInvaders/MaxxInvadersData.json`
 
+### Per-viewer persistence (1.7.7+)
+
+The data file includes **`ViewerProfiles`**: a map keyed by **normalized** `viewerId` (lowercase) to the **last successful spawn** fields — display name, tier, kit name, behavior mode, and resolved RoamingNPCs **template key**.
+
+- **`PersistViewerIdentity`** (default **true**): after each successful spawn (and on **rename**), the plugin updates that viewer’s saved row and writes the data file.
+- **`MergeSavedViewerOnSpawn`** (default **true**): when the relay sends **placeholders** (`%username%`, `{nickname}`, …), the literal **`Viewer`** fallback, an **empty** kit or roaming **override**, or an **invalid** tier/mode, the plugin fills from the saved profile **when present** so TikFinity/webhook spawns can **reuse the same “character”** as the last time that stable `viewerId` spawned.
+
+**Requirements:** The relay must send a **stable** `viewerId` per TikTok (or platform) user. Display names alone are not unique.
+
+Toggles: **Invaders GUI → Maxx → PersistViewerIdentity / MergeSavedViewerOnSpawn**, or the same property names in `MaxxInvaders.json`.
+
 ## TODO / future expansion
 
 - [ ] Richer combat targeting (relationship components / NpcFact) where API allows on your server branch.
@@ -115,6 +126,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Changelog (high level)
 
+- **1.7.7:** **Per-viewer persistence** (`ViewerProfiles` in `MaxxInvadersData.json`): save last tier/kit/mode/roaming template/display name per stable **`viewerId`**; optional **merge** on spawn when the relay sends placeholders or empty fields. GUI toggles **PersistViewerIdentity** and **MergeSavedViewerOnSpawn** on the **Maxx** tab.
 - **1.6.8:** **World tags** always show **name + HP + distance**; `ddraw.text` uses **distance fade 0** so labels stay readable at long range. **RoamingNPCs 0.5.15+** clears the **vanilla nameplate** for **MaxxInvaders bridge** bots only (`Data.DisplayName` kept for corpse + admin UI via `GetResolvedDisplayName`).
 - **1.6.7:** **MAXX SETTINGS** uses a **scroll view** (mouse wheel) so all fields are reachable; **Access** line stays **fixed** at the bottom of the panel.
 - **1.6.6:** **`DefaultAnchorSteamId`** field moved **up** in **MAXX SETTINGS** (under Streamer HUD) so it is not drawn off-screen. Chat: **`/maxxinvaders anchor <Steam64>`** / **`anchor clear`** (admin).
