@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using Rust;
@@ -19,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.18")]
+    [Info("RustChaos", "RustMaxx", "1.15.19")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -181,7 +182,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "tiger", "panther", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "tiger", "panther", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -537,6 +538,15 @@ namespace Oxide.Plugins
                         target.Heal(big);
                         BroadcastChat(ChatMsg($"{viewerName} triggered FULL HEALTH!"));
                         Puts($"{LogPrefix} Set streamer {target.displayName} to full health (Heal({big})).");
+                    }
+                    break;
+
+                case "bunny1":
+                    if (target != null)
+                    {
+                        int n = TryApplyBunnyCostumeToStreamer(target);
+                        BroadcastChat(ChatMsg($"{viewerName} put the BUNNY COSTUME on {target.displayName}!"));
+                        Puts($"{LogPrefix} Bunny costume: equipped {n} wear item(s) on {target.displayName} (from {viewerName}).");
                     }
                     break;
 
@@ -902,6 +912,91 @@ namespace Oxide.Plugins
             return null;
         }
 
+        /// <summary>Strip current wear and equip bunny onesie + ears (TikFinity / RCON <c>bunny1</c>). Returns count successfully moved to wear.</summary>
+        private static int TryApplyBunnyCostumeToStreamer(BasePlayer player)
+        {
+            if (player == null || !player.IsValid()) return 0;
+            ItemContainer wear = player.inventory?.containerWear;
+            if (wear == null) return 0;
+            try
+            {
+                foreach (Item existing in wear.itemList.ToArray())
+                {
+                    if (existing != null)
+                        existing.RemoveFromContainer();
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            int ok = 0;
+            foreach (string shortName in BunnyCostumeWearShortnames)
+            {
+                if (TryCreateItemMoveToWear(player, shortName, 1))
+                    ok++;
+            }
+
+            try
+            {
+                player.inventory.ServerUpdate(null);
+            }
+            catch
+            {
+                // ignore
+            }
+
+            try
+            {
+                player.SendNetworkUpdate();
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return ok;
+        }
+
+        private static readonly string[] BunnyCostumeWearShortnames = { "attire.bunny.onesie", "attire.bunnyears" };
+
+        private static bool TryCreateItemMoveToWear(BasePlayer player, string shortName, int amount)
+        {
+            if (player == null || !player.IsValid() || string.IsNullOrEmpty(shortName) || amount <= 0) return false;
+            ItemContainer wear = player.inventory?.containerWear;
+            if (wear == null) return false;
+            ItemDefinition def = ItemManager.FindItemDefinition(shortName);
+            if (def == null) return false;
+            Item item = ItemManager.Create(def, amount, 0ul);
+            if (item == null) return false;
+            bool moved = false;
+            try
+            {
+                moved = item.MoveToContainer(wear);
+            }
+            catch
+            {
+                moved = false;
+            }
+
+            if (!moved)
+            {
+                try
+                {
+                    item.Remove();
+                }
+                catch
+                {
+                    // ignore
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+
         /// <summary>
         /// Gives an item (e.g. supply.signal) to the player. Used for supply/likes trigger.
         /// </summary>
@@ -1017,7 +1112,8 @@ namespace Oxide.Plugins
                    action == "chaoswavepanther" ||
                    action == "chaoswaverandom" ||
                    action == "revivechaos" ||
-                   action == "chaosheli";
+                   action == "chaosheli" ||
+                   action == "bunny1";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)

@@ -30,6 +30,7 @@ export const TIKTRIGGER_ACTIONS = [
   "fullheal",
   "revivechaos",
   "chaosheli",
+  "bunny1",
   "npcmaxx",
   "maxxinvaders",
 ] as const;
@@ -277,6 +278,12 @@ export const ACTION_META: Record<
       "Land only: gives homing missile launcher + 20 seeker missiles, then spawns a Chinook-style hackable locked crate near the streamer, then a patrol/attack helicopter. While the session is active, shooting down a counter-helicopter drops another locked crate (cooldown; minis/scrap heli/Ch47 excluded). Delays configurable in RustChaos.json.",
     exampleGifts: ["Heli Chaos", "HeliChaos"],
   },
+  bunny1: {
+    label: "Bunny costume",
+    description:
+      "Clears the streamer’s clothing slots and equips the bunny onesie and bunny ears live (RustChaos bunny1). Map TikFinity chat e.g. !bunny1 to this action; leading ! is stripped when matching.",
+    exampleGifts: ["Bunny1", "!bunny1"],
+  },
   npcmaxx: {
     label: "Roaming NPC (viewer bot)",
     description:
@@ -478,6 +485,8 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   fullheal: "fullheal",
   revivechaos: "revivechaos",
   chaosheli: "chaosheli",
+  bunny1: "bunny1",
+  "!bunny1": "bunny1",
   npcmaxx: "npcmaxx",
   maxxinvaders: "maxxinvaders",
   invaders: "maxxinvaders",
@@ -501,7 +510,10 @@ export function getRawActionNameFromPayload(body: unknown): string {
 
 /** If TikFinity sends an action name directly (action, actionName, or event), return it. */
 export function getActionFromPayload(body: unknown): TikTriggerAction | null {
-  const raw = getRawActionNameFromPayload(body).toLowerCase();
+  const raw = getRawActionNameFromPayload(body)
+    .toLowerCase()
+    .replace(/^!+/, "")
+    .trim();
   if (!raw) return null;
   if ((TIKTRIGGER_ACTIONS as readonly string[]).includes(raw)) return raw as TikTriggerAction;
   const fromEvent = EVENT_TO_ACTION[raw];
