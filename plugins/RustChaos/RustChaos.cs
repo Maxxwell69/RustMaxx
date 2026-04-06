@@ -926,7 +926,7 @@ namespace Oxide.Plugins
                     try
                     {
                         existing.RemoveFromContainer();
-                        existing.Remove(0f);
+                        existing.Remove();
                     }
                     catch
                     {
