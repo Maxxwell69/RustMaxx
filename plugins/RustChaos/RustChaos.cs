@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.19")]
+    [Info("RustChaos", "RustMaxx", "1.15.20")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. chaosheli: crate + patrol heli + homing launcher; bonus crate when a counter-heli is destroyed.")]
     public class RustChaos : RustPlugin
     {
@@ -922,8 +922,16 @@ namespace Oxide.Plugins
             {
                 foreach (Item existing in wear.itemList.ToArray())
                 {
-                    if (existing != null)
+                    if (existing == null) continue;
+                    try
+                    {
                         existing.RemoveFromContainer();
+                        existing.Remove(0f);
+                    }
+                    catch
+                    {
+                        // ignore per item
+                    }
                 }
             }
             catch
