@@ -332,7 +332,8 @@ async function runWebhook(request: NextRequest, body: unknown) {
           reason: payload
             ? "Gift not mapped to an action"
             : "No action specified. TikFinity sent empty/default body.",
-          debug: "To test a specific action (e.g. likes, supply, wolf), send a JSON body. Example: {\"action\": \"likes\"} or {\"giftName\": \"Puppy Kisses\"}. If TikFinity cannot set the webhook body, use the RustMaxx admin 'Test trigger' instead.",
+          debug:
+            "Specify the action one of these ways: (1) URL query ?action=bunny1 (or wolf, likes, …), (2) JSON {\"action\":\"bunny1\"}, (3) TikFinity connection name matching the action (Admin → Streamer interactions), (4) chat-style body with message/text containing the command, e.g. {\"message\":\"!bunny1\",\"nickname\":\"Viewer\"}. RustMaxx reads message, text, comment, chatMessage, msg, content, and nested data/event/payload. Test with POST ?action=bunny1 and body {\"viewerName\":\"Test\"}.",
           giftName: payload?.giftName,
         },
         { status: 200 }

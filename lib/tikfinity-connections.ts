@@ -39,7 +39,7 @@ export function parseNpcTemplateKey(raw: unknown): string | null {
 }
 
 function normalizeName(name: string): string {
-  return name.trim().toLowerCase();
+  return name.trim().toLowerCase().replace(/^!+/, "");
 }
 
 /** Get server action for an incoming event/action name from admin connections (case-insensitive). */

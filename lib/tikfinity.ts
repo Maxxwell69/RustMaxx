@@ -86,6 +86,9 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   ReviveChaos: "revivechaos",
   "Heli Chaos": "chaosheli",
   HeliChaos: "chaosheli",
+  Bunny1: "bunny1",
+  bunny1: "bunny1",
+  "!bunny1": "bunny1",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -308,6 +311,14 @@ export function getActionForGift(giftName: string): TikTriggerAction | null {
   for (const [gift, action] of Object.entries(DEFAULT_GIFT_TO_ACTION)) {
     if (gift.toLowerCase() === lower) return action as TikTriggerAction;
   }
+  // TikFinity chat / custom payloads: first token only, optional leading !
+  const cmdToken = lower.replace(/^!+/, "").split(/\s+/)[0];
+  if (
+    cmdToken &&
+    (TIKTRIGGER_ACTIONS as readonly string[]).includes(cmdToken)
+  ) {
+    return cmdToken as TikTriggerAction;
+  }
   return null;
 }
 
@@ -458,6 +469,58 @@ export function getDefaultGiftValue(giftName: string): number {
   return 0;
 }
 
+/** TikFinity chat / comment webhooks often put the command here (not in `action` / `event`). */
+const CHAT_MESSAGE_KEYS = [
+  "message",
+  "text",
+  "comment",
+  "chatMessage",
+  "chat_message",
+  "msg",
+  "content",
+  "chatMsg",
+  "chat",
+  "body",
+  "fullMessage",
+  "chatText",
+  "diamondString",
+] as const;
+
+function firstWhitespaceToken(line: string): string | null {
+  const t = line.trim().split(/\s+/)[0];
+  return t || null;
+}
+
+function collectChatStringsFromRecord(o: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  for (const k of CHAT_MESSAGE_KEYS) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  }
+  return out;
+}
+
+/**
+ * First chat token (e.g. "!bunny1" from "  !bunny1 hi") for action / connection lookup.
+ * Does not strip "!"; getActionFromPayload and normalizeName handle that.
+ */
+function extractChatCommandTokenFromBody(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+  for (const s of collectChatStringsFromRecord(o)) {
+    const t = firstWhitespaceToken(s);
+    if (t) return t;
+  }
+  const nested = (o.data ?? o.event ?? o.payload) as Record<string, unknown> | undefined;
+  if (nested && typeof nested === "object") {
+    for (const s of collectChatStringsFromRecord(nested)) {
+      const t = firstWhitespaceToken(s);
+      if (t) return t;
+    }
+  }
+  return null;
+}
+
 const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   likes: "likes",
   like: "likes",
@@ -493,7 +556,10 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   invader: "maxxinvaders",
 };
 
-/** Get raw action/event name from body (action, actionName, or event) for admin-connection lookup. */
+/**
+ * Raw action/event name for admin-connection lookup and getActionFromPayload.
+ * Order: explicit action fields, then first token from common TikFinity chat fields (message, text, …).
+ */
 export function getRawActionNameFromPayload(body: unknown): string {
   if (!body || typeof body !== "object") return "";
   const o = body as Record<string, unknown>;
@@ -505,7 +571,8 @@ export function getRawActionNameFromPayload(body: unknown): string {
         : typeof o.event === "string"
           ? o.event.trim()
           : "";
-  return raw;
+  if (raw) return raw;
+  return extractChatCommandTokenFromBody(body) ?? "";
 }
 
 /** If TikFinity sends an action name directly (action, actionName, or event), return it. */
