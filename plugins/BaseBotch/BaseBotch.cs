@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.9")]
+    [Info("BaseBotch", "RustMaxx", "1.4.10")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -888,6 +888,7 @@ namespace Oxide.Plugins
             if (comp.GetType().Name.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) < 0) return;
             const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             var invoked = 0;
+            var maxOut = ResolveWheelMaxOutput(comp);
             foreach (var m in comp.GetType().GetMethods(bf))
             {
                 var n = m.Name;
@@ -902,7 +903,7 @@ namespace Oxide.Plugins
                     n != "MarkDirtyForceUpdateOutputs" &&
                     n != "MarkDirty")
                     continue;
-                if (TryInvokeWithGeneratedArgs(comp, m, npc))
+                if (TryInvokeWithGeneratedArgs(comp, m, npc, maxOut))
                     invoked++;
             }
 
@@ -913,10 +914,32 @@ namespace Oxide.Plugins
             var now = Time.realtimeSinceStartup;
             if (_nextWheelPublishDebugAt.TryGetValue(mountId, out var nextAt) && now < nextAt) return;
             _nextWheelPublishDebugAt[mountId] = now + 4f;
-            Puts($"[BaseBotch][debug] wheelPublish mount={mountId} invoked={invoked}");
+            Puts($"[BaseBotch][debug] wheelPublish mount={mountId} invoked={invoked} maxOut={maxOut:F1}");
         }
 
-        private static bool TryInvokeWithGeneratedArgs(Component target, MethodInfo method, BasePlayer npc)
+        private static float ResolveWheelMaxOutput(Component comp)
+        {
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                var maxOutMethod = comp.GetType().GetMethod("MaximalPowerOutput", bf, null, Type.EmptyTypes, null);
+                if (maxOutMethod != null)
+                {
+                    var mv = maxOutMethod.Invoke(comp, null);
+                    if (mv is int mi) return Mathf.Max(1f, mi);
+                    if (mv is float mf) return Mathf.Max(1f, mf);
+                    if (mv is double md) return Mathf.Max(1f, (float)md);
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+
+            return 30f;
+        }
+
+        private static bool TryInvokeWithGeneratedArgs(Component target, MethodInfo method, BasePlayer npc, float maxOut)
         {
             try
             {
@@ -929,6 +952,7 @@ namespace Oxide.Plugins
                 }
 
                 var args = new object[ps.Length];
+                var usedPrimaryNumeric = false;
                 for (var i = 0; i < ps.Length; i++)
                 {
                     var pt = ps[i].ParameterType;
@@ -939,11 +963,20 @@ namespace Oxide.Plugins
                     else if (typeof(InputState).IsAssignableFrom(pt))
                         args[i] = npc.serverInput;
                     else if (pt == typeof(int))
-                        args[i] = 0;
+                    {
+                        args[i] = usedPrimaryNumeric ? 0 : Mathf.RoundToInt(maxOut);
+                        usedPrimaryNumeric = true;
+                    }
                     else if (pt == typeof(float))
-                        args[i] = 0f;
+                    {
+                        args[i] = usedPrimaryNumeric ? 0f : maxOut;
+                        usedPrimaryNumeric = true;
+                    }
                     else if (pt == typeof(double))
-                        args[i] = 0d;
+                    {
+                        args[i] = usedPrimaryNumeric ? 0d : (double)maxOut;
+                        usedPrimaryNumeric = true;
+                    }
                     else if (pt == typeof(bool))
                         args[i] = true;
                     else if (pt == typeof(uint))
