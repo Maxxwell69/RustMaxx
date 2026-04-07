@@ -9,12 +9,14 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBot", "RustMaxx", "1.1.1")]
+    [Info("BaseBot", "RustMaxx", "1.1.2")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBot : RustPlugin
     {
         private ConfigData _cfg;
         private readonly HashSet<ulong> _autorunNpcNetIds = new();
+        /// <summary>Tracks which mountable the bot was placed on so autorun/dismount work even when prefab names do not include "waterwheel" on the seat entity.</summary>
+        private readonly Dictionary<ulong, ulong> _npcToTrackedMountNetId = new();
         private Timer _autorunTimer;
 
         private sealed class ConfigData
@@ -32,6 +34,9 @@ namespace Oxide.Plugins
 
             /// <summary>Hold sprint as well as forward (typical “autorun”).</summary>
             public bool AutorunUseSprint = true;
+
+            /// <summary>Apply the same button mask again on the next tick (helps if RoamingNPCs/AI clears input between frames).</summary>
+            public bool AutorunDoubleApplyNextTick = true;
         }
 
         protected override void LoadDefaultConfig()
@@ -60,6 +65,7 @@ namespace Oxide.Plugins
         private void Unload()
         {
             _autorunNpcNetIds?.Clear();
+            _npcToTrackedMountNetId?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
             _autorunTimer = null;
@@ -68,7 +74,11 @@ namespace Oxide.Plugins
         private void OnEntityKill(BaseNetworkable entity)
         {
             if (entity is BasePlayer bp && bp.net != null)
-                _autorunNpcNetIds.Remove(bp.net.ID.Value);
+            {
+                var id = bp.net.ID.Value;
+                _autorunNpcNetIds.Remove(id);
+                _npcToTrackedMountNetId.Remove(id);
+            }
         }
 
         private void AutorunTick()
@@ -76,47 +86,94 @@ namespace Oxide.Plugins
             if (_autorunNpcNetIds.Count == 0) return;
             var copy = new List<ulong>(_autorunNpcNetIds);
             foreach (var id in copy)
-                ApplyAutorunInput(id);
+                ApplyAutorunInput(id, true);
         }
 
-        private void ApplyAutorunInput(ulong npcNetId)
+        private void ApplyAutorunInput(ulong npcNetId, bool scheduleDoubleApply)
         {
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcNetId)) as BasePlayer;
             if (npc == null || npc.IsDestroyed || !npc.isMounted)
             {
                 _autorunNpcNetIds.Remove(npcNetId);
+                _npcToTrackedMountNetId.Remove(npcNetId);
                 return;
             }
 
-            if (!IsNpcOnWaterWheelMount(npc))
+            var m = npc.GetMounted();
+            if (m == null || m.net == null)
+            {
+                _autorunNpcNetIds.Remove(npcNetId);
+                _npcToTrackedMountNetId.Remove(npcNetId);
+                return;
+            }
+
+            if (_npcToTrackedMountNetId.TryGetValue(npcNetId, out var expectedMountId))
+            {
+                if (m.net.ID.Value != expectedMountId)
+                {
+                    _autorunNpcNetIds.Remove(npcNetId);
+                    _npcToTrackedMountNetId.Remove(npcNetId);
+                    return;
+                }
+            }
+            else if (!PrefabChainLooksLikeWaterWheel(m))
             {
                 _autorunNpcNetIds.Remove(npcNetId);
                 return;
             }
 
+            if (!TryWriteMovementButtons(npc))
+                return;
+
+            if (scheduleDoubleApply && _cfg.AutorunDoubleApplyNextTick)
+            {
+                var nid = npcNetId;
+                NextTick(() =>
+                {
+                    if (!_autorunNpcNetIds.Contains(nid)) return;
+                    ApplyAutorunInput(nid, false);
+                });
+            }
+        }
+
+        private bool TryWriteMovementButtons(BasePlayer npc)
+        {
             var inp = npc.serverInput;
-            if (inp?.current == null) return;
+            if (inp?.current == null) return false;
 
             inp.current.buttons |= (int)BUTTON.FORWARD;
             if (_cfg.AutorunUseSprint)
                 inp.current.buttons |= (int)BUTTON.SPRINT;
+            npc.SendNetworkUpdate();
+            return true;
         }
 
-        private bool IsNpcOnWaterWheelMount(BasePlayer npc)
+        private bool PrefabChainLooksLikeWaterWheel(BaseMountable mount)
         {
-            if (npc == null || !npc.isMounted) return false;
-            var m = npc.GetMounted();
-            if (m == null) return false;
-            var ent = m as BaseEntity;
-            for (var i = 0; i < 16 && ent != null; i++)
+            if (mount == null) return false;
+            var sub = _cfg.WaterWheelPrefabSubstring ?? "waterwheel";
+            for (var ent = mount as BaseEntity; ent != null; ent = ent.GetParentEntity())
             {
                 var pn = ent.PrefabName ?? "";
-                if (pn.IndexOf(_cfg.WaterWheelPrefabSubstring ?? "waterwheel", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (pn.IndexOf(sub, StringComparison.OrdinalIgnoreCase) >= 0)
                     return true;
-                ent = ent.GetParentEntity();
             }
 
             return false;
+        }
+
+        private void RememberMountForNpc(BasePlayer npc, BaseMountable mount)
+        {
+            if (npc?.net == null || mount?.net == null) return;
+            _npcToTrackedMountNetId[npc.net.ID.Value] = mount.net.ID.Value;
+        }
+
+        private void ForgetNpc(BasePlayer npc)
+        {
+            if (npc?.net == null) return;
+            var id = npc.net.ID.Value;
+            _autorunNpcNetIds.Remove(id);
+            _npcToTrackedMountNetId.Remove(id);
         }
 
         /// <summary>
@@ -168,8 +225,10 @@ namespace Oxide.Plugins
                 return false;
             }
 
+            ForgetNpc(npc);
+
             if (npc.isMounted)
-                npc.DismountObject();
+                TryDismountNpc(npc);
 
             mount.MountPlayer(npc);
             var ok = npc.GetMounted() != null;
@@ -179,8 +238,13 @@ namespace Oxide.Plugins
                 return false;
             }
 
+            RememberMountForNpc(npc, mount);
             if (_cfg.AutorunAfterMount)
+            {
                 _autorunNpcNetIds.Add(npc.net.ID.Value);
+                ApplyAutorunInput(npc.net.ID.Value, true);
+            }
+
             return true;
         }
 
@@ -195,13 +259,28 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            if (!npc.isMounted || !IsNpcOnWaterWheelMount(npc))
+            if (!npc.isMounted)
             {
-                issuer?.ChatMessage("[BaseBot] Bot must be mounted on the electric water wheel.");
+                issuer?.ChatMessage("[BaseBot] Bot must be mounted.");
                 return false;
             }
 
+            var m = npc.GetMounted();
+            if (m == null || m.net == null)
+            {
+                issuer?.ChatMessage("[BaseBot] No active mount.");
+                return false;
+            }
+
+            if (!_npcToTrackedMountNetId.ContainsKey(npc.net.ID.Value) && !PrefabChainLooksLikeWaterWheel(m))
+            {
+                issuer?.ChatMessage("[BaseBot] Mount does not look like the electric water wheel.");
+                return false;
+            }
+
+            RememberMountForNpc(npc, m);
             _autorunNpcNetIds.Add(npc.net.ID.Value);
+            ApplyAutorunInput(npc.net.ID.Value, true);
             return true;
         }
 
@@ -209,11 +288,7 @@ namespace Oxide.Plugins
         [HookMethod("StopWaterWheelAutorun")]
         public object StopWaterWheelAutorun(ulong npcEntityNetId, BasePlayer issuer)
         {
-            var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
-            if (npc != null && npc.net != null)
-                _autorunNpcNetIds.Remove(npc.net.ID.Value);
-            else
-                _autorunNpcNetIds.Remove(npcEntityNetId);
+            _autorunNpcNetIds.Remove(npcEntityNetId);
             return true;
         }
 
@@ -223,6 +298,7 @@ namespace Oxide.Plugins
         {
             if (npcEntityNetId == 0UL) return false;
             _autorunNpcNetIds.Remove(npcEntityNetId);
+            _npcToTrackedMountNetId.Remove(npcEntityNetId);
 
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
             if (npc == null || npc.IsDestroyed)
@@ -231,9 +307,18 @@ namespace Oxide.Plugins
                 return false;
             }
 
+            TryDismountNpc(npc);
+            return true;
+        }
+
+        private static void TryDismountNpc(BasePlayer npc)
+        {
+            if (npc == null || npc.IsDestroyed || !npc.isMounted) return;
+            var mount = npc.GetMounted();
+            if (mount != null && !mount.IsDestroyed)
+                mount.DismountPlayer(npc);
             if (npc.isMounted)
                 npc.DismountObject();
-            return true;
         }
 
         private static BaseMountable ResolveWaterWheelMountable(BaseEntity start, string prefabSub)
