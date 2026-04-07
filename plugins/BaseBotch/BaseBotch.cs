@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.5")]
+    [Info("BaseBotch", "RustMaxx", "1.3.6")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -598,6 +598,22 @@ namespace Oxide.Plugins
                 }
             }
 
+            // Force run-state booleans on explicit wheel components.
+            if (tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                foreach (var f in comp.GetType().GetFields(bf))
+                {
+                    if (f.FieldType != typeof(bool) || !BoolNameLooksLikeRunSignal(f.Name)) continue;
+                    try { f.SetValue(comp, true); } catch { }
+                }
+                foreach (var p in comp.GetType().GetProperties(bf))
+                {
+                    if (!p.CanWrite || p.PropertyType != typeof(bool) || !BoolNameLooksLikeRunSignal(p.Name)) continue;
+                    try { p.SetValue(comp, true, null); } catch { }
+                }
+            }
+
             if (_cfg.AutorunInvokeWheelMethods)
                 TryInvokeWheelInputLikeMethods(comp, npc);
         }
@@ -731,6 +747,14 @@ namespace Oxide.Plugins
             if (fn.IndexOf("watts", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (fn.IndexOf("charge", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (fn.IndexOf("velocity", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("watt", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("generate", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("produc", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("desired", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("target", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                (fn.IndexOf("power", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 fn.IndexOf("rate", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 fn.IndexOf("rpm", StringComparison.OrdinalIgnoreCase) >= 0)) return true;
             if (fn.IndexOf("rate", StringComparison.OrdinalIgnoreCase) >= 0 &&
                 fn.IndexOf("separate", StringComparison.OrdinalIgnoreCase) < 0) return true;
             if (fn.IndexOf("current", StringComparison.OrdinalIgnoreCase) >= 0 &&
@@ -749,6 +773,17 @@ namespace Oxide.Plugins
             if (tn.IndexOf("Human", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (tn.IndexOf("Hamster", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (tn.IndexOf("IOEntity", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        private static bool BoolNameLooksLikeRunSignal(string name)
+        {
+            if (name.IndexOf("running", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("isrunning", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("active", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("producing", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("generating", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("spinning", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             return false;
         }
 
