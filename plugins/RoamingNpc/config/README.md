@@ -29,6 +29,22 @@ Use the **same string** in TikFinity **Roaming NPC** connections (**Roaming temp
 
 Each bot block must have **`"Enable bot?": true`** or `SpawnFromTemplateForBridge` will refuse to spawn.
 
+### MaxxInvaders: `No bot key "bunny1" under Bots settings`
+
+That message means **`oxide/config/RoamingNPCs.json` on the game server does not define** a bot template named **`bunny1`**. The RustMaxx repo includes it in the reference [`RoamingNPCs.json`](./RoamingNPCs.json), but you must **merge it into the file on the server** (or replace the file if you manage config only from the repo).
+
+1. Open **`bunny1.merge-fragment.json`** in this folder — it contains only the **`bunny1`** object.
+2. In your server’s **`oxide/config/RoamingNPCs.json`**, under **`"Bots settings"`** (English) or **`"Настройка ботов"`** (Russian), add a comma after the last existing bot and paste the **`"bunny1": { ... }`** entry from the fragment (merge into the same object that holds `bob_resources_farmer`, etc.).
+3. Run **`oxide.reload RoamingNPCs`** (or restart the server).
+
+To regenerate the fragment after editing the full template in `RoamingNPCs.json`:
+
+```bash
+python scripts/extract-roaming-bunny1-fragment.py
+```
+
+If you prefer not to use **`bunny1`**, point TikFinity at **`maxxinvaders`** with **`?template=`** set to a key that **already exists** on your server (e.g. `streamer_patrol`), or set **`ScientistFallbackEnabled=true`** in MaxxInvaders only if you accept vanilla scientist fallback when the template is missing.
+
 ## NPCMaxx RCON
 
 ```text

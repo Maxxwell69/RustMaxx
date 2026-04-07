@@ -1,0 +1,520 @@
+{
+  "bunny1": {
+    "Enable bot?": true,
+    "How many of these bots can be spawned?": 1,
+    "Bot appearance (used if bot's amount - 1, use the id in the range of the specified number of digits for the bot ID generator or leave 0 for random appearance)": 100000000,
+    "Bot name (leave empty for random)": "Bunny",
+    "Use random names from data file? (/data/RoamingNPCs/RandomNicknames, or Rust's random names will be used)": false,
+    "Allow wounded state?": true,
+    "Respawn timer (min 3 seconds)": 300.0,
+    "Enable periodic bot reinitialization? (can improve performance)": false,
+    "What respawn mode to use? (RandomPoint, RoadPoint, SpawnPoint, SpawnsDatabase)": "RandomPoint",
+    "What roads use to spawn? (DefaultRoads, MainRoads, SideRoads, TrailRoads, Rails)": "DefaultRoads",
+    "Spawn points filename (for SpawnsDatabase respawn mode)": "",
+    "Maximum health": 100.0,
+    "What spawns on death (PlayerCorpse, NpcCorpse, Backpack)": "PlayerCorpse",
+    "Keep clothes on NpcCorpse?": true,
+    "How many items will be destroyed when Backpack is selected (0 - 100%)": 50.0,
+    "List of items that won't drop on death": [],
+    "Bot behaviour - Aggressive, Friendly, Defensive": "Friendly",
+    "Enable random bot behaviour?": false,
+    "Controller setup": {
+      "Brain timer tick (0.01 - 1)": 0.1,
+      "Controls timer tick (0.01 - 1)": 0.5,
+      "Accuracy of fire (lower is better)": 5.0,
+      "Find entities radius": 30.0,
+      "Use only NavMesh navigation?": true,
+      "Movement speed (1 - 4)": 4,
+      "Movement speed in water (1 - 4)": 2,
+      "Suicide timer if the bot does not reach the destination point (0 - disables the timer)": 600.0,
+      "Timer attempt to avoid obstacle if the bot does not reach the target route": 3.0,
+      "Damage rate from water": 1.0,
+      "Damage rate to NPC targets": 2.0,
+      "Damage rate to animals": 2.0,
+      "Damage rate to players": 0.8,
+      "Damage rate from NPCs": 0.2,
+      "Damage rate from animals": 0.2,
+      "Damage rate from players": 0.8
+    },
+    "Wear items (on respawn)": {
+      "Lock container? (true - after death loot won't drop)": true,
+      "Allow bot to wear found clothes?": false,
+      "List of items": [
+        {
+          "Item shortname or ID": "attire.bunny.onesie",
+          "Item name (leave empty for default)": "",
+          "Item skin": 0,
+          "Enable chance of drop on death?": false,
+          "Chance of drop on death (0-100)": 100,
+          "Attachments": []
+        },
+        {
+          "Item shortname or ID": "attire.bunnyears",
+          "Item name (leave empty for default)": "",
+          "Item skin": 0,
+          "Enable chance of drop on death?": false,
+          "Chance of drop on death (0-100)": 100,
+          "Attachments": []
+        }
+      ]
+    },
+    "Allow dropping items on belt when dead?": false,
+    "Resource collection": {
+      "Allow to gather wood?": true,
+      "Allow to use fuel for chainsaw?": false,
+      "Allow to mine ore?": true,
+      "Allow to loot barrels?": false,
+      "Allow to loot road signs?": false,
+      "Allow to pickup resources?": true,
+      "Allow to pickup dropped items?": false,
+      "Allow to loot containers?": false,
+      "Allow to loot corpses?": false,
+      "Allow to harvest corpses?": false,
+      "List of prefabs of corpses to harvest": [
+        "assets/rust.ai/agents/boar/boar.corpse.prefab",
+        "polarbear.corpse",
+        "bear.corpse",
+        "stag.corpse",
+        "wolf.corpse",
+        "crocodile.corpse",
+        "panther.corpse",
+        "tiger.corpse",
+        "chicken.corpse"
+      ],
+      "List of prefabs blocked for mining": [
+        "assets/bundled/prefabs/autospawn/resource/vine_swinging/vineswingingtree03.prefab",
+        "assets/bundled/prefabs/autospawn/resource/vine_swinging/vineswingingtreeprefab.prefab",
+        "assets/bundled/prefabs/autospawn/resource/vine_swinging/vineswingingtree02.prefab"
+      ]
+    },
+    "Fights with NPCs and players": {
+      "After how many seconds forget the target if bot couldn't reach it?": 20.0,
+      "Chance of crouching during fight to dodge": 50.0,
+      "Ignore bots in vehicles? (TrafficDrivers, BikeDrivers, HeliPilots and etc.)": true,
+      "Ignore real players?": false,
+      "(WarMode plugin) Ignore player if they are in PVE mode?": false,
+      "Ignore sleeping players?": false,
+      "Ignore other RNPC bots?": false,
+      "Ignore other NPCs?": false,
+      "Maximum distance for attack from weapon (not less than 5)": 30.0,
+      "Maximum distance for attack from melee (not less than 2)": 1.0
+    },
+    "Animal hunting": {
+      "After how many seconds forget the target if bot couldn't reach it?": 20.0,
+      "Chance of crouching during fight to dodge": 50.0,
+      "Ignore bots in vehicles? (TrafficDrivers, BikeDrivers, HeliPilots and etc.)": true,
+      "Ignore real players?": false,
+      "(WarMode plugin) Ignore player if they are in PVE mode?": false,
+      "Ignore sleeping players?": false,
+      "Ignore other RNPC bots?": false,
+      "Ignore other NPCs?": false,
+      "Allow to hunt? (true - will attack animals even if they are not attacking)": false,
+      "Make melee weapons preferred for hunting?": true,
+      "Maximum distance for attack from weapon (not less than 5)": 30.0,
+      "Maximum distance for attack from melee (not less than 2)": 2.0,
+      "List of prefabs of animals to block hunting them": []
+    },
+    "Inventory overflow": {
+      "Stash setup (bot will put items in the stash)": {
+        "Enable?": true,
+        "Hide stash?": true,
+        "Life time (0 - will exist until restart)": 3600.0,
+        "Maximum amount to use (0 - without limit)": 10
+      },
+      "Box setup (bot will put items in the box)": {
+        "Enable?": true,
+        "Use small box?": true,
+        "Box skin": 0,
+        "Life time (0 - will exist until restart or until it dies)": 3600.0,
+        "Maximum amount to use (0 - without limit)": 5,
+        "Another container prefab (you can leave it empty)": ""
+      }
+    },
+    "Monuments visit setup": {
+      "Amount of random positions to visit on monument": 5,
+      "Suicide timer if the bot gets stuck in this state (0 - disables the timer)": 120.0,
+      "List of monument prefabs blocked for visiting": [
+        "assets/bundled/prefabs/autospawn/monument/lighthouse/lighthouse.prefab"
+      ]
+    },
+    "Loot on spawn": [],
+    "Items for ore mining": {
+      "Enable random order instead of priority?": false,
+      "List of items (in priority order)": [
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "jackhammer",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "lumberjack.pickaxe",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "diverpickaxe",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": true,
+          "Allow to give item when respawning?": true,
+          "Item": {
+            "Item shortname or ID": "pickaxe",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "stone.pickaxe",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "rock",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        }
+      ]
+    },
+    "Items for tree gathering": {
+      "Enable random order instead of priority?": false,
+      "List of items (in priority order)": [
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "chainsaw",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "lumberjack.hatchet",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "frontier_hatchet",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": true,
+          "Allow to give item when respawning?": true,
+          "Item": {
+            "Item shortname or ID": "hatchet",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "stonehatchet",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "rock",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        }
+      ]
+    },
+    "Items for fights": {
+      "Enable random order instead of priority?": false,
+      "Use ammo?": false,
+      "List of items (in priority order)": [
+        {
+          "Allow to create item if it is not in inventory?": true,
+          "Allow to give item when respawning?": true,
+          "Item": {
+            "Item shortname or ID": "bow.hunting",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "1965232394",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "salvaged.cleaver",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        }
+      ],
+      "Amount of ammo to give for weapon if respawning is allowed": 128
+    },
+    "Items for harvesting animals": {
+      "Enable random order instead of priority?": false,
+      "List of items (in priority order)": [
+        {
+          "Allow to create item if it is not in inventory?": true,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "knife.skinning",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        }
+      ]
+    },
+    "Items for healing": {
+      "Enable random order instead of priority?": false,
+      "List of items (in priority order)": [
+        {
+          "Allow to create item if it is not in inventory?": false,
+          "Allow to give item when respawning?": true,
+          "Item": {
+            "Item shortname or ID": "syringe.medical",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Amount of items to give when respawning": 5,
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        },
+        {
+          "Allow to create item if it is not in inventory?": true,
+          "Allow to give item when respawning?": false,
+          "Item": {
+            "Item shortname or ID": "bandage",
+            "Item name (leave empty for default)": "",
+            "Item skin": 0,
+            "Enable chance of drop on death?": false,
+            "Chance of drop on death (0-100)": 100,
+            "Attachments": []
+          },
+          "Amount of items to give when respawning": 1,
+          "Ammo shortname for weapon (leave empty to keep default)": ""
+        }
+      ]
+    },
+    "Voice phrases for different actions (you can download default voice phraes from plugin page)": {
+      "Use voice phrases?": false,
+      "Phrases for the Miner state": {
+        "Phrases when picking up resources": {
+          "Phrases": [
+            "uinston2/miner/pickup_collectable/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when picking up items": {
+          "Phrases": [
+            "uinston2/miner/pickup_collectable/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when gathering trees": {
+          "Phrases": [
+            "uinston2/miner/mining_tree/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when mining ore": {
+          "Phrases": [
+            "uinston2/miner/mining_ore/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when looting containers": {
+          "Phrases": [
+            "uinston2/miner/looting/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when breaking containers (barrels, signs and etc.)": {
+          "Phrases": [
+            "uinston2/miner/breaking/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when looting corpses": {
+          "Phrases": [
+            "uinston2/miner/looting/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when harvesting corpses": {
+          "Phrases": [
+            "uinston2/miner/butcher_corpse/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        }
+      },
+      "Phrases for the Hunter state": {
+        "Phrases before starting to attack": {
+          "Phrases": [
+            "uinston2/hunter/start_attack/1",
+            "uinston2/hunter/start_attack/2"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        }
+      },
+      "Phrases for the Fight state": {
+        "Phrases before starting to attack": {
+          "Phrases": [
+            "uinston2/attacker/start_attack/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when the bot does not see the target": {
+          "Phrases": [
+            "uinston2/attacker/not_visible/1",
+            "uinston2/attacker/not_visible/2",
+            "uinston2/attacker/not_visible/3"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when the bot runs away from the attacker": {
+          "Phrases": [
+            "uinston2/attacker/run_away/1",
+            "uinston2/attacker/run_away/2",
+            "uinston2/attacker/run_away/3"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        }
+      },
+      "Phrases for the Researcher state": {
+        "Phrases before starting to move to the monument point": {
+          "Phrases": [
+            "uinston2/researcher/before_move/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        },
+        "Phrases when reaching the destination": {
+          "Phrases": [
+            "uinston2/researcher/after_move/1"
+          ],
+          "Chance of using phrases (% 0 - 100)": 30.0
+        }
+      },
+      "Phrases when creating a container with resources": {
+        "Phrases": [
+          "uinston2/full_state/1",
+          "uinston2/full_state/2"
+        ],
+        "Chance of using phrases (% 0 - 100)": 30.0
+      },
+      "Phrases when healing": {
+        "Phrases": [
+          "uinston2/medical_state/1",
+          "uinston2/medical_state/2",
+          "uinston2/medical_state/3"
+        ],
+        "Chance of using phrases (% 0 - 100)": 30.0
+      }
+    }
+  }
+}
