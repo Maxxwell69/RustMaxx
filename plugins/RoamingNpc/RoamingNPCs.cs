@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.29")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.31")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -41,6 +41,8 @@ namespace Oxide.Plugins
         private Timer _bridgeDepositApproachTimer;
         /// <summary>MaxxInvaders bridge <c>deposit</c>: bot must be this close (m) before items move into storage.</summary>
         private const float BridgeDepositApproachCompleteDistance = 2f;
+        /// <summary>ApplyBridgeTask: minimum brain <see cref="ControllerSetup.RadiusFindEntity"/> for bridge bots (collectibles + Vis scan).</summary>
+        private const float BridgeTaskMinFindRadius = 48f;
         public Configuration config;
         public DataBots Data;
         public List<string> NicknamesData;
@@ -3421,7 +3423,7 @@ namespace Oxide.Plugins
                 }
 
                 if (pet.MoveController != null)
-                    pet.MoveController.SetDestination(stand, _ => { }, false);
+                    pet.MoveController.SetDestinationFast(stand, _ => { }, false);
             }
         }
 
@@ -6427,6 +6429,33 @@ namespace Oxide.Plugins
                     Move(EndPoint);
                 }
             }
+
+            /// <summary>MaxxInvaders bridge deposit: use max configured walk speed immediately (avoids slow ramp from <c>currentSpeed == 0</c>).</summary>
+            public void SetDestinationFast(Vector3 worldPos, UnityAction<bool> callback, bool faceMoveTowardsTarget = false)
+            {
+                if (!navigator)
+                {
+                    if (callback != null) callback.Invoke(false);
+                    return;
+                }
+
+                Reset();
+
+                owner.Ducked = false;
+                currentSpeed = Mathf.Clamp(MaxSpeedMoveToGround, 0, 3);
+                finishCallback = callback;
+                this.target = null;
+
+                endPoint = worldPos;
+
+                if (inWater) SetFlag(ModeMove.WaterMoveDown, true);
+                else
+                {
+                    SetMoveTo(true);
+                    Move(EndPoint);
+                }
+            }
+
             protected bool WaterMoveDown(Vector3 target)
             {
                 if (owner.transform.position.y > target.y && !Physics.Raycast(owner.transform.position, Vector3.down, 0.1f, layerMaskToObstacle))
@@ -9382,7 +9411,7 @@ namespace Oxide.Plugins
                 {
                     pet.Data.BridgeDepositApproachActive = true;
                     pet.Data.BridgeDepositApproachContainerNetId = be.net.ID.Value;
-                    pet.MoveController.SetDestination(stand, _ => { }, false);
+                    pet.MoveController.SetDestinationFast(stand, _ => { }, false);
                     return -3;
                 }
 
@@ -9451,63 +9480,101 @@ namespace Oxide.Plugins
                     m.CanButcherCorpse = true;
                 }
 
+                /// <summary>Wider Vis/collectible scan so bridge bots notice ground loot and resources.</summary>
+                void BridgeBoostFindRadius()
+                {
+                    setup.Controller ??= new ControllerSetup();
+                    if (setup.Controller.RadiusFindEntity < BridgeTaskMinFindRadius)
+                        setup.Controller.RadiusFindEntity = BridgeTaskMinFindRadius;
+                }
+
+                /// <summary>Clear gather/protect patrol so switching wood/stone/etc. does not leave conflicting FSM goals.</summary>
+                void StripCompanionPatrolAndProtect()
+                {
+                    setup.BattleState ??= new SetupBattle();
+                    setup.BridgePatrol ??= new SetupBridgePatrol();
+                    setup.BattleState._protectBridgeAnchorPlayer = false;
+                    setup.BridgePatrol.Enable = false;
+                }
+
+                /// <summary>Allow fighting back vs NPCs/players (except hunt-only keeps real players ignored).</summary>
+                void BridgeBattleDefenseBaseline(bool ignoreRealPlayersForAnimalHunt)
+                {
+                    setup.BattleState ??= new SetupBattle();
+                    setup.BattleState._ignoreNPCs = false;
+                    setup.BattleState._ignoreRNPC = true;
+                    setup.BattleState._ignorePersonalNpcBots = true;
+                    setup.BattleState._ignoreRealPlayers = ignoreRealPlayersForAnimalHunt;
+                }
+
                 var t = (taskName ?? "").Trim().ToLowerInvariant();
                 switch (t)
                 {
                     case "wood":
+                        StripCompanionPatrolAndProtect();
+                        BridgeBoostFindRadius();
+                        BridgeBattleDefenseBaseline(false);
                         MinerOff();
                         setup.MinerState.CanMiningWood = true;
                         setup.MinerState.CanFuelUseFromChainsaw = true;
+                        setup.MinerState.CanPickupDroppedItems = true;
                         setup.HunterState.CanHunt = false;
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
                         break;
                     case "stone":
+                        StripCompanionPatrolAndProtect();
+                        BridgeBoostFindRadius();
+                        BridgeBattleDefenseBaseline(false);
                         MinerOff();
                         setup.MinerState.CanMiningOre = true;
+                        setup.MinerState.CanPickupDroppedItems = true;
                         setup.HunterState.CanHunt = false;
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
                         break;
                     case "cloth":
+                        StripCompanionPatrolAndProtect();
+                        BridgeBoostFindRadius();
+                        BridgeBattleDefenseBaseline(false);
                         MinerOff();
                         setup.MinerState.CanPickupCollectibleItems = true;
+                        setup.MinerState.CanPickupDroppedItems = true;
                         setup.HunterState.CanHunt = false;
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
                         break;
                     case "hunt":
+                        StripCompanionPatrolAndProtect();
+                        BridgeBoostFindRadius();
+                        BridgeBattleDefenseBaseline(true);
                         MinerOff();
                         setup.HunterState.CanHunt = true;
+                        setup.MinerState.CanPickupDroppedItems = true;
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
-                        setup.BattleState._ignoreNPCs = false;
-                        setup.BattleState._ignoreRNPC = true;
-                        setup.BattleState._ignorePersonalNpcBots = true;
-                        setup.BattleState._ignoreRealPlayers = true;
                         break;
                     case "protect":
+                        BridgeBoostFindRadius();
+                        BridgeBattleDefenseBaseline(false);
                         MinerOff();
+                        setup.MinerState.CanPickupDroppedItems = true;
                         setup.HunterState.CanHunt = false;
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
                         setup.BattleState._protectBridgeAnchorPlayer = true;
-                        setup.BattleState._ignoreNPCs = false;
-                        setup.BattleState._ignoreRNPC = true;
-                        setup.BattleState._ignorePersonalNpcBots = true;
                         setup.BridgePatrol.Enable = true;
                         if (setup.BridgePatrol.RadiusMeters < 8f) setup.BridgePatrol.RadiusMeters = 28f;
                         break;
                     case "gather":
                     case "all":
+                        BridgeBoostFindRadius();
+                        BridgeBattleDefenseBaseline(false);
                         MinerGatherAll();
                         setup.HunterState.CanHunt = false;
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
                         setup.BattleState._protectBridgeAnchorPlayer = true;
-                        setup.BattleState._ignoreNPCs = false;
-                        setup.BattleState._ignoreRNPC = true;
-                        setup.BattleState._ignorePersonalNpcBots = true;
                         setup.BridgePatrol.Enable = true;
                         if (setup.BridgePatrol.RadiusMeters < 8f) setup.BridgePatrol.RadiusMeters = 28f;
                         setup.FullState.BridgeUseAnchorOwnedStorage = true;
@@ -9515,7 +9582,11 @@ namespace Oxide.Plugins
                             setup.FullState.BridgeAnchorStorageSearchRadius = 18f;
                         break;
                     case "idle":
+                        StripCompanionPatrolAndProtect();
+                        BridgeBoostFindRadius();
+                        BridgeBattleDefenseBaseline(false);
                         MinerOff();
+                        setup.MinerState.CanPickupDroppedItems = true;
                         setup.HunterState.CanHunt = false;
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
@@ -9544,10 +9615,11 @@ namespace Oxide.Plugins
             var bp = setup.BridgePatrol;
             var fs = setup.FullState;
 
-            bool MinerOff()
+            /// <summary>Core gather off; dropped items allowed (bridge tasks use ground loot alongside main job).</summary>
+            bool MinerCoreOffDroppedOk()
             {
                 return !m.CanMiningWood && !m.CanFuelUseFromChainsaw && !m.CanMiningOre && !m.CanMiningBarrel &&
-                       !m.CanMiningRoadSign && !m.CanPickupCollectibleItems && !m.CanPickupDroppedItems &&
+                       !m.CanMiningRoadSign && !m.CanPickupCollectibleItems &&
                        !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse;
             }
 
@@ -9563,22 +9635,22 @@ namespace Oxide.Plugins
             var patrol = bp != null && bp.Enable;
             var stor = fs != null && fs.BridgeUseAnchorOwnedStorage;
 
-            if (hunt && MinerOff()) return "hunt";
+            if (hunt && MinerCoreOffDroppedOk()) return "hunt";
             if (MinerGatherAll() && prot && patrol && stor) return "gather";
-            if (MinerOff() && !hunt && prot && patrol) return "protect";
+            if (MinerCoreOffDroppedOk() && !hunt && prot && patrol) return "protect";
             if (m.CanMiningWood && m.CanFuelUseFromChainsaw && !m.CanMiningOre && !m.CanMiningBarrel &&
-                !m.CanMiningRoadSign && !m.CanPickupCollectibleItems && !m.CanPickupDroppedItems &&
+                !m.CanMiningRoadSign && !m.CanPickupCollectibleItems &&
                 !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse)
                 return "wood";
             if (!m.CanMiningWood && !m.CanFuelUseFromChainsaw && m.CanMiningOre && !m.CanMiningBarrel &&
-                !m.CanMiningRoadSign && !m.CanPickupCollectibleItems && !m.CanPickupDroppedItems &&
+                !m.CanMiningRoadSign && !m.CanPickupCollectibleItems &&
                 !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse)
                 return "stone";
             if (!m.CanMiningWood && !m.CanFuelUseFromChainsaw && !m.CanMiningOre && !m.CanMiningBarrel &&
-                !m.CanMiningRoadSign && m.CanPickupCollectibleItems && !m.CanPickupDroppedItems &&
+                !m.CanMiningRoadSign && m.CanPickupCollectibleItems &&
                 !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse)
                 return "cloth";
-            if (MinerOff() && !hunt) return "idle";
+            if (MinerCoreOffDroppedOk() && !hunt && !prot && !patrol) return "idle";
             return "mixed";
         }
 
