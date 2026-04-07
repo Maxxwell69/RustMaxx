@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.4")]
+    [Info("BaseBotch", "RustMaxx", "1.4.5")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -1141,7 +1141,8 @@ namespace Oxide.Plugins
             try
             {
                 var names = new List<string>();
-                var wheelMethodHints = new List<string>();
+                var mountableMethodHints = new List<string>();
+                var electricMethodHints = new List<string>();
                 foreach (var c in comps)
                 {
                     if (c == null) continue;
@@ -1169,9 +1170,16 @@ namespace Oxide.Plugins
                                 mn.IndexOf("power", StringComparison.OrdinalIgnoreCase) < 0)
                                 continue;
                             var sig = $"{n}.{mn}({m.GetParameters().Length})";
-                            if (!wheelMethodHints.Contains(sig))
-                                wheelMethodHints.Add(sig);
-                            if (wheelMethodHints.Count >= 20) break;
+                            if (n.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                if (!electricMethodHints.Contains(sig))
+                                    electricMethodHints.Add(sig);
+                            }
+                            else
+                            {
+                                if (!mountableMethodHints.Contains(sig))
+                                    mountableMethodHints.Add(sig);
+                            }
                         }
                     }
                     if (names.Count >= 24)
@@ -1179,8 +1187,10 @@ namespace Oxide.Plugins
                 }
 
                 Puts($"[BaseBotch][debug] wheelComponents mount={mountId} count={comps?.Length ?? 0} types=[{string.Join(", ", names.ToArray())}]");
-                if (wheelMethodHints.Count > 0)
-                    Puts($"[BaseBotch][debug] wheelMethods mount={mountId} methods=[{string.Join(", ", wheelMethodHints.ToArray())}]");
+                if (mountableMethodHints.Count > 0)
+                    Puts($"[BaseBotch][debug] wheelMethodsMountable mount={mountId} methods=[{string.Join(", ", mountableMethodHints.ToArray())}]");
+                if (electricMethodHints.Count > 0)
+                    Puts($"[BaseBotch][debug] wheelMethodsElectric mount={mountId} methods=[{string.Join(", ", electricMethodHints.ToArray())}]");
             }
             catch
             {
