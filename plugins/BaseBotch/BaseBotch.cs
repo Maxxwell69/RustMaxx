@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.7")]
+    [Info("BaseBotch", "RustMaxx", "1.4.8")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -248,6 +248,8 @@ namespace Oxide.Plugins
 
             var wrote = TryWriteMovementButtons(npc);
             TryForceMovementModelState(npc);
+            if (_cfg.DebugWheelAutorun)
+                EnsureWheelDebugDumpForMounted(npc);
             if (_cfg.AutorunTryWheelPowerReflection)
                 TryBumpWheelPowerViaReflection(npc);
 
@@ -496,6 +498,25 @@ namespace Oxide.Plugins
                 BumpWheelComponentFieldsAndMethods(comp, npc);
                 if (_cfg.DebugWheelAutorun)
                     TryLogWheelSignalValues(comp, npc, mountId);
+            }
+        }
+
+        private void EnsureWheelDebugDumpForMounted(BasePlayer npc)
+        {
+            var m = npc?.GetMounted();
+            if (m == null || m.net == null) return;
+            var mountId = m.net.ID.Value;
+            if (_wheelComponentDumped.ContainsKey(mountId) && _wheelMemberDumped.ContainsKey(mountId)) return;
+            var comps = BuildWheelBumpComponentCache(m);
+            if (!_wheelComponentDumped.ContainsKey(mountId))
+            {
+                _wheelComponentDumped[mountId] = true;
+                DumpWheelComponentsForDebug(mountId, comps);
+            }
+            if (!_wheelMemberDumped.ContainsKey(mountId))
+            {
+                _wheelMemberDumped[mountId] = true;
+                DumpElectricWheelMembersForDebug(mountId, comps);
             }
         }
 
