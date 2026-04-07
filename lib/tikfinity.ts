@@ -294,7 +294,7 @@ export const ACTION_META: Record<
   bunny1npc: {
     label: "Bunny viewer bot (spawn)",
     description:
-      "Runs MaxxInvaders maxxinvaders.spawn with RoamingNPCs template bunny1 (viewer name + id from webhook). Same pipeline as maxxinvaders; override template with ?template= or connection Roaming key. Requires MaxxInvaders + RoamingNPCs; not RustChaos.",
+      "MaxxInvaders spawn using the same Roaming template as normal viewer bots (default streamer_patrol). Only the outfit is overridden to bunny onesie + ears — no separate bunny1 JSON bot key. Optional ?template= to use another Roaming key. Requires MaxxInvaders 1.7.8+ and RoamingNPCs 0.5.23+.",
     exampleGifts: ["BunnyBot", "!bunny1npc"],
   },
   npcmaxx: {

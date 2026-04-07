@@ -29,7 +29,10 @@ import {
   isCrewRegistered,
 } from "@/lib/crew-rnpc-registrations";
 import { npcmaxxRconSpawn } from "@/lib/npcmaxx-rcon";
-import { maxxinvadersRconSpawn } from "@/lib/maxxinvaders-rcon";
+import {
+  maxxinvadersRconSpawn,
+  MAXX_INVADERS_BUNNY_WEAR_PIPE,
+} from "@/lib/maxxinvaders-rcon";
 import { resolveMaxxInvadersAnchorSteam } from "@/lib/maxxinvaders-anchor-steam";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
@@ -552,10 +555,13 @@ async function runWebhook(request: NextRequest, body: unknown) {
       connectionFromAdmin?.server_action === "bunny1npc"
         ? parseNpcTemplateKey(connectionFromAdmin.npc_template_key)
         : null;
+    // bunny1npc = same Roaming template as normal viewer spawns (default streamer_patrol) + bunny wear pipe only.
     const roamingBotKey =
-      action === "bunny1npc"
-        ? (roamingFromExplicit ?? roamingFromConnection ?? "bunny1")
-        : (roamingFromExplicit ?? roamingFromConnection ?? DEFAULT_MAXXINVADERS_ROAMING_BOT);
+      roamingFromExplicit ??
+      roamingFromConnection ??
+      DEFAULT_MAXXINVADERS_ROAMING_BOT;
+    const roamingWearPipe =
+      action === "bunny1npc" ? MAXX_INVADERS_BUNNY_WEAR_PIPE : null;
     const viewerId =
       extractTikTokUniqueIdFromBody(body) ??
       `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -613,6 +619,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
       mode,
       roamingBotKey,
       anchorSteam64,
+      roamingWearPipe,
       connectionId: connectionFromAdmin?.id ?? null,
       tikfinityEventName: tikfinityEventNameForLog,
     });
@@ -675,12 +682,13 @@ async function runWebhook(request: NextRequest, body: unknown) {
         mode,
         kit,
         roamingBotKey,
+        roamingWearPipe: roamingWearPipe ?? undefined,
         command: spawnMi.command,
         rconResponse: spawnMi.rconResponse,
         anchorSteam64: anchorSteam64 ?? null,
         debug:
           action === "bunny1npc"
-            ? "bunny1npc uses MaxxInvaders maxxinvaders.spawn with RoamingNPCs template bunny1 (override with ?template=). Requires MaxxInvaders + RoamingNPCs on the server."
+            ? `bunny1npc: MaxxInvaders + Roaming template "${roamingBotKey}" (default streamer_patrol) with bunny outfit override. No separate bunny1 bot key required. Needs RoamingNPCs 0.5.23+ and MaxxInvaders 1.7.8+.`
             : anchorSteam64 != null
               ? "maxxinvaders.spawn used anchor Steam64: spawn ring + RoamingNPCs bridge anchor near that player (must be online or sleeping). Tune MaxxInvaders.json MaxDistanceFromAnchor / MinimumSpawnRadiusFromAnchor to tighten patrol."
               : "maxxinvaders.spawn succeeded with no anchorSteam — set ?anchorSteam=17digit, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID so the bot stays near you (streamer/base owner must be on server or sleeping).",

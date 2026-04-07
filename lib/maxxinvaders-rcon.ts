@@ -32,8 +32,16 @@ function quoteRconArg(s: string): string {
   return `"${cleaned}"`;
 }
 
+/** Default wear pipe for TikFinity `bunny1npc` (Roaming bridge replaces outfit only; template stays streamer_patrol). */
+export const MAXX_INVADERS_BUNNY_WEAR_PIPE = "attire.bunny.onesie|attire.bunnyears";
+
+function sanitizeWearPipe(s: string): string {
+  return s.replace(/[^a-zA-Z0-9._|]/g, "");
+}
+
 /**
- * Send `maxxinvaders.spawn … [roamingBotKey] [anchorSteam64]` over RCON (6th = RoamingNPCs bot key; 7th = optional anchor).
+ * Send `maxxinvaders.spawn … [roamingBotKey] [anchorSteam64|-] [wearPipe]` over RCON.
+ * 6th = RoamingNPCs bot key; 7th = optional anchor Steam64 or `-`; 8th = optional wear shortnames (pipe-separated).
  */
 export async function maxxinvadersRconSpawn(params: {
   server: ServerRow;
@@ -46,6 +54,8 @@ export async function maxxinvadersRconSpawn(params: {
   roamingBotKey: string;
   /** Optional 17-digit Steam64: spawn + leash near this player (active or sleeping). */
   anchorSteam64?: string | null;
+  /** Optional: replaces Wear on the Roaming template only (MaxxInvaders 1.7.8+ / RoamingNPCs 0.5.23+). */
+  roamingWearPipe?: string | null;
   connectionId: string | null;
   tikfinityEventName: string | null;
 }): Promise<MaxxinvadersRconResult> {
@@ -61,11 +71,22 @@ export async function maxxinvadersRconSpawn(params: {
       ? params.anchorSteam64.trim()
       : null;
 
-  const command =
-    anchorTok != null
-      ? `maxxinvaders.spawn ${quoteRconArg(nameTok)} ${quoteRconArg(idTok)} ${tier} ${kitArg} ${modeArg} ${quoteRconArg(botTok)} ${quoteRconArg(anchorTok)}`
-      : `maxxinvaders.spawn ${quoteRconArg(nameTok)} ${quoteRconArg(idTok)} ${tier} ${kitArg} ${modeArg} ${quoteRconArg(botTok)}`;
-  const templateKey = `maxxinvaders:t${tier}:${modeArg}:${botTok}${anchorTok ? `:a${anchorTok}` : ""}`;
+  const wearRaw = params.roamingWearPipe?.trim() ?? "";
+  const wearTok = wearRaw ? sanitizeWearPipe(wearRaw) : null;
+
+  const baseSpawn = `maxxinvaders.spawn ${quoteRconArg(nameTok)} ${quoteRconArg(idTok)} ${tier} ${kitArg} ${modeArg} ${quoteRconArg(botTok)}`;
+  let command: string;
+  if (wearTok) {
+    command =
+      anchorTok != null
+        ? `${baseSpawn} ${quoteRconArg(anchorTok)} ${quoteRconArg(wearTok)}`
+        : `${baseSpawn} "-" ${quoteRconArg(wearTok)}`;
+  } else {
+    command =
+      anchorTok != null ? `${baseSpawn} ${quoteRconArg(anchorTok)}` : baseSpawn;
+  }
+
+  const templateKey = `maxxinvaders:t${tier}:${modeArg}:${botTok}${anchorTok ? `:a${anchorTok}` : ""}${wearTok ? ":wear" : ""}`;
 
   const connected = await ensureConnection(
     params.server.id,

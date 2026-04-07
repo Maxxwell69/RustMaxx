@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.7")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.8")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -862,7 +862,8 @@ namespace Oxide.Plugins
             string mode,
             BasePlayer anchorPlayer,
             string source,
-            string roamingTemplateOverride = null)
+            string roamingTemplateOverride = null,
+            string roamingWearOverridePipe = null)
         {
             if (!_cfg.EnablePlugin)
                 return SpawnResult.Fail("plugin_disabled");
@@ -946,8 +947,13 @@ namespace Oxide.Plugins
                     ulong anchorSteam = 0UL;
                     if (anchorPlayer != null)
                         anchorSteam = anchorPlayer.userID;
-                    var ro = RoamingNPCs.Call("SpawnFromTemplateForBridge", roamingTemplate, viewerName, viewerId,
-                        anchorSteam);
+                    object ro;
+                    if (string.IsNullOrWhiteSpace(roamingWearOverridePipe))
+                        ro = RoamingNPCs.Call("SpawnFromTemplateForBridge", roamingTemplate, viewerName, viewerId,
+                            anchorSteam);
+                    else
+                        ro = RoamingNPCs.Call("SpawnFromTemplateForBridge", roamingTemplate, viewerName, viewerId,
+                            anchorSteam, roamingWearOverridePipe.Trim());
                     npcPlayer = ro as BasePlayer;
                     if (npcPlayer != null && !npcPlayer.IsDestroyed)
                     {
@@ -1884,7 +1890,7 @@ namespace Oxide.Plugins
             if (parts.Count < 5)
             {
                 arg.ReplyWith(
-                    "Usage: maxxinvaders.spawn <viewerName> <viewerId> <tier> <kitName|-> <mode> [roamingTemplateKey] [anchorSteam64]");
+                    "Usage: maxxinvaders.spawn <viewerName> <viewerId> <tier> <kitName|-> <mode> [roamingTemplateKey] [anchorSteam64|-] [wearPipe e.g. attire.bunny.onesie|attire.bunnyears]");
                 return;
             }
 
@@ -1906,23 +1912,29 @@ namespace Oxide.Plugins
             if (parts.Count >= 7 && !string.IsNullOrWhiteSpace(parts[6]))
             {
                 var rawAnchor = parts[6].Trim();
-                if (!ulong.TryParse(rawAnchor, NumberStyles.Integer, CultureInfo.InvariantCulture, out var anchorSteam) ||
-                    anchorSteam < 10000UL)
+                if (!string.Equals(rawAnchor, "-", StringComparison.Ordinal))
                 {
-                    arg.ReplyWith("Error: invalid_anchor_steam (expect 17-digit Steam64)");
-                    return;
-                }
+                    if (!ulong.TryParse(rawAnchor, NumberStyles.Integer, CultureInfo.InvariantCulture, out var anchorSteam) ||
+                        anchorSteam < 10000UL)
+                    {
+                        arg.ReplyWith("Error: invalid_anchor_steam (expect 17-digit Steam64 or - for none)");
+                        return;
+                    }
 
-                anchorPlayer = FindPlayerOrSleeperByUserId(anchorSteam);
-                if (anchorPlayer == null)
-                {
-                    arg.ReplyWith(
-                        $"Error: anchor_offline (no active or sleeping player for Steam64 {anchorSteam})");
-                    return;
+                    anchorPlayer = FindPlayerOrSleeperByUserId(anchorSteam);
+                    if (anchorPlayer == null)
+                    {
+                        arg.ReplyWith(
+                            $"Error: anchor_offline (no active or sleeping player for Steam64 {anchorSteam})");
+                        return;
+                    }
                 }
             }
 
-            var result = TrySpawn(viewerName, viewerId, tier, kit, mode, anchorPlayer, "console", roamingTemplateOverride);
+            string wearPipe = parts.Count >= 8 && !string.IsNullOrWhiteSpace(parts[7]) ? parts[7].Trim() : null;
+
+            var result = TrySpawn(viewerName, viewerId, tier, kit, mode, anchorPlayer, "console", roamingTemplateOverride,
+                wearPipe);
             if (!result.Success)
             {
                 if (!string.IsNullOrWhiteSpace(result.ErrorDetail))

@@ -6,7 +6,7 @@ Viewer-linked NPCs for TikFinity / RustMaxx relay events. **1.1.0+** can spawn *
 
 1. Install **RoamingNPCs** (`oxide/plugins/RoamingNPCs.cs`) and configure **Bots settings** in `oxide/config/RoamingNPCs.json`. Each template you reference must exist and have **`"Enable bot?": true`** (see RoamingNPCs `config/README.md`).
 2. In **MaxxInvaders** config, set **`UseRoamingNPCsWhenAvailable`** to `true` (default) and **`DefaultRoamingTemplateKey`** to a valid bot key (example: `bob_resources_farmer`). Optionally set **`RoamingTemplateKey`** per tier to use different personalities per gift tier.
-3. MaxxInvaders calls `SpawnFromTemplateForBridge(templateKey, displayName, viewerId)`, then **teleports** the spawned NPC to the same validated spawn position it uses for scientists. RoamingNPCs owns movement and AI after that; MaxxInvaders only tracks lifecycle, GUI, and hooks.
+3. MaxxInvaders calls `SpawnFromTemplateForBridge(templateKey, displayName, viewerId, anchorSteam64, wearPipeOptional)`, then **teleports** the spawned NPC to the same validated spawn position it uses for scientists. When **`wearPipeOptional`** is set (pipe-separated shortnames, e.g. `attire.bunny.onesie|attire.bunnyears`), RoamingNPCs **replaces only the template’s Wear** — same bot key / AI (e.g. **`streamer_patrol`**), different outfit. RoamingNPCs owns movement and AI after that; MaxxInvaders only tracks lifecycle, GUI, and hooks.
 4. **Kits** are **not** applied to roaming spawns (the template outfits the bot). Kits still apply to scientist fallback spawns.
 5. Set **`UseRoamingNPCsWhenAvailable`** to `false` if you only want vanilla scientists.
 6. Set **`ScientistFallbackEnabled`** to **`false`** if you **never** want scientists — spawns only succeed when the RoamingNPCs bridge returns a bot (otherwise you get error `roaming_only_failed`). Keep **`UseRoamingNPCsWhenAvailable`** `true` and RoamingNPCs loaded with valid templates.
@@ -33,10 +33,13 @@ maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> "<kitName>" -
 maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - hostile
 maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - roaming "streamer_patrol"
 maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - roaming "streamer_patrol" "76561198963850965"
+maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - roaming "streamer_patrol" "-" "attire.bunny.onesie|attire.bunnyears"
+maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - roaming "streamer_patrol" "76561198963850965" "attire.bunny.onesie|attire.bunnyears"
 ```
 
 - Optional **6th argument** is a **RoamingNPCs bot key** (overrides `ViewerRoamingTemplateKey` / tier default for that spawn). RustMaxx TikFinity webhook defaults to **`streamer_patrol`** when you do not pass `?template=`.
-- Optional **7th argument** is **anchor Steam64** (17 digits): spawn ring + RoamingNPCs bridge use that **online or sleeping** player’s position so the bot stays near the streamer / base owner. Omit for legacy behavior (first online player or world origin). RustMaxx webhook: `?anchorSteam=…`, JSON `anchorSteam`, server dashboard field, or env `TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID`.
+- Optional **7th argument** is **anchor Steam64** (17 digits) or **`-`** to skip anchor: spawn ring + RoamingNPCs bridge use that **online or sleeping** player’s position so the bot stays near the streamer / base owner. Omit for legacy behavior (first online player or world origin). RustMaxx webhook: `?anchorSteam=…`, JSON `anchorSteam`, server dashboard field, or env `TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID`.
+- Optional **8th argument** is **wear override** (pipe-separated item shortnames). Replaces the Roaming template’s clothing only; requires **RoamingNPCs 0.5.23+** and **MaxxInvaders 1.7.8+**. RustMaxx **`bunny1npc`** TikFinity action uses **`streamer_patrol`** + this wear pipe automatically.
 - **1.5.9+:** When an anchor player is set, **`AnchorPosition` updates every behavior tick** while they stay online (or as a sleeper) so the leash / patrol radius **moves with the streamer** instead of staying at the spawn point.
 - Use `-` for an empty kit name when you have no Kits entry.
 - Quote viewer names that contain spaces.

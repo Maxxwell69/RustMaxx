@@ -20,7 +20,7 @@ Each **top-level key** under `"Bots settings"` is a **template key** you can use
 | `john_looter`       | Looter preset |
 | `alfred_hunter`     | Hunter preset |
 | `austin_fighter`    | Fighter preset |
-| `bunny1`            | Bunny onesie + ears viewer bot (RustMaxx webhook `?action=bunny1npc` → MaxxInvaders, or `npcmaxx.spawn bunny1 …`) |
+| `bunny1`            | *(Optional)* Full bot preset with bunny clothes — only if you use **`npcmaxx.spawn bunny1`**. RustMaxx **`bunny1npc`** uses **`streamer_patrol`** + wear override instead (no `bunny1` key required). |
 
 Set **`CREW_RNPC_TEMPLATE_KEY`** (Railway / `.env`) to **one** of these strings — exactly as written, case-sensitive.
 
@@ -29,21 +29,15 @@ Use the **same string** in TikFinity **Roaming NPC** connections (**Roaming temp
 
 Each bot block must have **`"Enable bot?": true`** or `SpawnFromTemplateForBridge` will refuse to spawn.
 
-### MaxxInvaders: `No bot key "bunny1" under Bots settings`
+### MaxxInvaders + RustMaxx **`bunny1npc`** (bunny outfit, `streamer_patrol` brain)
 
-That message means **`oxide/config/RoamingNPCs.json` on the game server does not define** a bot template named **`bunny1`**. The RustMaxx repo includes it in the reference [`RoamingNPCs.json`](./RoamingNPCs.json), but you must **merge it into the file on the server** (or replace the file if you manage config only from the repo).
+**You do not need a `bunny1` bot key** for TikFinity **`bunny1npc`**. RustMaxx calls **`maxxinvaders.spawn`** with your normal Roaming template (**`streamer_patrol`** by default) and a **wear pipe** (bunny onesie + ears). Update **RoamingNPCs 0.5.23+** and **MaxxInvaders 1.7.8+** on the server.
 
-1. Open **`bunny1.merge-fragment.json`** in this folder — it contains only the **`bunny1`** object.
-2. In your server’s **`oxide/config/RoamingNPCs.json`**, under **`"Bots settings"`** (English) or **`"Настройка ботов"`** (Russian), add a comma after the last existing bot and paste the **`"bunny1": { ... }`** entry from the fragment (merge into the same object that holds `bob_resources_farmer`, etc.).
-3. Run **`oxide.reload RoamingNPCs`** (or restart the server).
+### MaxxInvaders: `No bot key "…" under Bots settings`
 
-To regenerate the fragment after editing the full template in `RoamingNPCs.json`:
+The **6th RCON argument** must match a **template key** that exists under **`Bots settings`**. If you still use **`bunny1`** in a URL or old connection, add that key to JSON or switch to **`bunny1npc`** / **`maxxinvaders`** with **`streamer_patrol`**.
 
-```bash
-python scripts/extract-roaming-bunny1-fragment.py
-```
-
-If you prefer not to use **`bunny1`**, point TikFinity at **`maxxinvaders`** with **`?template=`** set to a key that **already exists** on your server (e.g. `streamer_patrol`), or set **`ScientistFallbackEnabled=true`** in MaxxInvaders only if you accept vanilla scientist fallback when the template is missing.
+Optional: merge **`bunny1.merge-fragment.json`** only if you want a standalone **`npcmaxx.spawn bunny1`** template. Regenerate with `python scripts/extract-roaming-bunny1-fragment.py`.
 
 ## NPCMaxx RCON
 

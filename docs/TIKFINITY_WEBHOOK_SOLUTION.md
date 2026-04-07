@@ -66,11 +66,11 @@ The webhook picks **viewer name** from typical TikTok fields: `uniqueId`, `viewe
 | Action | What it does |
 |--------|----------------|
 | **`bunny1`** | Puts the **bunny costume on the streamer** only (clears wear, equips onesie + ears). **Does not spawn** a new character. |
-| **`bunny1npc`** | Spawns a **viewer bot** through **MaxxInvaders** (`maxxinvaders.spawn` … Roaming template **`bunny1`**). This is **not** RustChaos. Requires **MaxxInvaders** + **RoamingNPCs**; optional anchor Steam (same as `maxxinvaders`). |
-| **`maxxinvaders`** | General viewer spawn with tier/mode/kit and Roaming template (default `streamer_patrol` unless overridden). |
-| **`npcmaxx` + `template=bunny1`** | Spawns via **NPCMaxx** only (`npcmaxx.spawn bunny1 Name`) — no MaxxInvaders tier/kit. Template must be **enabled**. |
+| **`bunny1npc`** | **MaxxInvaders** viewer spawn with the **same Roaming template as usual** (default **`streamer_patrol`**). Only **clothes** are forced to bunny onesie + ears (wear pipe). **No** separate `bunny1` bot key in JSON. Optional **`?template=`** if you want another Roaming key as the base. |
+| **`maxxinvaders`** | Same pipeline, no wear override (template defines outfit). |
+| **`npcmaxx` + `template=…`** | **NPCMaxx** direct spawn (`npcmaxx.spawn …`) — separate from MaxxInvaders; still needs that template key in RoamingNPCs. |
 
-If you expected a **character in the world** but used **`bunny1`**, use **`bunny1npc`** or **`maxxinvaders`** with `template=bunny1`, not the costume action.
+If you expected a **character in the world** but used **`bunny1`** (RustChaos), use **`bunny1npc`** or **`maxxinvaders`**, not the costume action.
 
 ### 5a. Bunny costume (`bunny1`) — working setups
 
@@ -117,15 +117,15 @@ Content-Type: application/json
 { "message": "!bunny1npc", "nickname": "TikTokViewer" }
 ```
 
-**Server:** **MaxxInvaders** + **RoamingNPCs**; **`bunny1`** template enabled in `RoamingNPCs.json`. The webhook sends **`maxxinvaders.spawn`** (see JSON field **`spawnEngine`: `"maxxinvaders"`**). Optional: **`?template=other_key`** to use another Roaming bot key instead of `bunny1`.
+**Server:** **MaxxInvaders 1.7.8+** + **RoamingNPCs 0.5.23+**; your normal viewer template (**`streamer_patrol`** by default) must exist and be enabled. The webhook sends **`maxxinvaders.spawn`** with an **8th argument** wear pipe (see **`spawnEngine`: `"maxxinvaders"`**, **`roamingWearPipe`** in JSON). Optional **`?template=`** changes the Roaming bot key; outfit override still applies on top.
 
-**RustChaos** is only for **`bunny1`** (costume on streamer), not for **`bunny1npc`**.
+**RustChaos `bunny1`** only dresses the **streamer**, not the viewer bot.
 
 ## 6. Game server checklist (why it might still “not work”)
 
 - **RustChaos** loaded on the server; **`oxide.reload RustChaos`** after updating the plugin.  
 - **`StreamerName`** in `oxide/config/RustChaos.json` matches the in-game name of the streamer (for **`bunny1`** costume and **`bunny1npc`** anchor).  
-- For **viewer bots** (`bunny1npc`, `maxxinvaders`): **MaxxInvaders** + **RoamingNPCs**; **`bunny1`** (or chosen template) **enabled**; watch **F1** for `[MaxxInvaders]` / `[RoamingNPCs]`.  
+- For **viewer bots** (`bunny1npc`, `maxxinvaders`): **MaxxInvaders** + **RoamingNPCs**; **`streamer_patrol`** (or your `?template=`) **enabled**; **`bunny1npc`** needs plugin versions with **wear pipe** support (see above).  
 - **RCON** in RustMaxx matches the live server (host/port/password; firewall).  
 - Webhook response **`ok: true`** but no effect → check server console for `[RustChaos]` lines and RCON errors.
 
@@ -163,5 +163,5 @@ Invoke-RestMethod -Uri $uri -Method POST -ContentType "application/json; charset
 - Admin connections: `lib/tikfinity-connections.ts`  
 - Crew + Roaming NPC setup: `docs/TIKFINITY_CREW_RNPC_SETUP.md`  
 - Costume: `plugins/RustChaos/RustChaos.cs` → `bunny1`  
-- Viewer spawns: `plugins/MaxxInvaders/MaxxInvaders.cs` → `maxxinvaders.spawn`; webhook `bunny1npc` uses that path  
-- Roaming template: `plugins/RoamingNpc/config/RoamingNPCs.json` → key `bunny1`
+- Viewer spawns: `plugins/MaxxInvaders/MaxxInvaders.cs` → `maxxinvaders.spawn`; webhook `bunny1npc` = **`streamer_patrol`** + wear pipe  
+- Roaming: `plugins/RoamingNpc/RoamingNPCs.cs` → `SpawnFromTemplateForBridge` (optional wear pipe, 0.5.23+)

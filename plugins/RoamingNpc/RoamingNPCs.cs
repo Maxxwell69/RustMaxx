@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.22")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.23")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8866,9 +8866,25 @@ namespace Oxide.Plugins
             return false;
         }
 
+        /// <summary>MaxxInvaders bridge: optional pipe-separated item shortnames replace Wear only (e.g. bunny onesie|ears).</summary>
+        private static void ApplyWearOverridePipe(BotSetup setup, string pipeSeparatedShortnames)
+        {
+            if (setup == null || string.IsNullOrWhiteSpace(pipeSeparatedShortnames)) return;
+            string[] seg = pipeSeparatedShortnames.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+            if (seg.Length == 0) return;
+            if (setup.Wear == null) setup.Wear = new WearSetup();
+            setup.Wear.items = new List<ItemSetup>();
+            foreach (string s in seg)
+            {
+                string t = s.Trim();
+                if (t.Length == 0) continue;
+                setup.Wear.items.Add(new ItemSetup(t, 0UL));
+            }
+        }
+
         [HookMethod("SpawnFromTemplateForBridge")]
         public object SpawnFromTemplateForBridge(string templateKey, string displayName, string uniqueSuffix,
-            ulong anchorSteamIdToProtect = 0)
+            ulong anchorSteamIdToProtect = 0, string wearOverridePipeSeparated = null)
         {
             if (string.IsNullOrWhiteSpace(templateKey) || config?.bots == null)
                 return null;
@@ -8895,6 +8911,8 @@ namespace Oxide.Plugins
 
             if (setup == null)
                 return null;
+
+            ApplyWearOverridePipe(setup, wearOverridePipeSeparated);
 
             setup.Init();
             setup.Amount = 1;
