@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.35")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.36")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2378,6 +2378,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public ulong BridgeDepositApproachContainerNetId;
             /// <summary>Last <see cref="ApplyBridgeTask"/> keyword applied (runtime only; not saved).</summary>
             [JsonIgnore] public string BridgeLastAppliedTask;
+            /// <summary>Prevents stacking resume timers after streamer-defense retaliation ends.</summary>
+            [JsonIgnore] public bool BridgeResumeAfterDefenseScheduled;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -3365,6 +3367,7 @@ namespace Oxide.Plugins
             if (pet.Data.BridgeProtectAnchorUserId == 0UL) return;
             if (pet.Data.BridgeDepositApproachActive) return;
             if (IsBotInCombat(pet)) return;
+            if (ShouldSkipBridgePatrolForTaskBrainState(pet)) return;
             if (pet.MoveController?.Navigator == null) return;
             if (UnityEngine.Time.realtimeSinceStartup < pet.Data.BridgePatrolNextMoveAt) return;
 
@@ -3560,6 +3563,48 @@ namespace Oxide.Plugins
             else if (state is HunterState) return true;
 
             return false;
+        }
+
+        /// <summary>Bridge patrol must not override Miner/Medical/etc. movement — causes rubberbanding with task AI.</summary>
+        private static bool ShouldSkipBridgePatrolForTaskBrainState(CustomPet pet)
+        {
+            var cs = pet?.CustomBrain?.currentState;
+            if (cs == null) return false;
+            return cs is MinerState or MedicalState or DroppedState or ResearcherState;
+        }
+
+        /// <summary>After defending the streamer, re-apply <see cref="DataBot.BridgeLastAppliedTask"/> so gather/hunt/etc. resumes.</summary>
+        private void ScheduleResumeBridgeTaskAfterDefense(CustomPet pet)
+        {
+            if (pet?.Data == null || !pet.Data.SpawnedFromMaxxInvadersBridge) return;
+            if (string.IsNullOrEmpty(pet.Data.BridgeLastAppliedTask)) return;
+            if (pet.Data.BridgeResumeAfterDefenseScheduled) return;
+            var netId = pet.net?.ID.Value ?? 0UL;
+            if (netId == 0UL) return;
+
+            pet.Data.BridgeResumeAfterDefenseScheduled = true;
+            pet.Data.BridgePatrolNextMoveAt = UnityEngine.Time.realtimeSinceStartup + 4f;
+
+            timer.Once(0.25f, () =>
+            {
+                if (pet == null || pet.IsDestroyed || !pet.IsAlive())
+                {
+                    if (pet?.Data != null) pet.Data.BridgeResumeAfterDefenseScheduled = false;
+                    return;
+                }
+
+                pet.Data.BridgeResumeAfterDefenseScheduled = false;
+                if (IsBotInCombat(pet)) return;
+
+                try
+                {
+                    ApplyBridgeTask(netId, pet.Data.BridgeProtectAnchorUserId, pet.Data.BridgeLastAppliedTask);
+                }
+                catch (Exception ex)
+                {
+                    PrintError($"[RoamingNPCs] ScheduleResumeBridgeTaskAfterDefense: {ex}");
+                }
+            });
         }
 
         public BaseCombatEntity GetBotCombatTarget(CustomPet bot)
@@ -7429,8 +7474,17 @@ namespace Oxide.Plugins
                     {
                         var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(owner.Data.BridgeRetaliationAnimalNetId)) as
                             BaseCombatEntity;
-                        if (ent != null && ent.IsAlive() && !ent.InSafeZone() && CheckTarget(ent) &&
-                            owner.Distance(ent) < 150f)
+                        if (ent == null || !ent.IsAlive())
+                        {
+                            var hadDefense = owner.Data.BridgeRetaliationAnimalNetId != 0UL ||
+                                             owner.Data.BridgeRetaliationTargetUserId != 0UL;
+                            owner.Data.BridgeRetaliationAnimalNetId = 0UL;
+                            owner.Data.BridgeRetaliationTargetUserId = 0UL;
+                            owner.Data.BridgeRetaliationExpireTime = 0f;
+                            if (hadDefense && owner.Data.SpawnedFromMaxxInvadersBridge)
+                                instance?.ScheduleResumeBridgeTaskAfterDefense(owner);
+                        }
+                        else if (!ent.InSafeZone() && CheckTarget(ent) && owner.Distance(ent) < 150f)
                             target = ent;
                     }
 
@@ -7443,8 +7497,12 @@ namespace Oxide.Plugins
 
                 if (owner.Data != null && UnityEngine.Time.realtimeSinceStartup >= owner.Data.BridgeRetaliationExpireTime)
                 {
+                    var hadDefense = owner.Data.BridgeRetaliationAnimalNetId != 0UL ||
+                                     owner.Data.BridgeRetaliationTargetUserId != 0UL;
                     owner.Data.BridgeRetaliationAnimalNetId = 0UL;
                     owner.Data.BridgeRetaliationTargetUserId = 0UL;
+                    if (hadDefense && owner.Data.SpawnedFromMaxxInvadersBridge)
+                        instance?.ScheduleResumeBridgeTaskAfterDefense(owner);
                 }
 
                 SetTargetState<BaseCombatEntity>(target);
@@ -7563,8 +7621,12 @@ namespace Oxide.Plugins
 
                 if (owner.Data != null && !IsBridgeRetaliationActive())
                 {
+                    var hadDefense = owner.Data.BridgeRetaliationTargetUserId != 0UL ||
+                                     owner.Data.BridgeRetaliationAnimalNetId != 0UL;
                     owner.Data.BridgeRetaliationTargetUserId = 0UL;
                     owner.Data.BridgeRetaliationAnimalNetId = 0UL;
+                    if (hadDefense && owner.Data.SpawnedFromMaxxInvadersBridge)
+                        instance?.ScheduleResumeBridgeTaskAfterDefense(owner);
                 }
 
                 if (target != null && owner.Distance(target) > 150f)
