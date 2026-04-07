@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.7")]
+    [Info("BaseBotch", "RustMaxx", "1.3.8")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -26,6 +26,7 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, Component[]> _wheelBumpComponentCache = new();
         private readonly Dictionary<ulong, bool> _wheelComponentDumped = new();
         private readonly Dictionary<ulong, bool> _wheelMemberDumped = new();
+        private readonly Dictionary<ulong, bool> _wheelMountedSyncEnabled = new();
         private Timer _autorunTimer;
 
         private sealed class WheelRestoreState
@@ -163,6 +164,7 @@ namespace Oxide.Plugins
             _wheelBumpComponentCache?.Clear();
             _wheelComponentDumped?.Clear();
             _wheelMemberDumped?.Clear();
+            _wheelMountedSyncEnabled?.Clear();
             _nextAutorunDebugAt?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
@@ -179,6 +181,7 @@ namespace Oxide.Plugins
                     _wheelBumpComponentCache.Remove(mountId);
                     _wheelComponentDumped.Remove(mountId);
                     _wheelMemberDumped.Remove(mountId);
+                    _wheelMountedSyncEnabled.Remove(mountId);
                 }
                 _autorunNpcNetIds.Remove(id);
                 _npcToTrackedMountNetId.Remove(id);
@@ -477,9 +480,35 @@ namespace Oxide.Plugins
                 _wheelMemberDumped[mountId] = true;
                 DumpElectricWheelMembersForDebug(mountId, comps);
             }
+            if (!_wheelMountedSyncEnabled.ContainsKey(mountId))
+            {
+                TryEnableMountedPlayerSync(comps);
+                _wheelMountedSyncEnabled[mountId] = true;
+            }
 
             foreach (var comp in comps)
                 BumpWheelComponentFieldsAndMethods(comp, npc);
+        }
+
+        private static void TryEnableMountedPlayerSync(Component[] comps)
+        {
+            if (comps == null) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            foreach (var c in comps)
+            {
+                if (c == null) continue;
+                var tn = c.GetType().Name;
+                if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                try
+                {
+                    var m = c.GetType().GetMethod("EnableMountedPlayerSync", bf, null, Type.EmptyTypes, null);
+                    m?.Invoke(c, null);
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
         }
 
         private Component[] BuildWheelBumpComponentCache(BaseMountable mount)
@@ -625,6 +654,34 @@ namespace Oxide.Plugins
 
             if (_cfg.AutorunInvokeWheelMethods)
                 TryInvokeWheelInputLikeMethods(comp, npc);
+
+            TryDriveWaterWheelMountablePlayerInput(comp, npc);
+        }
+
+        private static void TryDriveWaterWheelMountablePlayerInput(Component comp, BasePlayer npc)
+        {
+            if (comp == null || npc == null) return;
+            var tn = comp.GetType().Name;
+            if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) < 0) return;
+            if (npc.serverInput == null) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                foreach (var m in comp.GetType().GetMethods(bf))
+                {
+                    if (m.Name != "PlayerServerInput") continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length != 2) continue;
+                    if (!typeof(BasePlayer).IsAssignableFrom(ps[0].ParameterType)) continue;
+                    if (!typeof(InputState).IsAssignableFrom(ps[1].ParameterType)) continue;
+                    m.Invoke(comp, new object[] { npc, npc.serverInput });
+                    return;
+                }
+            }
+            catch
+            {
+                // ignored
+            }
         }
 
         private void TryInvokeWheelInputLikeMethods(Component comp, BasePlayer npc)
@@ -953,6 +1010,7 @@ namespace Oxide.Plugins
                 _wheelBumpComponentCache.Remove(mountId);
                 _wheelComponentDumped.Remove(mountId);
                 _wheelMemberDumped.Remove(mountId);
+                _wheelMountedSyncEnabled.Remove(mountId);
             }
             _autorunNpcNetIds.Remove(id);
             _npcToTrackedMountNetId.Remove(id);
@@ -1330,6 +1388,7 @@ namespace Oxide.Plugins
                 _wheelBumpComponentCache.Remove(mountCacheId);
                 _wheelComponentDumped.Remove(mountCacheId);
                 _wheelMemberDumped.Remove(mountCacheId);
+                _wheelMountedSyncEnabled.Remove(mountCacheId);
             }
             _autorunNpcNetIds.Remove(npcEntityNetId);
             _npcToTrackedMountNetId.Remove(npcEntityNetId);
