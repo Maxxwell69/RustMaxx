@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.9")]
+    [Info("BaseBotch", "RustMaxx", "1.4.0")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -660,6 +660,48 @@ namespace Oxide.Plugins
                     if (f.Name == "syncsMountedPlayers" || f.Name == "ensureOutputsUpdated")
                     {
                         try { f.SetValue(comp, true); } catch { }
+                    }
+                }
+
+                // Hard-force known runtime wheel-state members from debug dump.
+                if (tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    foreach (var f in comp.GetType().GetFields(bf))
+                    {
+                        try
+                        {
+                            if (f.Name == "fetchedWaterInfo" && f.FieldType == typeof(bool)) f.SetValue(comp, true);
+                            else if (f.Name == "isInWater" && f.FieldType == typeof(bool)) f.SetValue(comp, true);
+                            else if (f.Name == "isInOpenWater" && f.FieldType == typeof(bool)) f.SetValue(comp, true);
+                            else if (f.Name == "_waterAlignmentCached" && f.FieldType == typeof(bool)) f.SetValue(comp, true);
+                            else if (f.Name == "ensureOutputsUpdated" && f.FieldType == typeof(bool)) f.SetValue(comp, true);
+                            else if (f.Name == "serverWaterSpeed" && f.FieldType == typeof(float)) f.SetValue(comp, Mathf.Max(2.5f, (float)f.GetValue(comp)));
+                            else if (f.Name == "_waterAlignment" && f.FieldType == typeof(float)) f.SetValue(comp, 1f);
+                            else if (f.Name == "lastUpdateTime" && f.FieldType == typeof(float)) f.SetValue(comp, Time.realtimeSinceStartup);
+                        }
+                        catch
+                        {
+                            // ignored
+                        }
+                    }
+                }
+
+                if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    foreach (var f in comp.GetType().GetFields(bf))
+                    {
+                        try
+                        {
+                            // NPCs can fail manual drive if calories are required.
+                            if (f.Name == "caloriesRequired" && f.FieldType == typeof(float)) f.SetValue(comp, 0f);
+                            else if (f.Name == "calorieDrainPerMinute" && f.FieldType == typeof(float)) f.SetValue(comp, 0f);
+                            else if (f.Name == "hydrationDrainPerMinute" && f.FieldType == typeof(float)) f.SetValue(comp, 0f);
+                            else if (f.Name == "syncsMountedPlayers" && f.FieldType == typeof(bool)) f.SetValue(comp, true);
+                        }
+                        catch
+                        {
+                            // ignored
+                        }
                     }
                 }
                 TryInvokeIoEntityRefresh(comp);
