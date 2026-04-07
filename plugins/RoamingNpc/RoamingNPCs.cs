@@ -3064,13 +3064,13 @@ namespace Oxide.Plugins
             if (player.IsSleeping() || player.IsDead() || player.IsWounded()) return;
             if (!input.WasJustPressed(BUTTON.USE)) return;
             if (_roamingLootUseDebounce.TryGetValue(player.userID, out var last) &&
-                Time.realtimeSinceStartup < last + 0.12f)
+                UnityEngine.Time.realtimeSinceStartup < last + 0.12f)
                 return;
             if (!TryGetCustomPetUnderPlayerRay(player, LootRoamingRayDistance, out var pet)) return;
             if (!ShouldAllowPlayerLootRoamingAlive(pet, player)) return;
             if (Vector3.Distance(player.transform.position, pet.transform.position) > LootRoamingMaxSeparation) return;
 
-            _roamingLootUseDebounce[player.userID] = Time.realtimeSinceStartup;
+            _roamingLootUseDebounce[player.userID] = UnityEngine.Time.realtimeSinceStartup;
             TryOpenRoamingPlayerInventory(player, pet);
         }
 
