@@ -5,6 +5,7 @@ import type { ServerRow } from "@/lib/db";
 import { getTikfinityWebhookUrlOrNull } from "@/lib/tikfinity-webhook-public-url";
 import { getPublicOriginOrNull } from "@/lib/twitch-public-url";
 import { ensureConnection } from "@/lib/rcon-manager";
+import { isSquawkOutboundConfigured } from "@/lib/squawk-notify";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
     features: {
       crewSpawnOnRegisterConfigured,
       npcmaxxRequireCrewRegistry,
+      squawkOutboundConfigured: isSquawkOutboundConfigured(),
     },
     rconProbe: probeRcon ? rconProbe : undefined,
     hints: buildHints({

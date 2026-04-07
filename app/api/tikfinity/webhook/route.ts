@@ -38,6 +38,7 @@ import {
   resolveRoamingWearPipeForOutfit,
 } from "@/lib/maxxinvaders-outfit-profiles";
 import { resolveMaxxInvadersAnchorSteam } from "@/lib/maxxinvaders-anchor-steam";
+import { fireSquawkAfterTikfinityEvent } from "@/lib/squawk-notify";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 const TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID =
@@ -189,6 +190,13 @@ async function handleCrewRnpcJoin(
       }
     }
   }
+
+  fireSquawkAfterTikfinityEvent({
+    kind: "crew_join",
+    action: "join",
+    viewerName: displayName,
+    giftName: "crew",
+  });
 
   return withCors(
     NextResponse.json({
@@ -549,6 +557,13 @@ async function runWebhook(request: NextRequest, body: unknown) {
       command: spawn.command,
     }).catch(() => {});
 
+    fireSquawkAfterTikfinityEvent({
+      kind: "npcmaxx",
+      action: "npcmaxx",
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+    });
+
     return withCors(
       NextResponse.json({
         ok: true,
@@ -735,6 +750,13 @@ async function runWebhook(request: NextRequest, body: unknown) {
       command: spawnMi.command,
     }).catch(() => {});
 
+    fireSquawkAfterTikfinityEvent({
+      kind: "maxxinvaders",
+      action,
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+    });
+
     const nameFallbackViewer =
       String(payload.viewerName ?? "").trim().toLowerCase() === "viewer";
 
@@ -886,6 +908,13 @@ async function runWebhook(request: NextRequest, body: unknown) {
     scrapAmount: giftValue ? giftValue : undefined,
     rconResponse,
   }).catch(() => {});
+
+  fireSquawkAfterTikfinityEvent({
+    kind: "rustchaos",
+    action,
+    viewerName: payload.viewerName,
+    giftName: payload.giftName,
+  });
 
   return withCors(
     NextResponse.json({
