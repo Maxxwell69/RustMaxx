@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.2")]
+    [Info("BaseBotch", "RustMaxx", "1.3.3")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -24,6 +24,7 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, WheelRestoreState> _wheelRestorePending = new();
         /// <summary>Mount net ID → components touched for power reflection (built once per mount).</summary>
         private readonly Dictionary<ulong, Component[]> _wheelBumpComponentCache = new();
+        private readonly Dictionary<ulong, bool> _wheelComponentDumped = new();
         private Timer _autorunTimer;
 
         private sealed class WheelRestoreState
@@ -156,6 +157,7 @@ namespace Oxide.Plugins
             _npcToTrackedMountNetId?.Clear();
             _wheelRestorePending?.Clear();
             _wheelBumpComponentCache?.Clear();
+            _wheelComponentDumped?.Clear();
             _nextAutorunDebugAt?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
@@ -168,7 +170,10 @@ namespace Oxide.Plugins
             {
                 var id = bp.net.ID.Value;
                 if (_npcToTrackedMountNetId.TryGetValue(id, out var mountId))
+                {
                     _wheelBumpComponentCache.Remove(mountId);
+                    _wheelComponentDumped.Remove(mountId);
+                }
                 _autorunNpcNetIds.Remove(id);
                 _npcToTrackedMountNetId.Remove(id);
                 TryRestoreWheelRoamTask(id);
@@ -455,6 +460,12 @@ namespace Oxide.Plugins
                 _wheelBumpComponentCache[mountId] = comps;
             }
 
+            if (_cfg.DebugWheelAutorun && !_wheelComponentDumped.ContainsKey(mountId))
+            {
+                _wheelComponentDumped[mountId] = true;
+                DumpWheelComponentsForDebug(mountId, comps);
+            }
+
             foreach (var comp in comps)
                 BumpWheelComponentFieldsAndMethods(comp);
         }
@@ -498,7 +509,7 @@ namespace Oxide.Plugins
         {
             if (comp == null) return;
             var tn = comp.GetType().Name;
-            var scanAll = ComponentTypeLooksWheelRelated(tn);
+            var scanAll = ComponentTypeLooksWheelRelated(tn) || tn.IndexOf("IOEntity", StringComparison.OrdinalIgnoreCase) >= 0;
             const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             foreach (var f in comp.GetType().GetFields(bf))
             {
@@ -523,23 +534,59 @@ namespace Oxide.Plugins
                 }
             }
 
+            foreach (var p in comp.GetType().GetProperties(bf))
+            {
+                if (!p.CanRead || !p.CanWrite) continue;
+                var pt = p.PropertyType;
+                if (pt != typeof(float) && pt != typeof(double)) continue;
+                if (!FieldNameLooksLikePowerSignal(p.Name)) continue;
+                try
+                {
+                    if (pt == typeof(float))
+                    {
+                        var v = (float)p.GetValue(comp, null);
+                        p.SetValue(comp, Mathf.Clamp(v + 3f, 0f, 500f), null);
+                    }
+                    else
+                    {
+                        var v = (double)p.GetValue(comp, null);
+                        p.SetValue(comp, v + 3.0, null);
+                    }
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
+
             if (!scanAll) return;
             foreach (var method in comp.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
-                if (method.ReturnType != typeof(void)) continue;
-                var ps = method.GetParameters();
-                if (ps.Length != 1 || ps[0].ParameterType != typeof(float)) continue;
                 var mn = method.Name;
                 if (mn.IndexOf("power", StringComparison.OrdinalIgnoreCase) < 0 &&
                     mn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) < 0 &&
                     mn.IndexOf("human", StringComparison.OrdinalIgnoreCase) < 0 &&
                     mn.IndexOf("manual", StringComparison.OrdinalIgnoreCase) < 0 &&
                     mn.IndexOf("input", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mn.IndexOf("drive", StringComparison.OrdinalIgnoreCase) < 0)
+                    mn.IndexOf("drive", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("rider", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("pedal", StringComparison.OrdinalIgnoreCase) < 0)
                     continue;
                 try
                 {
-                    method.Invoke(comp, new object[] { 1f });
+                    if (method.ReturnType != typeof(void)) continue;
+                    var ps = method.GetParameters();
+                    if (ps.Length == 0)
+                    {
+                        method.Invoke(comp, null);
+                    }
+                    else if (ps.Length == 1)
+                    {
+                        if (ps[0].ParameterType == typeof(float))
+                            method.Invoke(comp, new object[] { 1f });
+                        else if (typeof(BasePlayer).IsAssignableFrom(ps[0].ParameterType))
+                            method.Invoke(comp, new object[] { null });
+                    }
                 }
                 catch
                 {
@@ -599,6 +646,29 @@ namespace Oxide.Plugins
             Puts($"[BaseBotch][debug] npc={npc.displayName}/{id} wrote={wrote} mounted={npc.isMounted} mount={mountPrefab} navType={nav?.GetType().Name ?? "none"} canNavigateMounted={(canNavMounted?.ToString() ?? "n/a")}");
         }
 
+        private void DumpWheelComponentsForDebug(ulong mountId, Component[] comps)
+        {
+            try
+            {
+                var names = new List<string>();
+                foreach (var c in comps)
+                {
+                    if (c == null) continue;
+                    var n = c.GetType().Name;
+                    if (!names.Contains(n))
+                        names.Add(n);
+                    if (names.Count >= 24)
+                        break;
+                }
+
+                Puts($"[BaseBotch][debug] wheelComponents mount={mountId} count={comps?.Length ?? 0} types=[{string.Join(", ", names.ToArray())}]");
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
         private bool PrefabChainLooksLikeWaterWheel(BaseMountable mount)
         {
             if (mount == null) return false;
@@ -624,7 +694,10 @@ namespace Oxide.Plugins
             if (npc?.net == null) return;
             var id = npc.net.ID.Value;
             if (_npcToTrackedMountNetId.TryGetValue(id, out var mountId))
+            {
                 _wheelBumpComponentCache.Remove(mountId);
+                _wheelComponentDumped.Remove(mountId);
+            }
             _autorunNpcNetIds.Remove(id);
             _npcToTrackedMountNetId.Remove(id);
         }
@@ -749,11 +822,17 @@ namespace Oxide.Plugins
         private static bool? TryGetCanNavigateMounted(object navigator)
         {
             if (navigator == null) return null;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             try
             {
-                var p = navigator.GetType().GetProperty("CanNavigateMounted");
-                if (p == null) return null;
-                return (bool)p.GetValue(navigator);
+                var p = navigator.GetType().GetProperty("CanNavigateMounted", bf);
+                if (p != null && p.CanRead)
+                    return (bool)p.GetValue(navigator, null);
+                var f = navigator.GetType().GetField("CanNavigateMounted", bf) ??
+                        navigator.GetType().GetField("canNavigateMounted", bf);
+                if (f != null && f.FieldType == typeof(bool))
+                    return (bool)f.GetValue(navigator);
+                return null;
             }
             catch
             {
@@ -764,11 +843,19 @@ namespace Oxide.Plugins
         private static void TrySetCanNavigateMounted(object navigator, bool value)
         {
             if (navigator == null) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             try
             {
-                var p = navigator.GetType().GetProperty("CanNavigateMounted");
-                if (p == null || !p.CanWrite) return;
-                p.SetValue(navigator, value);
+                var p = navigator.GetType().GetProperty("CanNavigateMounted", bf);
+                if (p != null && p.CanWrite)
+                {
+                    p.SetValue(navigator, value, null);
+                    return;
+                }
+                var f = navigator.GetType().GetField("CanNavigateMounted", bf) ??
+                        navigator.GetType().GetField("canNavigateMounted", bf);
+                if (f != null && f.FieldType == typeof(bool))
+                    f.SetValue(navigator, value);
             }
             catch
             {
@@ -983,7 +1070,10 @@ namespace Oxide.Plugins
         {
             if (npcEntityNetId == 0UL) return false;
             if (_npcToTrackedMountNetId.TryGetValue(npcEntityNetId, out var mountCacheId))
+            {
                 _wheelBumpComponentCache.Remove(mountCacheId);
+                _wheelComponentDumped.Remove(mountCacheId);
+            }
             _autorunNpcNetIds.Remove(npcEntityNetId);
             _npcToTrackedMountNetId.Remove(npcEntityNetId);
 
