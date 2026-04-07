@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.23")]
+    [Info("RustChaos", "RustMaxx", "1.15.24")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -922,7 +922,6 @@ namespace Oxide.Plugins
             return null;
         }
 
-        /// <summary>Spawn a RoamingNPCs bot from the bunny template named after the viewer; patrol/protect anchor = streamer Steam id.</summary>
         /// <summary>Strip current wear and equip bunny onesie + ears (TikFinity / RCON <c>bunny1</c>). Returns count successfully moved to wear.</summary>
         private static int TryApplyBunnyCostumeToStreamer(BasePlayer player)
         {
@@ -959,7 +958,7 @@ namespace Oxide.Plugins
 
             try
             {
-                player.inventory.ServerUpdate(null);
+                player.inventory.ServerUpdate(0f);
             }
             catch
             {
