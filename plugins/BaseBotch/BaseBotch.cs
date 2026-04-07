@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.8")]
+    [Info("BaseBotch", "RustMaxx", "1.4.9")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -48,6 +48,7 @@ namespace Oxide.Plugins
         private static int _autorunTickPhase;
         private readonly Dictionary<ulong, float> _nextAutorunDebugAt = new();
         private readonly Dictionary<ulong, float> _nextWheelSignalDebugAt = new();
+        private readonly Dictionary<ulong, float> _nextWheelPublishDebugAt = new();
 
         private sealed class ConfigData
         {
@@ -169,6 +170,7 @@ namespace Oxide.Plugins
             _wheelMountedSyncEnabled?.Clear();
             _nextAutorunDebugAt?.Clear();
             _nextWheelSignalDebugAt?.Clear();
+            _nextWheelPublishDebugAt?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
             _autorunTimer = null;
@@ -185,6 +187,7 @@ namespace Oxide.Plugins
                     _wheelComponentDumped.Remove(mountId);
                     _wheelMemberDumped.Remove(mountId);
                     _wheelMountedSyncEnabled.Remove(mountId);
+                    _nextWheelPublishDebugAt.Remove(mountId);
                 }
                 _autorunNpcNetIds.Remove(id);
                 _npcToTrackedMountNetId.Remove(id);
@@ -750,6 +753,7 @@ namespace Oxide.Plugins
 
                     TryInvokeElectricWheelUpdateMethods(comp);
                     TryDriveElectricWheelDirectOutput(comp);
+                    TryInvokeElectricWheelPublishPipeline(comp, npc);
                 }
 
                 if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -875,6 +879,95 @@ namespace Oxide.Plugins
             catch
             {
                 // ignored
+            }
+        }
+
+        private void TryInvokeElectricWheelPublishPipeline(Component comp, BasePlayer npc)
+        {
+            if (comp == null || npc == null) return;
+            if (comp.GetType().Name.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) < 0) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var invoked = 0;
+            foreach (var m in comp.GetType().GetMethods(bf))
+            {
+                var n = m.Name;
+                if (n != "UpdateOutputs" &&
+                    n != "UpdateFromInput" &&
+                    n != "TouchIOState" &&
+                    n != "IOStateChanged" &&
+                    n != "OnCircuitChanged" &&
+                    n != "SendChangedToRoot" &&
+                    n != "SendIONetworkUpdate" &&
+                    n != "UpdateHasPower" &&
+                    n != "MarkDirtyForceUpdateOutputs" &&
+                    n != "MarkDirty")
+                    continue;
+                if (TryInvokeWithGeneratedArgs(comp, m, npc))
+                    invoked++;
+            }
+
+            if (!_cfg.DebugWheelAutorun || npc.net == null) return;
+            var mount = npc.GetMounted();
+            if (mount?.net == null) return;
+            var mountId = mount.net.ID.Value;
+            var now = Time.realtimeSinceStartup;
+            if (_nextWheelPublishDebugAt.TryGetValue(mountId, out var nextAt) && now < nextAt) return;
+            _nextWheelPublishDebugAt[mountId] = now + 4f;
+            Puts($"[BaseBotch][debug] wheelPublish mount={mountId} invoked={invoked}");
+        }
+
+        private static bool TryInvokeWithGeneratedArgs(Component target, MethodInfo method, BasePlayer npc)
+        {
+            try
+            {
+                var ps = method.GetParameters();
+                if (ps.Length == 0)
+                {
+                    if (method.ReturnType != typeof(void)) return false;
+                    method.Invoke(target, null);
+                    return true;
+                }
+
+                var args = new object[ps.Length];
+                for (var i = 0; i < ps.Length; i++)
+                {
+                    var pt = ps[i].ParameterType;
+                    if (typeof(BasePlayer).IsAssignableFrom(pt))
+                        args[i] = npc;
+                    else if (typeof(BaseEntity).IsAssignableFrom(pt))
+                        args[i] = npc;
+                    else if (typeof(InputState).IsAssignableFrom(pt))
+                        args[i] = npc.serverInput;
+                    else if (pt == typeof(int))
+                        args[i] = 0;
+                    else if (pt == typeof(float))
+                        args[i] = 0f;
+                    else if (pt == typeof(double))
+                        args[i] = 0d;
+                    else if (pt == typeof(bool))
+                        args[i] = true;
+                    else if (pt == typeof(uint))
+                        args[i] = 0u;
+                    else if (pt == typeof(ulong))
+                        args[i] = 0UL;
+                    else if (pt == typeof(string))
+                        args[i] = "";
+                    else if (pt == typeof(Vector3))
+                        args[i] = Vector3.zero;
+                    else if (pt.IsEnum)
+                        args[i] = Activator.CreateInstance(pt);
+                    else if (!pt.IsValueType)
+                        args[i] = null;
+                    else
+                        args[i] = Activator.CreateInstance(pt);
+                }
+
+                method.Invoke(target, args);
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -1324,6 +1417,7 @@ namespace Oxide.Plugins
                 _wheelComponentDumped.Remove(mountId);
                 _wheelMemberDumped.Remove(mountId);
                 _wheelMountedSyncEnabled.Remove(mountId);
+                _nextWheelPublishDebugAt.Remove(mountId);
             }
             _autorunNpcNetIds.Remove(id);
             _npcToTrackedMountNetId.Remove(id);
@@ -1702,6 +1796,7 @@ namespace Oxide.Plugins
                 _wheelComponentDumped.Remove(mountCacheId);
                 _wheelMemberDumped.Remove(mountCacheId);
                 _wheelMountedSyncEnabled.Remove(mountCacheId);
+                _nextWheelPublishDebugAt.Remove(mountCacheId);
             }
             _autorunNpcNetIds.Remove(npcEntityNetId);
             _npcToTrackedMountNetId.Remove(npcEntityNetId);
