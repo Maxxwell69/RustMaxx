@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.24")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.25")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2917,17 +2917,124 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// True when a real player may treat this bot like a sleeper for inventory (wear/main/belt).
+        /// Includes MaxxInvaders/NPCMaxx bridge spawns and patrol-around-anchor templates so JSON does not need a new key.
+        /// </summary>
+        private static bool ShouldAllowPlayerLootRoamingAlive(CustomPet pet, BasePlayer looter)
+        {
+            if (pet == null || looter == null || pet.IsDestroyed || !pet.IsAlive()) return false;
+            var data = pet.Data;
+            var setup = data?.Setup;
+            if (setup == null) return false;
+            if (data.SpawnedFromMaxxInvadersBridge) return true;
+            if (setup.BridgePatrol?.Enable == true) return true;
+            return setup.AllowPlayerLootInventoryWhileAlive;
+        }
+
+        /// <summary>
         /// Lets real players open a roaming bot's main/belt/wear while it is awake (vanilla only allows sleeping/wounded).
-        /// Per-bot: <see cref="BotSetup.AllowPlayerLootInventoryWhileAlive"/>.
+        /// The game client usually does not send loot RPC for awake NPCs, so <see cref="OnPlayerInput"/> also opens the panel server-side.
         /// </summary>
         private object CanLootPlayer(BasePlayer target, BasePlayer looter)
         {
             if (target == null || looter == null || target == looter) return null;
             if (!looter.userID.IsSteamId()) return null;
             if (target is not CustomPet pet) return null;
-            if (pet.IsDestroyed || target.IsDead()) return null;
-            if (pet.Data?.Setup?.AllowPlayerLootInventoryWhileAlive != true) return null;
+            if (!ShouldAllowPlayerLootRoamingAlive(pet, looter)) return null;
             return true;
+        }
+
+        private static readonly int LootRoamingUseLayerMask =
+            LayerMask.GetMask("Player (Server)", "Player Movement", "Deployed", "Default");
+
+        private const float LootRoamingUseMaxDistance = 3.35f;
+
+        private static bool TryGetCustomPetUnderPlayerRay(BasePlayer player, float maxDist, out CustomPet pet)
+        {
+            pet = null;
+            if (player?.eyes == null) return false;
+            var ray = player.eyes.HeadRay();
+            if (!Physics.Raycast(ray, out RaycastHit hit, maxDist, LootRoamingUseLayerMask, QueryTriggerInteraction.Ignore))
+                return false;
+            var ent = hit.GetEntity();
+            for (var i = 0; i < 8 && ent != null; i++)
+            {
+                if (ent is CustomPet cp)
+                {
+                    pet = cp;
+                    return true;
+                }
+                ent = ent.GetParentEntity();
+            }
+            return false;
+        }
+
+        /// <summary>Same RPC path as vanilla loot player / PersonalNPC <c>RPC_OpenLootPanel</c>.</summary>
+        private static bool TryOpenRoamingPlayerInventory(BasePlayer looter, CustomPet target)
+        {
+            if (looter == null || target == null || !ShouldAllowPlayerLootRoamingAlive(target, looter)) return false;
+            if (looter.inventory?.loot == null || target.inventory == null) return false;
+            looter.EndLooting();
+            looter.inventory.loot.Clear();
+            if (!looter.inventory.loot.StartLootingEntity(target, false)) return false;
+            looter.inventory.loot.entitySource = target;
+            looter.inventory.loot.AddContainer(target.inventory.containerMain);
+            looter.inventory.loot.AddContainer(target.inventory.containerWear);
+            looter.inventory.loot.AddContainer(target.inventory.containerBelt);
+            looter.RadioactiveLootCheck(looter.inventory.loot.containers);
+            looter.inventory.loot.SendImmediate();
+            looter.ClientRPC(RpcTarget.Player("RPC_OpenLootPanel", looter), "player_corpse");
+            return true;
+        }
+
+        /// <summary>
+        /// Awake NPCs do not get a client loot prompt; opening on Use (E) when looking at an allowed bot.
+        /// </summary>
+        private void OnPlayerInput(BasePlayer player, InputState input)
+        {
+            if (player == null || !player.userID.IsSteamId()) return;
+            if (player.IsSleeping() || player.IsDead() || player.IsWounded()) return;
+            if (!input.WasJustPressed(BUTTON.USE)) return;
+            if (!TryGetCustomPetUnderPlayerRay(player, LootRoamingUseMaxDistance, out var pet)) return;
+            if (!ShouldAllowPlayerLootRoamingAlive(pet, player)) return;
+
+            NextTick(() =>
+            {
+                if (player == null || !player.IsConnected || pet == null || pet.IsDestroyed) return;
+                if (Vector3.Distance(player.transform.position, pet.transform.position) > LootRoamingUseMaxDistance + 0.65f)
+                    return;
+                TryOpenRoamingPlayerInventory(player, pet);
+            });
+        }
+
+        [ChatCommand("lootnpc")]
+        private void LootNpcChatCommand(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            CustomPet nearest = null;
+            var best = LootRoamingUseMaxDistance + 1.5f;
+            foreach (var kv in listNpcPlayers)
+            {
+                var pet = kv.Value;
+                if (pet == null || pet.IsDestroyed || !ShouldAllowPlayerLootRoamingAlive(pet, player)) continue;
+                var d = Vector3.Distance(player.transform.position, pet.transform.position);
+                if (d < best)
+                {
+                    best = d;
+                    nearest = pet;
+                }
+            }
+            if (nearest == null)
+            {
+                player.ChatMessage(RU
+                    ? "Рядом нет бота, чей инвентарь можно открыть."
+                    : "No roaming bot with loot access nearby (within ~4m).");
+                return;
+            }
+            if (!TryOpenRoamingPlayerInventory(player, nearest))
+                player.ChatMessage(RU
+                    ? "Не удалось открыть инвентарь бота."
+                    : "Could not open bot inventory (blocked or too far).");
         }
         private object OnPlayerDeath(BasePlayer player, HitInfo info)
         {

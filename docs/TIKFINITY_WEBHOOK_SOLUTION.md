@@ -117,7 +117,7 @@ Content-Type: application/json
 { "message": "!bunny1npc", "nickname": "TikTokViewer" }
 ```
 
-**Server:** **MaxxInvaders 1.7.8+** + **RoamingNPCs 0.5.24+** (0.5.23+ minimum for wear pipe); your normal viewer template (**`streamer_patrol`** by default) must exist and be enabled. The webhook sends **`maxxinvaders.spawn`** with an **8th argument** wear pipe (see **`spawnEngine`: `"maxxinvaders"`**, **`roamingWearPipe`** in JSON). Optional **`?template=`** changes the Roaming bot key; outfit override still applies on top. To **open the bot’s inventory while it walks**, use RoamingNPCs **0.5.24+** and **`AllowPlayerLootInventoryWhileAlive`** on that template (default **`true`** on auto-created **`streamer_patrol`**).
+**Server:** **MaxxInvaders 1.7.8+** + **RoamingNPCs 0.5.25+** (0.5.23+ minimum for wear pipe); your normal viewer template (**`streamer_patrol`** by default) must exist and be enabled. The webhook sends **`maxxinvaders.spawn`** with an **8th argument** wear pipe (see **`spawnEngine`: `"maxxinvaders"`**, **`roamingWearPipe`** in JSON). Optional **`?template=`** changes the Roaming bot key; outfit override still applies on top. To **open the bot’s inventory while it walks**: RoamingNPCs **0.5.25+** — look at the bot and press **Use (E)**, or **`/lootnpc`** nearby (bridge spawns are included automatically).
 
 **RustChaos `bunny1`** only dresses the **streamer**, not the viewer bot.
 
@@ -176,4 +176,4 @@ Invoke-RestMethod -Uri $uri -Method POST -ContentType "application/json; charset
 - Crew + Roaming NPC setup: `docs/TIKFINITY_CREW_RNPC_SETUP.md`  
 - Costume: `plugins/RustChaos/RustChaos.cs` → `bunny1`  
 - Viewer spawns: `plugins/MaxxInvaders/MaxxInvaders.cs` → `maxxinvaders.spawn`; webhook `bunny1npc` = **`streamer_patrol`** + wear pipe  
-- Roaming: `plugins/RoamingNpc/RoamingNPCs.cs` → `SpawnFromTemplateForBridge` (optional wear pipe, 0.5.23+; live player loot 0.5.24+)
+- Roaming: `plugins/RoamingNpc/RoamingNPCs.cs` → `SpawnFromTemplateForBridge` (optional wear pipe, 0.5.23+; live player loot **0.5.25+**)
