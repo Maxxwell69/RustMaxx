@@ -558,7 +558,15 @@ async function runWebhook(request: NextRequest, body: unknown) {
     );
   }
 
-  if (action === "maxxinvaders" || action === "bunny1npc") {
+  const maxxInvadersProfileActions = [
+    "maxxinvaders",
+    "bunny1npc",
+    "gingynpc",
+    "eggnpc",
+    "vampnpc",
+  ] as const;
+
+  if ((maxxInvadersProfileActions as readonly string[]).includes(action)) {
     const viewerNameFromQuery = request.nextUrl.searchParams.get("viewerName")?.trim();
     if (viewerNameFromQuery) {
       payload = { ...payload, viewerName: viewerNameFromQuery };
@@ -566,18 +574,37 @@ async function runWebhook(request: NextRequest, body: unknown) {
     const miParams = parseMaxxInvadersParams(request, body);
     const { tier, mode, kit } = miParams;
     const roamingFromExplicit = parseNpcTemplateKey(miParams.roamingTemplate);
+    const profileNpcActions = [
+      "bunny1npc",
+      "gingynpc",
+      "eggnpc",
+      "vampnpc",
+    ] as const;
     const roamingFromConnection =
       connectionFromAdmin?.server_action === "maxxinvaders" ||
-      connectionFromAdmin?.server_action === "bunny1npc"
-        ? parseNpcTemplateKey(connectionFromAdmin.npc_template_key)
+      (profileNpcActions as readonly string[]).includes(
+        connectionFromAdmin?.server_action ?? ""
+      )
+        ? parseNpcTemplateKey(connectionFromAdmin?.npc_template_key)
         : null;
-    const roamingBotKey =
+    let roamingBotKey =
       roamingFromExplicit ??
       roamingFromConnection ??
       DEFAULT_MAXXINVADERS_ROAMING_BOT;
-    // bunny1npc always uses outfit profile bunny1 (ignores ?outfit=). maxxinvaders uses ?outfit= / body / default.
+    if (action === "gingynpc") {
+      roamingBotKey = "gingy";
+    } else if (action === "eggnpc") {
+      roamingBotKey = "egg";
+    } else if (action === "vampnpc") {
+      roamingBotKey = "vamp";
+    }
+    // bunny1npc: outfit bunny1 on default template. gingynpc/eggnpc/vampnpc: fixed Roaming preset, no wear pipe.
     const outfitRequest =
-      action === "bunny1npc" ? "bunny1" : miParams.outfit ?? "default";
+      action === "bunny1npc"
+        ? "bunny1"
+        : action === "gingynpc" || action === "eggnpc" || action === "vampnpc"
+          ? "default"
+          : miParams.outfit ?? "default";
     const resolvedOutfit = resolveRoamingWearPipeForOutfit(outfitRequest);
     if (!resolvedOutfit.knownProfile && !outfitRequest.includes("|")) {
       console.warn(
@@ -716,6 +743,8 @@ async function runWebhook(request: NextRequest, body: unknown) {
         debug:
           action === "bunny1npc"
             ? `bunny1npc: profile bunny1 on Roaming template "${roamingBotKey}" (default streamer_patrol). Same spawn path as maxxinvaders; outfit forced to bunny. Add more looks via ?action=maxxinvaders&outfit=… in lib/maxxinvaders-outfit-profiles.ts.`
+            : action === "gingynpc" || action === "eggnpc" || action === "vampnpc"
+              ? `${action}: fixed Roaming template "${roamingBotKey}" (wear + loadout from RoamingNPCs.json). ?template= and ?outfit= ignored for this action.`
             : roamingWearPipe
               ? `maxxinvaders.spawn with outfit "${resolvedOutfit.resolvedId}" (wear override on template "${roamingBotKey}").`
               : anchorSteam64 != null

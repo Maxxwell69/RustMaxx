@@ -382,7 +382,11 @@ export default function AdminStreamerInteractionsPage() {
               <code className="rounded bg-zinc-800 px-1">lib/maxxinvaders-outfit-profiles.ts</code>. Raw pipe:{" "}
               <code className="rounded bg-zinc-800 px-1">?outfit=short.one|short.two</code>.{" "}
               <strong className="text-zinc-300">bunny1npc</strong> always uses profile{" "}
-              <code className="rounded bg-zinc-800 px-1">bunny1</code>.
+              <code className="rounded bg-zinc-800 px-1">bunny1</code>.{" "}
+              <strong className="text-zinc-300">gingynpc</strong> / <strong className="text-zinc-300">eggnpc</strong> /{" "}
+              <strong className="text-zinc-300">vampnpc</strong> use fixed Roaming templates{" "}
+              <code className="rounded bg-zinc-800 px-1">gingy</code>, <code className="rounded bg-zinc-800 px-1">egg</code>,{" "}
+              <code className="rounded bg-zinc-800 px-1">vamp</code> (wear + weapons from server JSON).
             </p>
             <p className="mt-2 text-sm text-zinc-400">
               <strong className="text-zinc-300">Override:</strong>{" "}
@@ -433,6 +437,54 @@ export default function AdminStreamerInteractionsPage() {
                   className="shrink-0 rounded bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
                 >
                   Copy bunny outfit
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                  {`${webhookUrl}?action=gingynpc`}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${webhookUrl}?action=gingynpc`);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="shrink-0 rounded bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
+                >
+                  Copy Gingy bot
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                  {`${webhookUrl}?action=eggnpc`}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${webhookUrl}?action=eggnpc`);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="shrink-0 rounded bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
+                >
+                  Copy Egg bot
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                  {`${webhookUrl}?action=vampnpc`}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${webhookUrl}?action=vampnpc`);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="shrink-0 rounded bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
+                >
+                  Copy Vamp bot
                 </button>
               </div>
             </div>

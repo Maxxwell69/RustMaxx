@@ -68,6 +68,9 @@ The webhook picks **viewer name** from typical TikTok fields: `uniqueId`, `viewe
 | **`bunny1`** | Puts the **bunny costume on the streamer** only (clears wear, equips onesie + ears). **Does not spawn** a new character. |
 | **`bunny1npc`** | **MaxxInvaders** viewer spawn with the **same Roaming template as usual** (default **`streamer_patrol`**). Always uses outfit profile **`bunny1`** (bunny onesie + ears); **`?outfit=`** is ignored. **No** separate `bunny1` bot key in JSON. Optional **`?template=`** for another Roaming key. |
 | **`maxxinvaders`** | Same pipeline. **Outfit:** default **`default`** / **`crew`** = template clothes only; **`bunny1`** = same wear as `bunny1npc`; or **`?outfit=`** with a **pipe-separated** list of item shortnames. Named profiles live in **`lib/maxxinvaders-outfit-profiles.ts`** (add more there). |
+| **`gingynpc`** | **MaxxInvaders** spawn with fixed Roaming template **`gingy`** (gingerbread suit, AK, jackhammer, pickaxe, tree hatchet, meds + gathering). **`?template=`** / **`?outfit=`** ignored. Requires **`gingy`** under **Bots settings** in RoamingNPCs. |
+| **`eggnpc`** | Same, template **`egg`** (egg suit, LR-300, chainsaw, meds + gathering). Requires **`egg`** in RoamingNPCs. |
+| **`vampnpc`** | Same, template **`vamp`** (Dracula cape, mask, pants, bow + baseball bat, meds + gathering). Requires **`vamp`** in RoamingNPCs. |
 | **`npcmaxx` + `template=…`** | **NPCMaxx** direct spawn (`npcmaxx.spawn …`) — separate from MaxxInvaders; still needs that template key in RoamingNPCs. |
 
 If you expected a **character in the world** but used **`bunny1`** (RustChaos), use **`bunny1npc`** or **`maxxinvaders`**, not the costume action.
@@ -127,6 +130,7 @@ Same **`maxxinvaders.spawn`** path as plain **`maxxinvaders`**; only the **8th R
 
 - **`?outfit=default`** or **`?outfit=crew`** — no wear override (Roaming JSON defines clothes, e.g. normal **crew** look on **`streamer_patrol`**).
 - **`?outfit=bunny1`** — same bunny pipe as **`bunny1npc`**.
+- **`?outfit=gingy`**, **`egg`**, **`vamp`** — wear-only pipes (clothes). For the **full** weapon/tool loadouts, spawn with **`?action=gingynpc`**, **`eggnpc`**, or **`vampnpc`** (or **`?template=gingy`** / **`egg`** / **`vamp`** on **`maxxinvaders`**), not just the outfit name on **`streamer_patrol`**.
 - **`?outfit=item.one|item.two`** — custom pipe (sanitized server-side).
 - JSON body: **`outfit`** or **`outfitProfile`** (query wins if both are set).
 
@@ -147,6 +151,7 @@ Register new named profiles in **`lib/maxxinvaders-outfit-profiles.ts`**.
 | Query | `.../webhook?action=wolf` |
 | Roaming NPC | `.../webhook?action=npcmaxx&template=bob_resources_farmer` |
 | Bunny viewer bot | `.../webhook?action=bunny1npc` |
+| Gingy / Egg / Vamp viewer bots | `.../webhook?action=gingynpc` · `.../webhook?action=eggnpc` · `.../webhook?action=vampnpc` |
 | MaxxInvaders + bunny outfit (same as bunny1npc) | `.../webhook?action=maxxinvaders&outfit=bunny1` |
 | Crew registry | `.../webhook?event=join` (see `TIKFINITY_CREW_RNPC_SETUP.md`) |
 

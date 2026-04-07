@@ -9,6 +9,12 @@ export const MAXX_INVADERS_OUTFIT_PROFILES: Record<string, string | null> = {
   /** Alias of default — useful for TikFinity labels (“crew look”). */
   crew: null,
   bunny1: "attire.bunny.onesie|attire.bunnyears",
+  /** Gingerbread suit — wear-only; full loadout uses Roaming template `gingy`. */
+  gingy: "gingerbreadsuit",
+  /** Egg suit — wear-only; full loadout uses Roaming template `egg`. */
+  egg: "attire.egg.suit",
+  /** Dracula cape + mask + default pants (Rust has no separate “Dracula pants” item). */
+  vamp: "draculacape|draculamask|pants",
 };
 
 /** Backward-compatible export for scripts and docs that referenced the bunny pipe directly. */
@@ -73,5 +79,20 @@ export const MAXX_INVADERS_OUTFIT_PROFILE_DOCS: {
     id: "bunny1",
     wearPipe: "attire.bunny.onesie|attire.bunnyears",
     note: "Bunny onesie + ears (same as bunny1npc action).",
+  },
+  {
+    id: "gingy",
+    wearPipe: "gingerbreadsuit",
+    note: "Gingerbread suit. Use webhook action gingynpc or ?template=gingy for AK + tools + meds.",
+  },
+  {
+    id: "egg",
+    wearPipe: "attire.egg.suit",
+    note: "Egg suit. Use eggnpc or ?template=egg for LR-300 + chainsaw + meds.",
+  },
+  {
+    id: "vamp",
+    wearPipe: "draculacape|draculamask|pants",
+    note: "Dracula look + pants. Use vampnpc or ?template=vamp for bow + bat + meds.",
   },
 ];

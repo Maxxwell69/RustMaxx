@@ -32,6 +32,9 @@ export const TIKTRIGGER_ACTIONS = [
   "chaosheli",
   "bunny1",
   "bunny1npc",
+  "gingynpc",
+  "eggnpc",
+  "vampnpc",
   "npcmaxx",
   "maxxinvaders",
 ] as const;
@@ -93,6 +96,15 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Bunny1Npc: "bunny1npc",
   bunny1npc: "bunny1npc",
   "!bunny1npc": "bunny1npc",
+  GingyNpc: "gingynpc",
+  gingynpc: "gingynpc",
+  "!gingynpc": "gingynpc",
+  EggNpc: "eggnpc",
+  eggnpc: "eggnpc",
+  "!eggnpc": "eggnpc",
+  VampNpc: "vampnpc",
+  vampnpc: "vampnpc",
+  "!vampnpc": "vampnpc",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -296,6 +308,24 @@ export const ACTION_META: Record<
     description:
       "MaxxInvaders spawn using the same Roaming template as normal viewer bots (default streamer_patrol). Forces outfit profile bunny1 (onesie + ears); ignores ?outfit=. No separate bunny1 JSON bot key. Optional ?template= for another Roaming key. For other outfits use ?action=maxxinvaders&outfit=… (lib/maxxinvaders-outfit-profiles.ts). Requires MaxxInvaders 1.7.8+ and RoamingNPCs 0.5.23+.",
     exampleGifts: ["BunnyBot", "!bunny1npc"],
+  },
+  gingynpc: {
+    label: "Gingy viewer bot (spawn)",
+    description:
+      "MaxxInvaders spawn using Roaming template **`gingy`** (gingerbread suit, AK rifle, jackhammer, pickaxe, prototype tree hatchet, syringes + gathering). Forces that template and default outfit (no wear pipe); ignores ?outfit= and ?template=. Requires RoamingNPCs config with Bots settings **`gingy`**.",
+    exampleGifts: ["GingyNpc", "!gingynpc"],
+  },
+  eggnpc: {
+    label: "Egg viewer bot (spawn)",
+    description:
+      "MaxxInvaders spawn using Roaming template **`egg`** (egg suit, LR-300, chainsaw + fuel-capable gathering, syringes). Forces template **`egg`**. Requires **`egg`** in RoamingNPCs.",
+    exampleGifts: ["EggNpc", "!eggnpc"],
+  },
+  vampnpc: {
+    label: "Vamp viewer bot (spawn)",
+    description:
+      "MaxxInvaders spawn using Roaming template **`vamp`** (Dracula cape, mask, pants, hunting bow + baseball bat, syringes + gathering). Forces template **`vamp`**. Requires **`vamp`** in RoamingNPCs.",
+    exampleGifts: ["VampNpc", "!vampnpc"],
   },
   npcmaxx: {
     label: "Roaming NPC (viewer bot)",
@@ -562,6 +592,12 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   "!bunny1": "bunny1",
   bunny1npc: "bunny1npc",
   "!bunny1npc": "bunny1npc",
+  gingynpc: "gingynpc",
+  "!gingynpc": "gingynpc",
+  eggnpc: "eggnpc",
+  "!eggnpc": "eggnpc",
+  vampnpc: "vampnpc",
+  "!vampnpc": "vampnpc",
   npcmaxx: "npcmaxx",
   maxxinvaders: "maxxinvaders",
   invaders: "maxxinvaders",
