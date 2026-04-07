@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.13")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.14")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1475,7 +1475,7 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Returns stacks moved to anchor-owned storage, or -1 error / not Roaming, -2 no eligible storage near anchor.
+        /// Returns stacks moved to anchor-owned storage, -1 error, -2 no storage, -3 bot is walking to the box (transfer when within ~2 m).
         /// </summary>
         private int TryRoamingDepositItemsToAnchorStorage(ulong entityId, ulong anchorSteamId)
         {
@@ -1501,6 +1501,7 @@ namespace Oxide.Plugins
             var uid = issuer.userID;
             var total = 0;
             var tried = 0;
+            var enroute = 0;
             var noRoam = 0;
             foreach (var r in _registry.All().ToArray())
             {
@@ -1513,7 +1514,8 @@ namespace Oxide.Plugins
 
                 tried++;
                 var m = TryRoamingDepositItemsToAnchorStorage(r.EntityId, uid);
-                if (m >= 0) total += m;
+                if (m == -3) enroute++;
+                else if (m >= 0) total += m;
             }
 
             if (tried == 0 && noRoam > 0)
@@ -1521,12 +1523,18 @@ namespace Oxide.Plugins
                     "[MaxxInvaders] Deposit only applies to RoamingNPCs bots (not vanilla scientists).");
             else if (tried == 0)
                 issuer.ChatMessage("[MaxxInvaders] No active bots to deposit.");
-            else if (total == 0)
+            else if (total == 0 && enroute == 0)
                 issuer.ChatMessage(
-                    "[MaxxInvaders] Deposit: 0 stacks moved (empty bot bags, or stand near a non-full box/cupboard you own).");
+                    "[MaxxInvaders] Deposit: 0 stacks moved (empty bot bags, or no eligible non-full storage for your anchor).");
             else
-                issuer.ChatMessage(
-                    $"[MaxxInvaders] Deposit: moved {total} stack(s) into your storage from {tried} bot(s).");
+            {
+                var parts = new List<string>();
+                if (total > 0) parts.Add($"moved {total} stack(s) now");
+                if (enroute > 0)
+                    parts.Add(
+                        $"{enroute} bot(s) walking to storage (loot moves when within ~2 m — needs RoamingNPCs 0.5.29+)");
+                issuer.ChatMessage("[MaxxInvaders] Deposit: " + string.Join("; ", parts) + ".");
+            }
         }
 
         private void DepositSingleRoamingBot(BasePlayer issuer, InvaderRuntime r)
@@ -1544,7 +1552,10 @@ namespace Oxide.Plugins
                     "[MaxxInvaders] Deposit failed (RoamingNPCs not loaded, or that NPC is not a tracked Roaming bot).");
             else if (m == -2)
                 issuer.ChatMessage(
-                    "[MaxxInvaders] No non-full storage found — stand near a box/cupboard you own (same OwnerID as you).");
+                    "[MaxxInvaders] No non-full storage found — assign a box or stand near anchor-owned cupboard/box (same OwnerID).");
+            else if (m == -3)
+                issuer.ChatMessage(
+                    "[MaxxInvaders] Bot is walking to the deposit box — items transfer automatically within ~2 m (RoamingNPCs 0.5.29+).");
             else
                 issuer.ChatMessage($"[MaxxInvaders] Deposit: moved {m} stack(s) to your storage.");
         }

@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.28")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.29")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -38,6 +38,9 @@ namespace Oxide.Plugins
         public static RoamingNPCs instance;
         private Timer _timer;
         private Timer _bridgePatrolTimer;
+        private Timer _bridgeDepositApproachTimer;
+        /// <summary>MaxxInvaders bridge <c>deposit</c>: bot must be this close (m) before items move into storage.</summary>
+        private const float BridgeDepositApproachCompleteDistance = 2f;
         public Configuration config;
         public DataBots Data;
         public List<string> NicknamesData;
@@ -2350,6 +2353,9 @@ namespace Oxide.Plugins
             [JsonIgnore] public float BridgePatrolNextMoveAt;
             /// <summary>MaxxInvaders: optional <see cref="StorageContainer"/> net ID for <c>deposit</c> (OwnerID must match anchor).</summary>
             [JsonIgnore] public ulong BridgeDepositContainerNetId;
+            /// <summary>Walking to assigned/nearby storage before <c>DepositItemsToAnchorOwnedStorage</c> transfer.</summary>
+            [JsonIgnore] public bool BridgeDepositApproachActive;
+            [JsonIgnore] public ulong BridgeDepositApproachContainerNetId;
             /// <summary>Last <see cref="ApplyBridgeTask"/> keyword applied (runtime only; not saved).</summary>
             [JsonIgnore] public string BridgeLastAppliedTask;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
@@ -2846,6 +2852,9 @@ namespace Oxide.Plugins
             }
             if (_bridgePatrolTimer != null && !_bridgePatrolTimer.Destroyed) _bridgePatrolTimer.Destroy();
             _bridgePatrolTimer = timer.Every(2.5f, BridgePatrolTick);
+            if (_bridgeDepositApproachTimer != null && !_bridgeDepositApproachTimer.Destroyed)
+                _bridgeDepositApproachTimer.Destroy();
+            _bridgeDepositApproachTimer = timer.Every(0.25f, BridgeDepositApproachTick);
             timer.Once(1f, () =>
             {
                 InitializationBots(false);
@@ -2861,6 +2870,8 @@ namespace Oxide.Plugins
         {
             if (_timer != null && !_timer.Destroyed) _timer.Destroy();
             if (_bridgePatrolTimer != null && !_bridgePatrolTimer.Destroyed) _bridgePatrolTimer.Destroy();
+            if (_bridgeDepositApproachTimer != null && !_bridgeDepositApproachTimer.Destroyed)
+                _bridgeDepositApproachTimer.Destroy();
             visibleAdmins.Clear();
             visibleAdminsStash.Clear();
             _bridgeLootPetNetByLooter.Clear();
@@ -3345,6 +3356,73 @@ namespace Oxide.Plugins
             var ang = Random.Range(0f, Mathf.PI * 2f);
             var dist = Random.Range(radiusMeters * 0.22f, radiusMeters * 0.9f);
             return anchorPos + new Vector3(Mathf.Cos(ang) * dist, 0f, Mathf.Sin(ang) * dist);
+        }
+
+        private static int PerformBridgeDepositItemTransfer(CustomPet pet, IItemContainerEntity containerEntity)
+        {
+            var setup = pet?.Data?.Setup;
+            if (setup == null || containerEntity?.inventory == null) return -1;
+            var inv = pet.inventory?.containerMain;
+            if (inv == null) return -1;
+            var items = Pool.Get<List<Item>>();
+            items.AddRange(inv.itemList);
+            var moved = 0;
+            for (var i = 0; i < items.Count && containerEntity != null; i++)
+            {
+                var item = items[i];
+                if (item == null || item.amount <= 0) continue;
+                if (setup.ContainsItem(item)) continue;
+                if (item.MoveToContainer(containerEntity.inventory)) moved++;
+                else break;
+            }
+
+            Pool.FreeUnmanaged(ref items);
+            return moved;
+        }
+
+        /// <summary>Complete MaxxInvaders <c>deposit</c> after the bot reaches the storage (within <see cref="BridgeDepositApproachCompleteDistance"/> m).</summary>
+        private void BridgeDepositApproachTick()
+        {
+            if (listNpcPlayers == null || listNpcPlayers.Count == 0) return;
+            foreach (var pet in listNpcPlayers.Values)
+            {
+                if (pet == null || pet.IsDestroyed || !pet.IsAlive()) continue;
+                var data = pet.Data;
+                if (data == null || !data.BridgeDepositApproachActive) continue;
+
+                var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(data.BridgeDepositApproachContainerNetId)) as
+                    BaseEntity;
+                if (ent == null || ent.IsDestroyed || ent is not StorageContainer sc || sc.inventory == null ||
+                    sc.inventory.IsFull())
+                {
+                    data.BridgeDepositApproachActive = false;
+                    data.BridgeDepositApproachContainerNetId = 0UL;
+                    continue;
+                }
+
+                if (data.BridgeProtectAnchorUserId != 0UL && ent.OwnerID != data.BridgeProtectAnchorUserId)
+                {
+                    data.BridgeDepositApproachActive = false;
+                    data.BridgeDepositApproachContainerNetId = 0UL;
+                    continue;
+                }
+
+                var stand = ent.transform.position;
+                if (pet.MoveController?.Navigator != null &&
+                    pet.MoveController.Navigator.GetNearestNavmeshPosition(stand, out var nav, 6f))
+                    stand = nav;
+
+                if (Vector3.Distance(pet.transform.position, stand) <= BridgeDepositApproachCompleteDistance)
+                {
+                    data.BridgeDepositApproachActive = false;
+                    data.BridgeDepositApproachContainerNetId = 0UL;
+                    PerformBridgeDepositItemTransfer(pet, sc);
+                    continue;
+                }
+
+                if (pet.MoveController != null)
+                    pet.MoveController.SetDestination(stand, _ => { }, false);
+            }
         }
 
         private void OnCollectiblePickedup(CollectibleEntity collectible, CustomPet customPet, Item item)
@@ -9255,8 +9333,9 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// MaxxInvaders: move items from the bot main inventory into the nearest non-full <see cref="StorageContainer"/>
-        /// owned by <paramref name="anchorSteamId"/> (same rules as automatic bridge deposit). Returns item stacks moved, or -1 not found, -2 no storage.
+        /// MaxxInvaders: move items from the bot main inventory into anchor-owned <see cref="StorageContainer"/> (assigned box or nearest).
+        /// If the bot is farther than ~2 m from the container, it paths to the box first; transfer runs when close (see <see cref="BridgeDepositApproachTick"/>).
+        /// Returns stacks moved, -1 error, -2 no storage, -3 pathing to storage (transfer shortly).
         /// </summary>
         [HookMethod("DepositItemsToAnchorOwnedStorage")]
         public object DepositItemsToAnchorOwnedStorage(ulong entityNetId, ulong anchorSteamId)
@@ -9278,26 +9357,38 @@ namespace Oxide.Plugins
                         setup.FullState.BridgeAnchorStorageSearchRadius = 18f;
                 }
 
-                if (!TryFindAnchorOwnedStorageForBridge(pet, out var container))
+                if (!TryFindAnchorOwnedStorageForBridge(pet, out var container) || container == null)
                     return -2;
 
-                var inv = pet.inventory?.containerMain;
-                if (inv == null) return -1;
+                if (pet.inventory?.containerMain == null) return -1;
 
-                var items = Pool.Get<List<Item>>();
-                items.AddRange(inv.itemList);
-                var moved = 0;
-                for (var i = 0; i < items.Count && container != null; i++)
+                var be = container as BaseEntity;
+                if (be == null || be.net == null)
+                    return PerformBridgeDepositItemTransfer(pet, container);
+
+                var stand = be.transform.position;
+                if (pet.MoveController?.Navigator != null &&
+                    pet.MoveController.Navigator.GetNearestNavmeshPosition(stand, out var nav, 6f))
+                    stand = nav;
+
+                if (pet.MoveController?.Navigator == null)
                 {
-                    var item = items[i];
-                    if (item == null || item.amount <= 0) continue;
-                    if (setup.ContainsItem(item)) continue;
-                    if (item.MoveToContainer(container.inventory)) moved++;
-                    else break;
+                    pet.Data.BridgeDepositApproachActive = false;
+                    pet.Data.BridgeDepositApproachContainerNetId = 0UL;
+                    return PerformBridgeDepositItemTransfer(pet, container);
                 }
 
-                Pool.FreeUnmanaged(ref items);
-                return moved;
+                if (Vector3.Distance(pet.transform.position, stand) > BridgeDepositApproachCompleteDistance)
+                {
+                    pet.Data.BridgeDepositApproachActive = true;
+                    pet.Data.BridgeDepositApproachContainerNetId = be.net.ID.Value;
+                    pet.MoveController.SetDestination(stand, _ => { }, false);
+                    return -3;
+                }
+
+                pet.Data.BridgeDepositApproachActive = false;
+                pet.Data.BridgeDepositApproachContainerNetId = 0UL;
+                return PerformBridgeDepositItemTransfer(pet, container);
             }
             catch (Exception ex)
             {
