@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.15")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.16")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1594,6 +1594,36 @@ namespace Oxide.Plugins
             return true;
         }
 
+        private static bool TryGetBuildingPrivlidgeFromPlayerLook(BasePlayer player, float maxDist, out BuildingPrivlidge priv)
+        {
+            priv = null;
+            if (player?.eyes == null) return false;
+            if (!Physics.Raycast(player.eyes.HeadRay(), out RaycastHit hit, maxDist, Physics.DefaultRaycastLayers,
+                    QueryTriggerInteraction.Ignore))
+                return false;
+            var ent = hit.GetEntity();
+            for (var i = 0; i < 12 && ent != null; i++)
+            {
+                if (ent is BuildingPrivlidge bp)
+                {
+                    priv = bp;
+                    return true;
+                }
+
+                ent = ent.GetParentEntity();
+            }
+
+            return false;
+        }
+
+        private static bool TryGetCupboardNetIdFromPlayerLook(BasePlayer player, float maxDist, out ulong netId)
+        {
+            netId = 0UL;
+            if (!TryGetBuildingPrivlidgeFromPlayerLook(player, maxDist, out var bp) || bp == null) return false;
+            netId = bp.net.ID.Value;
+            return true;
+        }
+
         /// <summary>World marker for the player who assigned a deposit box (ddraw).</summary>
         private static void DrawDepositBoxAssignMarker(BasePlayer player, Vector3 worldPos)
         {
@@ -1645,6 +1675,59 @@ namespace Oxide.Plugins
                 player.ChatMessage($"[MaxxInvaders] Deposit box set for {ok} of {roam} Roaming bot(s).");
         }
 
+        /// <summary>World marker when assigning home TC (ddraw).</summary>
+        private static void DrawHomeCupboardAssignMarker(BasePlayer player, Vector3 worldPos)
+        {
+            if (player == null || !player.IsConnected) return;
+            const float NoFade = 0f;
+            var tip = worldPos + Vector3.up * 0.35f;
+            var arrowFrom = tip + Vector3.up * 4.5f;
+            var col = new Color(0.55f, 0.35f, 0.95f, 1f);
+            player.SendConsoleCommand("ddraw.arrow", DepositBoxMarkerDurationSeconds, col, arrowFrom, tip, 0.42f, NoFade);
+            player.SendConsoleCommand("ddraw.text", DepositBoxMarkerDurationSeconds, col, tip + Vector3.up * 1.25f,
+                "<size=14>HOME TC</size>", NoFade);
+            player.SendConsoleCommand("ddraw.sphere", DepositBoxMarkerDurationSeconds, new Color(0.45f, 0.25f, 0.9f, 0.35f),
+                tip, 0.38f, NoFade);
+        }
+
+        /// <summary>Pin the looked-at <see cref="BuildingPrivlidge"/> as home roam center for every Roaming bridge bot whose anchor owns it.</summary>
+        private void AssignHomeCupboardFromLookForAllRoaming(BasePlayer player)
+        {
+            if (player == null) return;
+            if (!TryGetBuildingPrivlidgeFromPlayerLook(player, DepositBoxLookRayMeters, out var priv) || priv == null ||
+                priv.IsDestroyed)
+            {
+                player.ChatMessage(
+                    $"[MaxxInvaders] Look at a tool cupboard within {DepositBoxLookRayMeters:F0}m (home roam center).");
+                return;
+            }
+
+            var net = priv.net.ID.Value;
+            var markerPos = priv.transform.position;
+            var ok = 0;
+            var roam = 0;
+            foreach (var r in _registry.All().ToArray())
+            {
+                if (r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed) continue;
+                if (!r.IsRoamingNpc) continue;
+                roam++;
+                var anchor = ResolveBridgeAnchorSteam(r, player);
+                if (TryRoamingSetBridgeHomeCupboard(r.EntityId, anchor, net)) ok++;
+            }
+
+            DrawHomeCupboardAssignMarker(player, markerPos);
+
+            if (roam == 0)
+                player.ChatMessage(
+                    "[MaxxInvaders] No Roaming bridge bots on the map — home TC applies to RoamingNPCs only.");
+            else if (ok == 0)
+                player.ChatMessage(
+                    "[MaxxInvaders] No bots updated — cupboard OwnerID must match each bot's anchor. Use their client or /maxxinvaders home <npcId> look.");
+            else
+                player.ChatMessage(
+                    $"[MaxxInvaders] Home TC set for {ok} of {roam} Roaming bot(s). Far roam from cupboard; deposit still uses your box command.");
+        }
+
         private void OnPlayerInput(BasePlayer player, InputState input)
         {
             if (player == null || input == null) return;
@@ -1690,6 +1773,21 @@ namespace Oxide.Plugins
             catch (Exception ex)
             {
                 PrintWarning($"{LogPrefix} RoamingNPCs.SetBridgeDepositBox: {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool TryRoamingSetBridgeHomeCupboard(ulong entityId, ulong anchorSteam, ulong cupboardNetId)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return false;
+            try
+            {
+                var raw = RoamingNPCs.Call("SetBridgeHomeCupboard", entityId, anchorSteam, cupboardNetId);
+                return raw is bool b && b;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} RoamingNPCs.SetBridgeHomeCupboard: {ex.Message}");
                 return false;
             }
         }
@@ -1788,6 +1886,29 @@ namespace Oxide.Plugins
             else
                 player.ChatMessage(
                     "[MaxxInvaders] Could not set box (invalid id, not storage, or OwnerID does not match anchor).");
+        }
+
+        private void TrySetBridgeHomeCupboardForInvader(BasePlayer player, InvaderRuntime r, ulong cupboardNetId)
+        {
+            if (player == null || r == null) return;
+            if (!r.IsRoamingNpc)
+            {
+                player.ChatMessage("[MaxxInvaders] Home TC is for RoamingNPCs bridge bots only.");
+                return;
+            }
+
+            var anchor = ResolveBridgeAnchorSteam(r, player);
+            if (TryRoamingSetBridgeHomeCupboard(r.EntityId, anchor, cupboardNetId))
+            {
+                if (cupboardNetId == 0UL)
+                    player.ChatMessage($"[MaxxInvaders] Cleared home TC for {r.NpcId}.");
+                else
+                    player.ChatMessage(
+                        $"[MaxxInvaders] {r.NpcId} home roam center = cupboard net {cupboardNetId}. Far patrol from TC; /maxxinvaders deposit recalls to storage.");
+            }
+            else
+                player.ChatMessage(
+                    "[MaxxInvaders] Could not set home TC (invalid id, not a tool cupboard, or OwnerID does not match anchor).");
         }
 
         private void BehaviorTick()
@@ -2425,6 +2546,28 @@ namespace Oxide.Plugins
             AssignDepositBoxFromLookForAllRoaming(player);
         }
 
+        /// <summary>Client: <c>maxxinvaders.homeall look</c> — assign looked-at tool cupboard as home roam center for all Roaming bots (same OwnerID as anchor).</summary>
+        [ConsoleCommand("maxxinvaders.homeall")]
+        private void CmdPlayerHomeAllLook(ConsoleSystem.Arg arg)
+        {
+            var player = arg.Connection?.player as BasePlayer;
+            if (player == null) return;
+            if (!CanAdmin(player))
+            {
+                player.ChatMessage("Requires maxxinvaders.admin.");
+                return;
+            }
+
+            var args = arg.Args;
+            if (args == null || args.Length < 1 || !args[0].Equals("look", StringComparison.OrdinalIgnoreCase))
+            {
+                player.ChatMessage("[MaxxInvaders] Usage: maxxinvaders.homeall look");
+                return;
+            }
+
+            AssignHomeCupboardFromLookForAllRoaming(player);
+        }
+
         private void ToggleInvadersHudPanelForPlayer(BasePlayer player)
         {
             if (player == null || !CanAdmin(player)) return;
@@ -2519,7 +2662,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | … | box … | boxall look | …  (middle mouse = assign deposit box for all Roaming bots; task: wood stone cloth hunt protect gather mixed idle)");
+                    "Usage: /maxxinvaders ui | … | box … | boxall look | home … | homeall look | …  (middle mouse = deposit box; home = tool cupboard for far roam; tasks: wood … mixed …)");
                 return;
             }
 
@@ -2773,6 +2916,58 @@ namespace Oxide.Plugins
                     }
 
                     AssignDepositBoxFromLookForAllRoaming(player);
+                    break;
+                case "home":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    if (args.Length < 3)
+                    {
+                        player.ChatMessage("Usage: /maxxinvaders home <npcId|viewerId> <look|0|netId>");
+                        return;
+                    }
+
+                    if (!TryFindInvader(args[1], out var homeR))
+                    {
+                        player.ChatMessage("[MaxxInvaders] NPC not found.");
+                        return;
+                    }
+
+                    var homeArg = args[2].Trim();
+                    if (homeArg.Equals("look", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!TryGetCupboardNetIdFromPlayerLook(player, DepositBoxLookRayMeters, out var lookCup))
+                        {
+                            player.ChatMessage(
+                                $"[MaxxInvaders] Look at a tool cupboard within {DepositBoxLookRayMeters:F0}m.");
+                            return;
+                        }
+
+                        TrySetBridgeHomeCupboardForInvader(player, homeR, lookCup);
+                    }
+                    else if (ulong.TryParse(homeArg, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cupNet))
+                        TrySetBridgeHomeCupboardForInvader(player, homeR, cupNet);
+                    else
+                        player.ChatMessage("[MaxxInvaders] Third arg must be look, 0, or a numeric net ID.");
+                    break;
+                case "homeall":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    if (args.Length < 2 || !args[1].Equals("look", StringComparison.OrdinalIgnoreCase))
+                    {
+                        player.ChatMessage(
+                            "Usage: /maxxinvaders homeall look  —  assigns looked-at tool cupboard for all Roaming bots");
+                        return;
+                    }
+
+                    AssignHomeCupboardFromLookForAllRoaming(player);
                     break;
                 case "debug":
                     if (!permission.UserHasPermission(player.UserIDString, PermDebug) && !player.IsAdmin)
@@ -5022,7 +5217,7 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                $"On map: {bots.Count} invader(s) · Roaming (bridge): {roam}. Scroll: Wd/St/Cl/Hu/Pr/Ga/Mx/Id/Dep. Deposit box for all: middle mouse (wheel click) or /maxxinvaders boxall look.",
+                $"On map: {bots.Count} invader(s) · Roaming (bridge): {roam}. Scroll: Wd/St/Cl/Hu/Pr/Ga/Mx/Id/Dep. Deposit: middle mouse or boxall look. Home TC (far roam): ALL HOME (look at cupboard) or homeall look.",
                 "0.03 0.875",
                 "0.97 0.925",
                 10,
@@ -5049,6 +5244,7 @@ namespace Oxide.Plugins
             const string cIdle = "0.22 0.22 0.26 0.95";
             const string cDep = "0.22 0.45 0.55 0.95";
             const string cMixed = "0.42 0.28 0.52 0.95";
+            const string cHome = "0.42 0.28 0.55 0.95";
 
             AddCuiText(
                 container,
@@ -5138,15 +5334,24 @@ namespace Oxide.Plugins
                 cIdle,
                 "ALL IDLE",
                 "0.50 0.02",
-                "0.69 0.09",
+                "0.62 0.09",
                 11);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui homeall look",
+                cHome,
+                "ALL HOME",
+                "0.63 0.02",
+                "0.78 0.09",
+                10);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui deposit all",
                 cDep,
                 "ALL DEPOSIT",
-                "0.70 0.02",
+                "0.79 0.02",
                 "0.97 0.09",
                 11,
                 TextAnchor.MiddleCenter,
@@ -5662,6 +5867,13 @@ namespace Oxide.Plugins
             {
                 var task = args[1].Trim().ToLowerInvariant();
                 ApplyBridgeTaskToAllRoaming(player, task);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "homeall" && args.Length > 1 && args[1].Equals("look", StringComparison.OrdinalIgnoreCase))
+            {
+                AssignHomeCupboardFromLookForAllRoaming(player);
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }

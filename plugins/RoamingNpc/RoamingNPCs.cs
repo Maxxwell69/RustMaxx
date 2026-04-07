@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.32")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.33")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -43,6 +43,8 @@ namespace Oxide.Plugins
         private const float BridgeDepositApproachCompleteDistance = 2f;
         /// <summary>ApplyBridgeTask: minimum brain <see cref="ControllerSetup.RadiusFindEntity"/> for bridge bots (collectibles + Vis scan).</summary>
         private const float BridgeTaskMinFindRadius = 72f;
+        /// <summary>When a <see cref="DataBot.BridgeHomeCupboardNetId"/> is set, scan at least this far for resources while roaming from home.</summary>
+        private const float BridgeHomeRoamMinFindRadius = 110f;
         public Configuration config;
         public DataBots Data;
         public List<string> NicknamesData;
@@ -1711,6 +1713,11 @@ namespace Oxide.Plugins
 
             [JsonProperty(RU ? "Макс. секунд между сменами точки" : "Max seconds between patrol moves")]
             public float MaxMoveIntervalSeconds = 11f;
+
+            [JsonProperty(RU
+                ? "Радиус дальнего патруля от дома (шкаф) — только если задан MaxxInvaders home TC"
+                : "Home TC roam radius (m) — used when bridge home cupboard is assigned; large = explore farther before deposit recall")]
+            public float HomeRoamRadiusMeters = 160f;
         }
 
         public class SetupMining
@@ -2362,6 +2369,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public float BridgePatrolNextMoveAt;
             /// <summary>MaxxInvaders: optional <see cref="StorageContainer"/> net ID for <c>deposit</c> (OwnerID must match anchor).</summary>
             [JsonIgnore] public ulong BridgeDepositContainerNetId;
+            /// <summary>MaxxInvaders: optional tool cupboard (<see cref="BuildingPrivlidge"/>) net ID — roam center + far patrol; return to deposit only when deposit is called.</summary>
+            [JsonIgnore] public ulong BridgeHomeCupboardNetId;
             /// <summary>Walking to assigned/nearby storage before <c>DepositItemsToAnchorOwnedStorage</c> transfer.</summary>
             [JsonIgnore] public bool BridgeDepositApproachActive;
             [JsonIgnore] public ulong BridgeDepositApproachContainerNetId;
@@ -3321,18 +3330,41 @@ namespace Oxide.Plugins
             if (setup?.BridgePatrol == null || !setup.BridgePatrol.Enable) return;
             if (pet.Data == null || !pet.Data.SpawnedFromMaxxInvadersBridge) return;
             if (pet.Data.BridgeProtectAnchorUserId == 0UL) return;
+            if (pet.Data.BridgeDepositApproachActive) return;
             if (IsBotInCombat(pet)) return;
             if (pet.MoveController?.Navigator == null) return;
             if (UnityEngine.Time.realtimeSinceStartup < pet.Data.BridgePatrolNextMoveAt) return;
 
-            var anchor = BasePlayer.FindByID(pet.Data.BridgeProtectAnchorUserId);
-            if (anchor == null || !anchor.IsAlive()) return;
+            var useHomeCupboard = pet.Data.BridgeHomeCupboardNetId != 0UL &&
+                                  TryGetBridgeHomeCupboardPosition(pet, out var homePos);
 
-            float radius = Mathf.Clamp(setup.BridgePatrol.RadiusMeters, 8f, 80f);
-            float minI = Mathf.Max(2f, setup.BridgePatrol.MinMoveIntervalSeconds);
-            float maxI = Mathf.Max(minI + 0.5f, setup.BridgePatrol.MaxMoveIntervalSeconds);
+            Vector3 anchorPos;
+            float radius;
+            float minI;
+            float maxI;
+            float minFrac = 0.22f;
+            float maxFrac = 0.9f;
 
-            var anchorPos = anchor.transform.position;
+            if (useHomeCupboard)
+            {
+                anchorPos = homePos;
+                var hr = setup.BridgePatrol.HomeRoamRadiusMeters > 5f ? setup.BridgePatrol.HomeRoamRadiusMeters : 160f;
+                radius = Mathf.Clamp(hr, 80f, 500f);
+                minI = Mathf.Max(1.5f, setup.BridgePatrol.MinMoveIntervalSeconds * 0.55f);
+                maxI = Mathf.Max(minI + 0.5f, setup.BridgePatrol.MaxMoveIntervalSeconds * 0.55f);
+                minFrac = 0.48f;
+                maxFrac = 0.98f;
+            }
+            else
+            {
+                var anchor = BasePlayer.FindByID(pet.Data.BridgeProtectAnchorUserId);
+                if (anchor == null || !anchor.IsAlive()) return;
+                anchorPos = anchor.transform.position;
+                radius = Mathf.Clamp(setup.BridgePatrol.RadiusMeters, 8f, 80f);
+                minI = Mathf.Max(2f, setup.BridgePatrol.MinMoveIntervalSeconds);
+                maxI = Mathf.Max(minI + 0.5f, setup.BridgePatrol.MaxMoveIntervalSeconds);
+            }
+
             var petPos = pet.transform.position;
             petPos.y = anchorPos.y;
             float dist = Vector3.Distance(petPos, anchorPos);
@@ -3349,7 +3381,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                targetXZ = SamplePatrolPointAroundAnchor(anchorPos, radius);
+                targetXZ = SamplePatrolPointAroundAnchor(anchorPos, radius, minFrac, maxFrac);
             }
 
             targetXZ.y = anchorPos.y;
@@ -3360,10 +3392,29 @@ namespace Oxide.Plugins
             pet.Data.BridgePatrolNextMoveAt = UnityEngine.Time.realtimeSinceStartup + Random.Range(minI, maxI);
         }
 
+        /// <summary>MaxxInvaders: valid tool cupboard for this bot (same OwnerID as anchor).</summary>
+        private static bool TryGetBridgeHomeCupboardPosition(CustomPet pet, out Vector3 pos)
+        {
+            pos = default;
+            if (pet?.Data == null || pet.Data.BridgeHomeCupboardNetId == 0UL) return false;
+            var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(pet.Data.BridgeHomeCupboardNetId)) as BaseEntity;
+            if (ent == null || ent.IsDestroyed || ent is not BuildingPrivlidge) return false;
+            if (pet.Data.BridgeProtectAnchorUserId != 0UL && ent.OwnerID != pet.Data.BridgeProtectAnchorUserId)
+                return false;
+            pos = ent.transform.position;
+            return true;
+        }
+
         private static Vector3 SamplePatrolPointAroundAnchor(Vector3 anchorPos, float radiusMeters)
         {
+            return SamplePatrolPointAroundAnchor(anchorPos, radiusMeters, 0.22f, 0.9f);
+        }
+
+        private static Vector3 SamplePatrolPointAroundAnchor(Vector3 anchorPos, float radiusMeters, float minFrac,
+            float maxFrac)
+        {
             var ang = Random.Range(0f, Mathf.PI * 2f);
-            var dist = Random.Range(radiusMeters * 0.22f, radiusMeters * 0.9f);
+            var dist = Random.Range(radiusMeters * minFrac, radiusMeters * maxFrac);
             return anchorPos + new Vector3(Mathf.Cos(ang) * dist, 0f, Mathf.Sin(ang) * dist);
         }
 
@@ -9496,6 +9547,19 @@ namespace Oxide.Plugins
                     setup.Controller.BridgeBoostScanTimers();
                 }
 
+                /// <summary>When a home TC is set, re-enable far patrol + wide scan after task switches that strip companion patrol.</summary>
+                void EnsureHomeBridgePatrolAfterTask()
+                {
+                    if (pet.Data.BridgeHomeCupboardNetId == 0UL) return;
+                    setup.BridgePatrol ??= new SetupBridgePatrol();
+                    setup.BridgePatrol.Enable = true;
+                    if (setup.BridgePatrol.RadiusMeters < 40f) setup.BridgePatrol.RadiusMeters = 40f;
+                    setup.Controller ??= new ControllerSetup();
+                    if (setup.Controller.RadiusFindEntity < BridgeHomeRoamMinFindRadius)
+                        setup.Controller.RadiusFindEntity = BridgeHomeRoamMinFindRadius;
+                    setup.Controller.BridgeBoostScanTimers();
+                }
+
                 /// <summary>Clear gather/protect patrol so switching wood/stone/etc. does not leave conflicting FSM goals.</summary>
                 void StripCompanionPatrolAndProtect()
                 {
@@ -9613,6 +9677,7 @@ namespace Oxide.Plugins
                         return false;
                 }
 
+                EnsureHomeBridgePatrolAfterTask();
                 pet.Data.BridgeLastAppliedTask = t == "all" ? "gather" : t;
                 pet.CustomBrain?.ChangeState(null);
                 return true;
@@ -9765,6 +9830,48 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>MaxxInvaders: pin home tool cupboard (<see cref="BuildingPrivlidge"/>) for far roam from base; 0 clears.</summary>
+        [HookMethod("SetBridgeHomeCupboard")]
+        public object SetBridgeHomeCupboard(ulong petEntityNetId, ulong anchorSteamId, ulong cupboardNetId)
+        {
+            try
+            {
+                if (listNpcPlayers == null || !listNpcPlayers.TryGetValue(petEntityNetId, out var pet) || pet == null ||
+                    pet.IsDestroyed)
+                    return false;
+                if (pet.Data?.Setup == null) return false;
+
+                pet.Data.SpawnedFromMaxxInvadersBridge = true;
+                if (anchorSteamId != 0UL)
+                    pet.Data.BridgeProtectAnchorUserId = anchorSteamId;
+
+                if (cupboardNetId == 0UL)
+                {
+                    pet.Data.BridgeHomeCupboardNetId = 0UL;
+                    return true;
+                }
+
+                var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(cupboardNetId)) as BaseEntity;
+                if (ent == null || ent.IsDestroyed || ent is not BuildingPrivlidge) return false;
+                if (anchorSteamId != 0UL && ent.OwnerID != anchorSteamId) return false;
+
+                pet.Data.BridgeHomeCupboardNetId = cupboardNetId;
+                pet.Data.Setup.BridgePatrol ??= new SetupBridgePatrol();
+                pet.Data.Setup.BridgePatrol.Enable = true;
+                if (pet.Data.Setup.BridgePatrol.RadiusMeters < 40f) pet.Data.Setup.BridgePatrol.RadiusMeters = 40f;
+                pet.Data.Setup.Controller ??= new ControllerSetup();
+                if (pet.Data.Setup.Controller.RadiusFindEntity < BridgeHomeRoamMinFindRadius)
+                    pet.Data.Setup.Controller.RadiusFindEntity = BridgeHomeRoamMinFindRadius;
+                pet.Data.Setup.Controller.BridgeBoostScanTimers();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] SetBridgeHomeCupboard: {ex}");
+                return false;
+            }
+        }
+
         [HookMethod("IsBridgeTemplateReady")]
         public object IsBridgeTemplateReady(string templateKey)
         {
@@ -9794,7 +9901,7 @@ namespace Oxide.Plugins
                 sb.AppendLine();
                 sb.AppendLine($"Version: {Version}");
                 sb.AppendLine(
-                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, DepositItemsToAnchorOwnedStorage, ApplyBridgeTask, SetBridgeDepositBox, GetBridgeTaskLabel, GetBridgeLootPetNetIdForPlayer, ClearBridgeLootMappingForPlayer, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
+                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, DepositItemsToAnchorOwnedStorage, ApplyBridgeTask, SetBridgeDepositBox, SetBridgeHomeCupboard, GetBridgeTaskLabel, GetBridgeLootPetNetIdForPlayer, ClearBridgeLootMappingForPlayer, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
                 sb.AppendLine();
                 if (config?.bots == null)
                 {
