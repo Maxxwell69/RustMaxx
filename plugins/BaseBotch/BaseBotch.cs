@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.11")]
+    [Info("BaseBotch", "RustMaxx", "1.4.12")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -762,6 +762,7 @@ namespace Oxide.Plugins
 
                     TryInvokeElectricWheelUpdateMethods(comp);
                     TryDriveElectricWheelDirectOutput(comp);
+                    TryForceElectricWheelEnergyState(comp);
                     TryInvokeElectricWheelPublishPipeline(comp, npc);
                 }
 
@@ -899,6 +900,7 @@ namespace Oxide.Plugins
             var invoked = 0;
             var maxOut = ResolveWheelMaxOutput(comp);
             var invokedNames = new List<string>();
+            var failedNames = new List<string>();
             foreach (var m in comp.GetType().GetMethods(bf))
             {
                 var n = m.Name;
@@ -918,6 +920,10 @@ namespace Oxide.Plugins
                     invoked++;
                     invokedNames.Add($"{n}({m.GetParameters().Length})");
                 }
+                else
+                {
+                    failedNames.Add($"{n}({m.GetParameters().Length})[{DescribeMethodParams(m)}]");
+                }
             }
 
             if (!_cfg.DebugWheelAutorun || npc.net == null) return;
@@ -928,6 +934,24 @@ namespace Oxide.Plugins
             if (_nextWheelPublishDebugAt.TryGetValue(mountId, out var nextAt) && now < nextAt) return;
             _nextWheelPublishDebugAt[mountId] = now + 4f;
             Puts($"[BaseBotch][debug] wheelPublish mount={mountId} invoked={invoked} maxOut={maxOut:F1} methods=[{string.Join(", ", invokedNames.ToArray())}]");
+            if (failedNames.Count > 0)
+                Puts($"[BaseBotch][debug] wheelPublishFailed mount={mountId} methods=[{string.Join(", ", failedNames.ToArray())}]");
+        }
+
+        private static string DescribeMethodParams(MethodInfo m)
+        {
+            try
+            {
+                var ps = m.GetParameters();
+                var parts = new List<string>();
+                foreach (var p in ps)
+                    parts.Add(p.ParameterType.Name);
+                return string.Join("|", parts.ToArray());
+            }
+            catch
+            {
+                return "?";
+            }
         }
 
         private static float ResolveWheelMaxOutput(Component comp)
@@ -1014,6 +1038,58 @@ namespace Oxide.Plugins
             catch
             {
                 return false;
+            }
+        }
+
+        private static void TryForceElectricWheelEnergyState(Component comp)
+        {
+            if (comp == null) return;
+            if (comp.GetType().Name.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) < 0) return;
+            var maxOut = ResolveWheelMaxOutput(comp);
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                for (var t = comp.GetType(); t != null && t != typeof(object); t = t.BaseType)
+                {
+                    foreach (var f in t.GetFields(bf))
+                    {
+                        var n = f.Name ?? "";
+                        try
+                        {
+                            if (f.FieldType == typeof(bool))
+                            {
+                                if (n.IndexOf("ensureOutputsUpdated", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    n.IndexOf("forceUpdateOutputs", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    n.IndexOf("shouldUpdateOutputs", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    n.IndexOf("wantsPower", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    n.IndexOf("hasPower", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    f.SetValue(comp, true);
+                            }
+                            else if (f.FieldType == typeof(int))
+                            {
+                                if (n.IndexOf("currentEnergy", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    n.IndexOf("energy", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    n.IndexOf("currentPower", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    f.SetValue(comp, Mathf.RoundToInt(maxOut));
+                            }
+                            else if (f.FieldType == typeof(float))
+                            {
+                                if (n.IndexOf("currentEnergy", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    n.IndexOf("energy", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    n.IndexOf("currentPower", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    f.SetValue(comp, maxOut);
+                            }
+                        }
+                        catch
+                        {
+                            // ignored
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // ignored
             }
         }
 
