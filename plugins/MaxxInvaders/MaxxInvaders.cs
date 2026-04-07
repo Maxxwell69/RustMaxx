@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using Facepunch;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -21,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.11")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.12")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -72,6 +73,7 @@ namespace Oxide.Plugins
         private readonly HashSet<ulong> _hudOverlayHiddenByUser = new HashSet<ulong>();
         /// <summary>Admin has main MaxxInvaders CUI open — hide right INVADERS overlay so it does not stack on the GUI.</summary>
         private readonly HashSet<ulong> _adminMainGuiOpen = new HashSet<ulong>();
+        private readonly Dictionary<ulong, float> _lastMiddleMouseDepositBoxAt = new();
         private DateTime _lastRoamingSpawnFailWarnUtc;
         private string _lastRoamingSpawnFailTemplate;
 
@@ -86,6 +88,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermDebug, this);
             Subscribe(nameof(OnEntityTakeDamage));
             Subscribe(nameof(OnPlayerDisconnected));
+            Subscribe(nameof(OnPlayerInput));
         }
 
         private void OnPlayerDisconnected(BasePlayer player, string reason)
@@ -94,6 +97,7 @@ namespace Oxide.Plugins
             _lastHudContentByUser.Remove(player.userID);
             _adminMainGuiOpen.Remove(player.userID);
             _hudOverlayHiddenByUser.Remove(player.userID);
+            _lastMiddleMouseDepositBoxAt.Remove(player.userID);
             CuiHelper.DestroyUi(player, HudOverlayUiName);
         }
 
@@ -1538,9 +1542,13 @@ namespace Oxide.Plugins
                 issuer.ChatMessage($"[MaxxInvaders] Deposit: moved {m} stack(s) to your storage.");
         }
 
-        private static bool TryGetStorageNetIdFromPlayerLook(BasePlayer player, float maxDist, out ulong netId)
+        private const float DepositBoxLookRayMeters = 5f;
+        private const float DepositBoxMarkerDurationSeconds = 14f;
+        private const float MiddleMouseDepositBoxCooldownSeconds = 0.65f;
+
+        private static bool TryGetStorageFromPlayerLook(BasePlayer player, float maxDist, out StorageContainer storage)
         {
-            netId = 0UL;
+            storage = null;
             if (player?.eyes == null) return false;
             if (!Physics.Raycast(player.eyes.HeadRay(), out RaycastHit hit, maxDist, Physics.DefaultRaycastLayers,
                     QueryTriggerInteraction.Ignore))
@@ -1548,14 +1556,88 @@ namespace Oxide.Plugins
             var ent = hit.GetEntity();
             for (var i = 0; i < 8 && ent != null; i++)
             {
-                if (ent is StorageContainer)
+                if (ent is StorageContainer sc)
                 {
-                    netId = ent.net.ID.Value;
+                    storage = sc;
                     return true;
                 }
+
                 ent = ent.GetParentEntity();
             }
+
             return false;
+        }
+
+        private static bool TryGetStorageNetIdFromPlayerLook(BasePlayer player, float maxDist, out ulong netId)
+        {
+            netId = 0UL;
+            if (!TryGetStorageFromPlayerLook(player, maxDist, out var sc) || sc == null) return false;
+            netId = sc.net.ID.Value;
+            return true;
+        }
+
+        /// <summary>World marker for the player who assigned a deposit box (ddraw).</summary>
+        private static void DrawDepositBoxAssignMarker(BasePlayer player, Vector3 worldPos)
+        {
+            if (player == null || !player.IsConnected) return;
+            const float NoFade = 0f;
+            var tip = worldPos + Vector3.up * 0.35f;
+            var arrowFrom = tip + Vector3.up * 4.5f;
+            var gold = new Color(1f, 0.82f, 0.08f, 1f);
+            player.SendConsoleCommand("ddraw.arrow", DepositBoxMarkerDurationSeconds, gold, arrowFrom, tip, 0.42f, NoFade);
+            player.SendConsoleCommand("ddraw.text", DepositBoxMarkerDurationSeconds, gold, tip + Vector3.up * 1.25f,
+                "<size=14>DEPOSIT</size>", NoFade);
+            player.SendConsoleCommand("ddraw.sphere", DepositBoxMarkerDurationSeconds, new Color(1f, 0.55f, 0f, 0.4f),
+                tip, 0.38f, NoFade);
+        }
+
+        /// <summary>Pin the looked-at <see cref="StorageContainer"/> as deposit box for every Roaming bridge bot whose anchor owns that container.</summary>
+        private void AssignDepositBoxFromLookForAllRoaming(BasePlayer player)
+        {
+            if (player == null) return;
+            if (!TryGetStorageFromPlayerLook(player, DepositBoxLookRayMeters, out var sc) || sc == null || sc.IsDestroyed)
+            {
+                player.ChatMessage(
+                    $"[MaxxInvaders] Look at a box or cupboard within {DepositBoxLookRayMeters:F0}m (middle mouse or /maxxinvaders boxall look).");
+                return;
+            }
+
+            var boxNet = sc.net.ID.Value;
+            var markerPos = sc.transform.position;
+            var ok = 0;
+            var roam = 0;
+            foreach (var r in _registry.All().ToArray())
+            {
+                if (r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed) continue;
+                if (!r.IsRoamingNpc) continue;
+                roam++;
+                var anchor = ResolveBridgeAnchorSteam(r, player);
+                if (TryRoamingSetBridgeDepositBox(r.EntityId, anchor, boxNet)) ok++;
+            }
+
+            DrawDepositBoxAssignMarker(player, markerPos);
+
+            if (roam == 0)
+                player.ChatMessage(
+                    "[MaxxInvaders] No Roaming bridge bots on the map — assign applies to RoamingNPCs only.");
+            else if (ok == 0)
+                player.ChatMessage(
+                    "[MaxxInvaders] No bots updated — storage OwnerID must match each bot's anchor (often the streamer). Use their client or /maxxinvaders box <npcId> look.");
+            else
+                player.ChatMessage($"[MaxxInvaders] Deposit box set for {ok} of {roam} Roaming bot(s).");
+        }
+
+        private void OnPlayerInput(BasePlayer player, InputState input)
+        {
+            if (player == null || input == null) return;
+            if (!input.WasJustPressed(BUTTON.FIRE_THIRD)) return;
+            if (!CanAdmin(player)) return;
+            var now = Time.realtimeSinceStartup;
+            if (_lastMiddleMouseDepositBoxAt.TryGetValue(player.userID, out var prev) &&
+                now - prev < MiddleMouseDepositBoxCooldownSeconds)
+                return;
+            _lastMiddleMouseDepositBoxAt[player.userID] = now;
+            AssignDepositBoxFromLookForAllRoaming(player);
         }
 
         private static ulong ResolveBridgeAnchorSteam(InvaderRuntime r, BasePlayer issuer)
@@ -2268,6 +2350,29 @@ namespace Oxide.Plugins
             ToggleInvadersHudPanelForPlayer(player);
         }
 
+        /// <summary>Client: <c>maxxinvaders.boxall look</c> — same as middle mouse (assign looked-at box for all Roaming bots). Bind: <c>bind mouse2 maxxinvaders.boxall look</c>.</summary>
+        [ConsoleCommand("maxxinvaders.boxall")]
+        private void CmdPlayerBoxAllLook(ConsoleSystem.Arg arg)
+        {
+            var player = arg.Connection?.player as BasePlayer;
+            if (player == null) return;
+            if (!CanAdmin(player))
+            {
+                player.ChatMessage("Requires maxxinvaders.admin.");
+                return;
+            }
+
+            var args = arg.Args;
+            if (args == null || args.Length < 1 || !args[0].Equals("look", StringComparison.OrdinalIgnoreCase))
+            {
+                player.ChatMessage(
+                    "[MaxxInvaders] Usage: maxxinvaders.boxall look  —  or bind: bind mouse2 maxxinvaders.boxall look");
+                return;
+            }
+
+            AssignDepositBoxFromLookForAllRoaming(player);
+        }
+
         private void ToggleInvadersHudPanelForPlayer(BasePlayer player)
         {
             if (player == null || !CanAdmin(player)) return;
@@ -2362,7 +2467,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | follow | protect | deposit | task … | box … | list | …  (task: wood stone cloth hunt protect gather idle; box: look at container)");
+                    "Usage: /maxxinvaders ui | … | box … | boxall look | …  (middle mouse = assign deposit box for all Roaming bots; task: wood stone cloth hunt protect gather idle)");
                 return;
             }
 
@@ -2587,9 +2692,10 @@ namespace Oxide.Plugins
                     var boxArg = args[2].Trim();
                     if (boxArg.Equals("look", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (!TryGetStorageNetIdFromPlayerLook(player, 4f, out var lookId))
+                        if (!TryGetStorageNetIdFromPlayerLook(player, DepositBoxLookRayMeters, out var lookId))
                         {
-                            player.ChatMessage("[MaxxInvaders] Look at a box or cupboard within 4m.");
+                            player.ChatMessage(
+                                $"[MaxxInvaders] Look at a box or cupboard within {DepositBoxLookRayMeters:F0}m.");
                             return;
                         }
 
@@ -2599,6 +2705,22 @@ namespace Oxide.Plugins
                         TrySetBridgeDepositBoxForInvader(player, boxR, boxNet);
                     else
                         player.ChatMessage("[MaxxInvaders] Third arg must be look, 0, or a numeric net ID.");
+                    break;
+                case "boxall":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    if (args.Length < 2 || !args[1].Equals("look", StringComparison.OrdinalIgnoreCase))
+                    {
+                        player.ChatMessage(
+                            "Usage: /maxxinvaders boxall look  —  or middle mouse (wheel click). Optional bind: bind mouse2 maxxinvaders.boxall look");
+                        return;
+                    }
+
+                    AssignDepositBoxFromLookForAllRoaming(player);
                     break;
                 case "debug":
                     if (!permission.UserHasPermission(player.UserIDString, PermDebug) && !player.IsAdmin)
@@ -4638,7 +4760,7 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                $"On map: {bots.Count} invader(s) · Roaming (bridge): {roam}. Scroll the list; Wd=wood, St=stone, Cl=cloth, Hu=hunt, Pr=protect, Ga=gather, Id=idle, Dep=deposit.",
+                $"On map: {bots.Count} invader(s) · Roaming (bridge): {roam}. Scroll: Wd/St/Cl/Hu/Pr/Ga/Id/Dep. Deposit box for all: middle mouse (wheel click) or /maxxinvaders boxall look.",
                 "0.03 0.875",
                 "0.97 0.925",
                 10,
