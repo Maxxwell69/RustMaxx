@@ -39,7 +39,7 @@ maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - roaming "streamer_patrol
 
 - Optional **6th argument** is a **RoamingNPCs bot key** (overrides `ViewerRoamingTemplateKey` / tier default for that spawn). RustMaxx TikFinity webhook defaults to **`streamer_patrol`** when you do not pass `?template=`.
 - Optional **7th argument** is **anchor Steam64** (17 digits) or **`-`** to skip anchor: spawn ring + RoamingNPCs bridge use that **online or sleeping** player’s position so the bot stays near the streamer / base owner. Omit for legacy behavior (first online player or world origin). RustMaxx webhook: `?anchorSteam=…`, JSON `anchorSteam`, server dashboard field, or env `TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID`.
-- Optional **8th argument** is **wear override** (pipe-separated item shortnames). Replaces the Roaming template’s clothing only; requires **RoamingNPCs 0.5.23+** and **MaxxInvaders 1.7.8+**. RustMaxx TikFinity: **`bunny1npc`** forces profile **`bunny1`**; **`maxxinvaders`** uses **`?outfit=`** / body fields resolved via **`lib/maxxinvaders-outfit-profiles.ts`** (e.g. **`default`**, **`crew`**, **`bunny1`**, or a raw pipe). **Live inventory** on awake bots: **RoamingNPCs 0.5.26+** (PersonalNPC-style corpse proxy; see RoamingNPCs README).
+- Optional **8th argument** is **wear override** (pipe-separated item shortnames). Replaces the Roaming template’s clothing only; requires **RoamingNPCs 0.5.23+** and **MaxxInvaders 1.7.9+**. RustMaxx TikFinity: **`bunny1npc`** forces profile **`bunny1`**; **`maxxinvaders`** uses **`?outfit=`** / body fields resolved via **`lib/maxxinvaders-outfit-profiles.ts`** (e.g. **`default`**, **`crew`**, **`bunny1`**, or a raw pipe). **Live inventory** on awake bots: **RoamingNPCs 0.5.26+** (PersonalNPC-style corpse proxy; see RoamingNPCs README).
 - **1.5.9+:** When an anchor player is set, **`AnchorPosition` updates every behavior tick** while they stay online (or as a sleeper) so the leash / patrol radius **moves with the streamer** instead of staying at the spawn point.
 - Use `-` for an empty kit name when you have no Kits entry.
 - Quote viewer names that contain spaces.
@@ -50,6 +50,8 @@ maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - roaming "streamer_patrol
 - `maxxinvaders.upgrade "<viewerId>" <tier>`
 - `maxxinvaders.remove "<viewerId>"`
 - `maxxinvaders.clearall`
+- **`maxxinvaders.task`** `"<viewerId|npcId>"` **`<wood|stone|cloth|hunt|protect|gather|idle>`** `[anchorSteam64]` — sets **RoamingNPCs** gather/hunt/protect profile at runtime (bridge bots only). **`gather`** = full gather + protect + patrol + deposit-to-storage enabled (same idea as squad companion). Requires **RoamingNPCs 0.5.27+**.
+- **`maxxinvaders.box`** `"<viewerId|npcId>"` **`<boxNetId|0>`** `[anchorSteam64]` — assign a **specific** box/cupboard for **`deposit`** (must match anchor **OwnerID**); **`0`** clears. Chat: **`/maxxinvaders box <npcId> look`** (aim at container).
 
 **Optional C# API** (another Oxide plugin on the same server):
 
@@ -67,6 +69,10 @@ Interface.Call("RemoveInvader", viewerId);
 | `/maxxinvaders spawn <name> <tier>` | admin | Test spawn near you |
 | `/maxxinvaders clear` | admin | Despawn all tracked |
 | `/maxxinvaders debug on\|off` | debug | Verbose logging |
+| `/maxxinvaders task <npcId> <wood\|…>` | admin | Runtime task on one Roaming bot |
+| `/maxxinvaders task all <wood\|…>` | admin | Same task on every Roaming bridge bot |
+| `/maxxinvaders box <npcId> look` | admin | Assign deposit box you are looking at (≤4 m) |
+| `/maxxinvaders box <npcId> 0` | admin | Clear assigned deposit box (nearest anchor-owned used again) |
 
 In the **GUI**, use tabs **Invaders** (spawn + list + bridge status), **Maxx** (edit **MaxxInvaders** options — saves `oxide/config/MaxxInvaders.json`), and **Roaming** (toggle **Enable bot?** per RoamingNPCs template — saves `oxide/config/RoamingNPCs.json`). You do not need to hand-edit JSON for those fields.
 
@@ -94,7 +100,7 @@ Facepunch moved many scientist prefabs under `assets/rust.ai/agents/npcplayer/hu
 
 ## Behavior modes — scientist vs roaming
 
-**RoamingNPCs spawns:** Behavior is defined by the **RoamingNPCs bot template** (personality, combat, gathering). MaxxInvaders does not steer or retarget these NPCs.
+**RoamingNPCs spawns:** Base behavior comes from the **RoamingNPCs** template. **MaxxInvaders 1.7.9+** can override **gather/hunt/protect** at runtime via **`maxxinvaders.task`** / **`/maxxinvaders task`** (see RCON list above). **`deposit`** still uses RoamingNPCs to move **main** inventory into storage (assigned **box** or nearest anchor-owned container).
 
 **Scientist fallback:** Rust **Scientist** AI is engine-driven. MaxxInvaders maps modes to **optional prefabs per mode** and **NavMesh destinations** (roam, move toward nearest player, follow admin).
 

@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.8")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.9")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1538,6 +1538,124 @@ namespace Oxide.Plugins
                 issuer.ChatMessage($"[MaxxInvaders] Deposit: moved {m} stack(s) to your storage.");
         }
 
+        private static bool TryGetStorageNetIdFromPlayerLook(BasePlayer player, float maxDist, out ulong netId)
+        {
+            netId = 0UL;
+            if (player?.eyes == null) return false;
+            if (!Physics.Raycast(player.eyes.HeadRay(), out RaycastHit hit, maxDist, Physics.DefaultRaycastLayers,
+                    QueryTriggerInteraction.Ignore))
+                return false;
+            var ent = hit.GetEntity();
+            for (var i = 0; i < 8 && ent != null; i++)
+            {
+                if (ent is StorageContainer)
+                {
+                    netId = ent.net.ID.Value;
+                    return true;
+                }
+                ent = ent.GetParentEntity();
+            }
+            return false;
+        }
+
+        private static ulong ResolveBridgeAnchorSteam(InvaderRuntime r, BasePlayer issuer)
+        {
+            if (r != null && r.AnchorSteamId != 0UL) return r.AnchorSteamId;
+            return issuer != null ? issuer.userID : 0UL;
+        }
+
+        private bool TryRoamingApplyBridgeTask(ulong entityId, ulong anchorSteam, string task)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return false;
+            try
+            {
+                var raw = RoamingNPCs.Call("ApplyBridgeTask", entityId, anchorSteam, task);
+                return raw is bool b && b;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} RoamingNPCs.ApplyBridgeTask: {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool TryRoamingSetBridgeDepositBox(ulong entityId, ulong anchorSteam, ulong boxNetId)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return false;
+            try
+            {
+                var raw = RoamingNPCs.Call("SetBridgeDepositBox", entityId, anchorSteam, boxNetId);
+                return raw is bool b && b;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} RoamingNPCs.SetBridgeDepositBox: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void ApplyBridgeTaskToAllRoaming(BasePlayer issuer, string task)
+        {
+            if (issuer == null) return;
+            var n = 0;
+            foreach (var r in _registry.All().ToArray())
+            {
+                if (r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed || !r.IsRoamingNpc) continue;
+                var anchor = ResolveBridgeAnchorSteam(r, issuer);
+                if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task)) n++;
+            }
+
+            issuer.ChatMessage(n > 0
+                ? $"[MaxxInvaders] Task '{task}' applied to {n} Roaming bot(s)."
+                : "[MaxxInvaders] No Roaming bots to update.");
+        }
+
+        private void ApplyBridgeTaskSingle(BasePlayer issuer, InvaderRuntime r, string task)
+        {
+            if (issuer == null || r == null) return;
+            if (r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+            {
+                issuer.ChatMessage("[MaxxInvaders] That invader is gone.");
+                return;
+            }
+
+            if (!r.IsRoamingNpc)
+            {
+                issuer.ChatMessage("[MaxxInvaders] Tasks apply to RoamingNPCs bridge bots only.");
+                return;
+            }
+
+            var anchor = ResolveBridgeAnchorSteam(r, issuer);
+            if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task))
+                issuer.ChatMessage($"[MaxxInvaders] Task '{task}' set on {r.NpcId}.");
+            else
+                issuer.ChatMessage(
+                    "[MaxxInvaders] Task failed. Valid: wood, stone, cloth, hunt, protect, gather, idle (all = gather).");
+        }
+
+        private void TrySetBridgeDepositBoxForInvader(BasePlayer player, InvaderRuntime r, ulong boxNetId)
+        {
+            if (player == null || r == null) return;
+            if (!r.IsRoamingNpc)
+            {
+                player.ChatMessage("[MaxxInvaders] Box assignment is for RoamingNPCs bridge bots only.");
+                return;
+            }
+
+            var anchor = ResolveBridgeAnchorSteam(r, player);
+            if (TryRoamingSetBridgeDepositBox(r.EntityId, anchor, boxNetId))
+            {
+                if (boxNetId == 0UL)
+                    player.ChatMessage($"[MaxxInvaders] Cleared deposit box for {r.NpcId}.");
+                else
+                    player.ChatMessage(
+                        $"[MaxxInvaders] {r.NpcId} deposits to box net {boxNetId}. Use /maxxinvaders deposit {r.NpcId}.");
+            }
+            else
+                player.ChatMessage(
+                    "[MaxxInvaders] Could not set box (invalid id, not storage, or OwnerID does not match anchor).");
+        }
+
         private void BehaviorTick()
         {
             foreach (var r in _registry.All().ToArray())
@@ -1947,6 +2065,90 @@ namespace Oxide.Plugins
             arg.ReplyWith($"OK npcId={result.NpcId} entity={result.EntityId}");
         }
 
+        [ConsoleCommand("maxxinvaders.task")]
+        private void CmdConsoleBridgeTask(ConsoleSystem.Arg arg)
+        {
+            if (arg.Connection != null)
+            {
+                arg.ReplyWith("Run from server console or RCON only.");
+                return;
+            }
+
+            var parts = ParseQuotedArgs(arg);
+            if (parts.Count < 2)
+            {
+                arg.ReplyWith(
+                    "Usage: maxxinvaders.task <viewerId|npcId> <wood|stone|cloth|hunt|protect|gather|idle> [anchorSteam64]");
+                return;
+            }
+
+            if (!TryFindInvader(parts[0], out var r) || r == null)
+            {
+                arg.ReplyWith("Error: invader_not_found");
+                return;
+            }
+
+            if (!r.IsRoamingNpc)
+            {
+                arg.ReplyWith("Error: not_roaming_bridge_bot");
+                return;
+            }
+
+            var task = parts[1].Trim().ToLowerInvariant();
+            var anchor = r.AnchorSteamId;
+            if (parts.Count >= 3 &&
+                ulong.TryParse(parts[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var a) &&
+                a >= 10000000000000000UL)
+                anchor = a;
+
+            if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task)) arg.ReplyWith("OK");
+            else arg.ReplyWith("Error: task_failed_invalid_name_or_roamingnpcs");
+        }
+
+        [ConsoleCommand("maxxinvaders.box")]
+        private void CmdConsoleBridgeBox(ConsoleSystem.Arg arg)
+        {
+            if (arg.Connection != null)
+            {
+                arg.ReplyWith("Run from server console or RCON only.");
+                return;
+            }
+
+            var parts = ParseQuotedArgs(arg);
+            if (parts.Count < 2)
+            {
+                arg.ReplyWith("Usage: maxxinvaders.box <viewerId|npcId> <boxNetId|0> [anchorSteam64]");
+                return;
+            }
+
+            if (!TryFindInvader(parts[0], out var r) || r == null)
+            {
+                arg.ReplyWith("Error: invader_not_found");
+                return;
+            }
+
+            if (!r.IsRoamingNpc)
+            {
+                arg.ReplyWith("Error: not_roaming_bridge_bot");
+                return;
+            }
+
+            if (!ulong.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var boxNet))
+            {
+                arg.ReplyWith("Error: invalid_box_net_id");
+                return;
+            }
+
+            var anchor = r.AnchorSteamId;
+            if (parts.Count >= 3 &&
+                ulong.TryParse(parts[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var a) &&
+                a >= 10000000000000000UL)
+                anchor = a;
+
+            if (TryRoamingSetBridgeDepositBox(r.EntityId, anchor, boxNet)) arg.ReplyWith("OK");
+            else arg.ReplyWith("Error: box_failed_invalid_or_owner_mismatch");
+        }
+
         [ConsoleCommand("maxxinvaders.upgrade")]
         private void CmdConsoleUpgrade(ConsoleSystem.Arg arg)
         {
@@ -2160,7 +2362,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | hud | maxx | roaming | anchor <Steam64> | follow | protect [npcId] | deposit [npcId] | list | spawn | …");
+                    "Usage: /maxxinvaders ui | follow | protect | deposit | task … | box … | list | …  (task: wood stone cloth hunt protect gather idle; box: look at container)");
                 return;
             }
 
@@ -2322,6 +2524,81 @@ namespace Oxide.Plugins
                         player.ChatMessage("[MaxxInvaders] NPC not found for deposit.");
                     else
                         DepositAllRoamingBotsToAnchor(player);
+                    break;
+                case "task":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    if (args.Length < 2)
+                    {
+                        player.ChatMessage(
+                            "Usage: /maxxinvaders task all <wood|stone|cloth|hunt|protect|gather|idle>  OR  task <npcId> <task>");
+                        return;
+                    }
+
+                    if (args[1].Equals("all", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (args.Length < 3)
+                        {
+                            player.ChatMessage("Usage: /maxxinvaders task all <task>");
+                            return;
+                        }
+
+                        ApplyBridgeTaskToAllRoaming(player, args[2].Trim().ToLowerInvariant());
+                        return;
+                    }
+
+                    if (args.Length < 3)
+                    {
+                        player.ChatMessage("Usage: /maxxinvaders task <npcId|viewerId> <task>");
+                        return;
+                    }
+
+                    if (!TryFindInvader(args[1], out var taskR))
+                    {
+                        player.ChatMessage("[MaxxInvaders] NPC not found.");
+                        return;
+                    }
+
+                    ApplyBridgeTaskSingle(player, taskR, args[2].Trim().ToLowerInvariant());
+                    break;
+                case "box":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    if (args.Length < 3)
+                    {
+                        player.ChatMessage("Usage: /maxxinvaders box <npcId|viewerId> <look|0|netId>");
+                        return;
+                    }
+
+                    if (!TryFindInvader(args[1], out var boxR))
+                    {
+                        player.ChatMessage("[MaxxInvaders] NPC not found.");
+                        return;
+                    }
+
+                    var boxArg = args[2].Trim();
+                    if (boxArg.Equals("look", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!TryGetStorageNetIdFromPlayerLook(player, 4f, out var lookId))
+                        {
+                            player.ChatMessage("[MaxxInvaders] Look at a box or cupboard within 4m.");
+                            return;
+                        }
+
+                        TrySetBridgeDepositBoxForInvader(player, boxR, lookId);
+                    }
+                    else if (ulong.TryParse(boxArg, NumberStyles.Integer, CultureInfo.InvariantCulture, out var boxNet))
+                        TrySetBridgeDepositBoxForInvader(player, boxR, boxNet);
+                    else
+                        player.ChatMessage("[MaxxInvaders] Third arg must be look, 0, or a numeric net ID.");
                     break;
                 case "debug":
                     if (!permission.UserHasPermission(player.UserIDString, PermDebug) && !player.IsAdmin)

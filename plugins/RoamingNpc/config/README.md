@@ -33,6 +33,10 @@ Each bot block must have **`"Enable bot?": true`** or `SpawnFromTemplateForBridg
 
 **You do not need a `bunny1` bot key** for TikFinity **`bunny1npc`**. RustMaxx calls **`maxxinvaders.spawn`** with your normal Roaming template (**`streamer_patrol`** by default) and a **wear pipe** (bunny onesie + ears). Update **RoamingNPCs 0.5.26+** and **MaxxInvaders 1.7.8+** on the server.
 
+### MaxxInvaders: runtime tasks + deposit box (bridge bots)
+
+**RoamingNPCs 0.5.27+** adds **`ApplyBridgeTask`** (wood / stone / cloth / hunt / protect / gather / idle) and **`SetBridgeDepositBox`** so **`deposit`** prefers a **specific** anchor-owned **`StorageContainer`**. **MaxxInvaders 1.7.9+** exposes **`maxxinvaders.task`**, **`maxxinvaders.box`**, and chat **`/maxxinvaders task`** / **`/maxxinvaders box … look`**. See [docs/MAXXINVADERS.md](../../../docs/MAXXINVADERS.md).
+
 ### Opening a live bot’s inventory (viewer / streamer patrol bots)
 
 Rust’s **client** usually does **not** show a loot prompt on **awake** humanoid NPCs. RoamingNPCs **0.5.26+** uses the same technique as **PersonalNPC** `OpenInventory`: a short-lived **`player_corpse`** proxy, **`SendAsSnapshot`** to your client, **`PositionChecks = false`**, then the bot’s real **main / wear / belt** containers — plus **`RPC_OpenLootPanel`** after a **0.25s** delay. Press **Use (E)** while looking at the bot (~2.5m ray, ~3.5m max separation) or use **`/lootnpc`** near an allowed bot.

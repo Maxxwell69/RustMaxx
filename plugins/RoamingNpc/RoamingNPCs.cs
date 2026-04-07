@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.26")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.27")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2346,6 +2346,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public ulong BridgeRetaliationTargetUserId;
             [JsonIgnore] public float BridgeRetaliationExpireTime;
             [JsonIgnore] public float BridgePatrolNextMoveAt;
+            /// <summary>MaxxInvaders: optional <see cref="StorageContainer"/> net ID for <c>deposit</c> (OwnerID must match anchor).</summary>
+            [JsonIgnore] public ulong BridgeDepositContainerNetId;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -3222,7 +3224,20 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>Nearest non-full <see cref="StorageContainer"/> with same <see cref="BaseEntity.OwnerID"/> as MaxxInvaders anchor.</summary>
+        private bool TryGetBridgeAssignedDepositContainer(CustomPet pet, out IItemContainerEntity container)
+        {
+            container = null;
+            var data = pet?.Data;
+            if (data == null || data.BridgeDepositContainerNetId == 0UL) return false;
+            var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(data.BridgeDepositContainerNetId)) as BaseEntity;
+            if (ent == null || ent.IsDestroyed || ent is not StorageContainer sc) return false;
+            if (sc.inventory == null || sc.inventory.IsFull()) return false;
+            if (data.BridgeProtectAnchorUserId != 0UL && ent.OwnerID != data.BridgeProtectAnchorUserId) return false;
+            container = sc;
+            return true;
+        }
+
+        /// <summary>Assigned box first (MaxxInvaders <c>box</c> command), else nearest anchor-owned storage.</summary>
         private bool TryFindAnchorOwnedStorageForBridge(CustomPet pet, out IItemContainerEntity container)
         {
             container = null;
@@ -3230,6 +3245,8 @@ namespace Oxide.Plugins
             var fs = data?.Setup?.FullState;
             if (fs == null || !fs.BridgeUseAnchorOwnedStorage) return false;
             if (!data.SpawnedFromMaxxInvadersBridge || data.BridgeProtectAnchorUserId == 0UL) return false;
+
+            if (TryGetBridgeAssignedDepositContainer(pet, out container)) return true;
 
             var anchor = BasePlayer.FindByID(data.BridgeProtectAnchorUserId);
             if (anchor == null || !anchor.IsAlive()) return false;
@@ -9280,6 +9297,181 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>
+        /// MaxxInvaders: runtime task profile for bridge bots — wood, stone, cloth (collectibles), hunt, protect, gather, idle.
+        /// </summary>
+        [HookMethod("ApplyBridgeTask")]
+        public object ApplyBridgeTask(ulong entityNetId, ulong anchorSteamId, string taskName)
+        {
+            try
+            {
+                if (listNpcPlayers == null || !listNpcPlayers.TryGetValue(entityNetId, out var pet) || pet == null ||
+                    pet.IsDestroyed)
+                    return false;
+                if (pet.Data?.Setup == null) return false;
+
+                pet.Data.SpawnedFromMaxxInvadersBridge = true;
+                if (anchorSteamId != 0UL)
+                    pet.Data.BridgeProtectAnchorUserId = anchorSteamId;
+
+                var setup = pet.Data.Setup;
+                setup.MinerState ??= new SetupMining();
+                setup.HunterState ??= new SetupHunting();
+                setup.BattleState ??= new SetupBattle();
+                setup.BridgePatrol ??= new SetupBridgePatrol();
+                setup.FullState ??= new SetupFullInventory();
+
+                void MinerOff()
+                {
+                    var m = setup.MinerState;
+                    m.CanMiningWood = false;
+                    m.CanFuelUseFromChainsaw = false;
+                    m.CanMiningOre = false;
+                    m.CanMiningBarrel = false;
+                    m.CanMiningRoadSign = false;
+                    m.CanPickupCollectibleItems = false;
+                    m.CanPickupDroppedItems = false;
+                    m.CanLootedContainer = false;
+                    m.CanLootedCorpse = false;
+                    m.CanButcherCorpse = false;
+                }
+
+                void MinerGatherAll()
+                {
+                    var m = setup.MinerState;
+                    m.CanMiningWood = true;
+                    m.CanFuelUseFromChainsaw = true;
+                    m.CanMiningOre = true;
+                    m.CanMiningBarrel = true;
+                    m.CanMiningRoadSign = true;
+                    m.CanPickupCollectibleItems = true;
+                    m.CanPickupDroppedItems = true;
+                    m.CanLootedContainer = true;
+                    m.CanLootedCorpse = true;
+                    m.CanButcherCorpse = true;
+                }
+
+                var t = (taskName ?? "").Trim().ToLowerInvariant();
+                switch (t)
+                {
+                    case "wood":
+                        MinerOff();
+                        setup.MinerState.CanMiningWood = true;
+                        setup.MinerState.CanFuelUseFromChainsaw = true;
+                        setup.HunterState.CanHunt = false;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        break;
+                    case "stone":
+                        MinerOff();
+                        setup.MinerState.CanMiningOre = true;
+                        setup.HunterState.CanHunt = false;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        break;
+                    case "cloth":
+                        MinerOff();
+                        setup.MinerState.CanPickupCollectibleItems = true;
+                        setup.HunterState.CanHunt = false;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        break;
+                    case "hunt":
+                        MinerOff();
+                        setup.HunterState.CanHunt = true;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        setup.BattleState._ignoreNPCs = false;
+                        setup.BattleState._ignoreRNPC = true;
+                        setup.BattleState._ignorePersonalNpcBots = true;
+                        setup.BattleState._ignoreRealPlayers = true;
+                        break;
+                    case "protect":
+                        MinerOff();
+                        setup.HunterState.CanHunt = false;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        setup.BattleState._protectBridgeAnchorPlayer = true;
+                        setup.BattleState._ignoreNPCs = false;
+                        setup.BattleState._ignoreRNPC = true;
+                        setup.BattleState._ignorePersonalNpcBots = true;
+                        setup.BridgePatrol.Enable = true;
+                        if (setup.BridgePatrol.RadiusMeters < 8f) setup.BridgePatrol.RadiusMeters = 28f;
+                        break;
+                    case "gather":
+                    case "all":
+                        MinerGatherAll();
+                        setup.HunterState.CanHunt = false;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        setup.BattleState._protectBridgeAnchorPlayer = true;
+                        setup.BattleState._ignoreNPCs = false;
+                        setup.BattleState._ignoreRNPC = true;
+                        setup.BattleState._ignorePersonalNpcBots = true;
+                        setup.BridgePatrol.Enable = true;
+                        if (setup.BridgePatrol.RadiusMeters < 8f) setup.BridgePatrol.RadiusMeters = 28f;
+                        setup.FullState.BridgeUseAnchorOwnedStorage = true;
+                        if (setup.FullState.BridgeAnchorStorageSearchRadius <= 0f)
+                            setup.FullState.BridgeAnchorStorageSearchRadius = 18f;
+                        break;
+                    case "idle":
+                        MinerOff();
+                        setup.HunterState.CanHunt = false;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        break;
+                    default:
+                        return false;
+                }
+
+                pet.CustomBrain?.ChangeState(null);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] ApplyBridgeTask: {ex}");
+                return false;
+            }
+        }
+
+        /// <summary>MaxxInvaders: pin deposit target to a <see cref="StorageContainer"/> net ID (OwnerID = anchor), or 0 to clear.</summary>
+        [HookMethod("SetBridgeDepositBox")]
+        public object SetBridgeDepositBox(ulong petEntityNetId, ulong anchorSteamId, ulong boxNetId)
+        {
+            try
+            {
+                if (listNpcPlayers == null || !listNpcPlayers.TryGetValue(petEntityNetId, out var pet) || pet == null ||
+                    pet.IsDestroyed)
+                    return false;
+                if (pet.Data?.Setup?.FullState == null) return false;
+
+                pet.Data.SpawnedFromMaxxInvadersBridge = true;
+                if (anchorSteamId != 0UL)
+                    pet.Data.BridgeProtectAnchorUserId = anchorSteamId;
+
+                if (boxNetId == 0UL)
+                {
+                    pet.Data.BridgeDepositContainerNetId = 0UL;
+                    return true;
+                }
+
+                var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(boxNetId)) as BaseEntity;
+                if (ent == null || ent.IsDestroyed || ent is not StorageContainer) return false;
+                if (anchorSteamId != 0UL && ent.OwnerID != anchorSteamId) return false;
+
+                pet.Data.BridgeDepositContainerNetId = boxNetId;
+                pet.Data.Setup.FullState.BridgeUseAnchorOwnedStorage = true;
+                if (pet.Data.Setup.FullState.BridgeAnchorStorageSearchRadius <= 0f)
+                    pet.Data.Setup.FullState.BridgeAnchorStorageSearchRadius = 18f;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] SetBridgeDepositBox: {ex}");
+                return false;
+            }
+        }
+
         [HookMethod("IsBridgeTemplateReady")]
         public object IsBridgeTemplateReady(string templateKey)
         {
@@ -9309,7 +9501,7 @@ namespace Oxide.Plugins
                 sb.AppendLine();
                 sb.AppendLine($"Version: {Version}");
                 sb.AppendLine(
-                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, DepositItemsToAnchorOwnedStorage, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
+                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, DepositItemsToAnchorOwnedStorage, ApplyBridgeTask, SetBridgeDepositBox, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
                 sb.AppendLine();
                 if (config?.bots == null)
                 {
