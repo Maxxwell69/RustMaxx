@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.36")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.37")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -45,6 +45,8 @@ namespace Oxide.Plugins
         private const float BridgeTaskMinFindRadius = 72f;
         /// <summary>When a <see cref="DataBot.BridgeHomeCupboardNetId"/> is set, scan at least this far for resources while roaming from home.</summary>
         private const float BridgeHomeRoamMinFindRadius = 110f;
+        /// <summary><see cref="ApplyBridgeTask"/> mixed: wider Vis/collectible scan for cloth, drops, corpses, barrels.</summary>
+        private const float BridgeMixedTaskMinFindRadius = 130f;
         public Configuration config;
         public DataBots Data;
         public List<string> NicknamesData;
@@ -3199,6 +3201,35 @@ namespace Oxide.Plugins
             }
 
             TryAssignBridgeProtectorRetaliation(target, info);
+            TryAssignBridgeSelfDefenseAgainstAnimal(target, info);
+        }
+
+        /// <summary>MaxxInvaders bridge bot damaged by an animal — retaliate (same HunterState path as streamer defense).</summary>
+        private void TryAssignBridgeSelfDefenseAgainstAnimal(BaseCombatEntity target, HitInfo info)
+        {
+            if (target is not CustomPet pet || pet == null || pet.IsDestroyed || pet.Data?.Setup == null) return;
+            if (!pet.Data.SpawnedFromMaxxInvadersBridge) return;
+            if (info?.Initiator == null) return;
+
+            var attacker = ResolveAnimalAttackerFromInitiator(info.Initiator);
+            if (attacker == null || attacker == pet || !attacker.IsAlive() || attacker.net == null) return;
+
+            pet.Data.BridgeRetaliationAnimalNetId = attacker.net.ID.Value;
+            pet.Data.BridgeRetaliationTargetUserId = 0UL;
+            pet.Data.BridgeRetaliationExpireTime = UnityEngine.Time.realtimeSinceStartup + 120f;
+            pet.CustomBrain?.OnNpcTarget(attacker);
+        }
+
+        private static BaseCombatEntity ResolveAnimalAttackerFromInitiator(BaseEntity initiator)
+        {
+            for (var i = 0; i < 12 && initiator != null; i++)
+            {
+                if (initiator is BaseAnimalNPC an && an.IsAlive()) return an;
+                if (initiator is BaseNPC2 n2 && n2.IsAnimal && n2.IsAlive()) return n2;
+                initiator = initiator.GetParentEntity();
+            }
+
+            return null;
         }
 
         /// <summary>When a MaxxInvaders anchor (streamer) takes damage from a player or animal, bodyguard bots retaliate.</summary>
@@ -9814,6 +9845,10 @@ namespace Oxide.Plugins
                         setup.HunterState.CanHunt = true;
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
+                        setup.Controller ??= new ControllerSetup();
+                        if (setup.Controller.RadiusFindEntity < BridgeMixedTaskMinFindRadius)
+                            setup.Controller.RadiusFindEntity = BridgeMixedTaskMinFindRadius;
+                        setup.Controller.BridgeBoostScanTimers();
                         break;
                     default:
                         return false;
