@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.0")]
+    [Info("BaseBotch", "RustMaxx", "1.3.1")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -22,6 +22,8 @@ namespace Oxide.Plugins
         private readonly HashSet<ulong> _autorunNpcNetIds = new();
         private readonly Dictionary<ulong, ulong> _npcToTrackedMountNetId = new();
         private readonly Dictionary<ulong, WheelRestoreState> _wheelRestorePending = new();
+        /// <summary>Mount net ID → components touched for power reflection (built once per mount).</summary>
+        private readonly Dictionary<ulong, Component[]> _wheelBumpComponentCache = new();
         private Timer _autorunTimer;
 
         private sealed class WheelRestoreState
@@ -33,6 +35,9 @@ namespace Oxide.Plugins
         private static Type _cachedInputMessageType;
         private static PropertyInfo _cachedInputStateCurrentProp;
         private static FieldInfo _cachedInputStateCurrentField;
+        private static PropertyInfo _cachedInputStatePreviousProp;
+        private static FieldInfo _cachedInputStatePreviousField;
+        private static int _autorunTickPhase;
 
         private sealed class ConfigData
         {
@@ -48,6 +53,15 @@ namespace Oxide.Plugins
 
             /// <summary>Experimental: nudge float fields on wheel/generator parents (names containing Power/Output/Energy).</summary>
             public bool AutorunTryWheelPowerReflection = true;
+
+            /// <summary>Extra BUTTON bits OR'd each tick (0 = default). Use only if you know your build's mask.</summary>
+            public int AutorunExtraButtonMask = 0;
+
+            /// <summary>When true, still run NextTick double-apply even if button write failed (helps power reflection + retries).</summary>
+            public bool AutorunDoubleApplyWhenButtonsFail = true;
+
+            public bool AutorunSendNetworkUpdateImmediate = true;
+            public bool AutorunInvokePlayerServerInput = true;
 
             /// <summary>Before mounting, snapshot bridge task and set RoamingNPCs task to idle so pathing does not fight the wheel.</summary>
             public bool PauseRoamingAiWhileOnWheel = true;
@@ -102,6 +116,12 @@ namespace Oxide.Plugins
                 _cachedInputStateCurrentField = ist.GetField(
                     "current",
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _cachedInputStatePreviousProp = ist.GetProperty(
+                    "previous",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _cachedInputStatePreviousField = ist.GetField(
+                    "previous",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             }
             catch
             {
@@ -114,6 +134,7 @@ namespace Oxide.Plugins
             _autorunNpcNetIds?.Clear();
             _npcToTrackedMountNetId?.Clear();
             _wheelRestorePending?.Clear();
+            _wheelBumpComponentCache?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
             _autorunTimer = null;
@@ -186,10 +207,12 @@ namespace Oxide.Plugins
             if (_cfg.AutorunTryWheelPowerReflection)
                 TryBumpWheelPowerViaReflection(npc);
 
-            if (!wrote)
+            TryInvokeInputFlush(npc, _cfg);
+
+            if (!wrote && !_cfg.AutorunDoubleApplyWhenButtonsFail)
                 return;
 
-            if (scheduleDoubleApply && _cfg.AutorunDoubleApplyNextTick)
+            if (scheduleDoubleApply && _cfg.AutorunDoubleApplyNextTick && (wrote || _cfg.AutorunDoubleApplyWhenButtonsFail))
             {
                 var nid = npcNetId;
                 NextTick(() =>
@@ -216,12 +239,30 @@ namespace Oxide.Plugins
             if (inp.current == null && !TryEnsureInputCurrent(inp))
                 return false;
             if (inp.current == null) return false;
+            TryEnsureInputPrevious(inp);
 
-            inp.current.buttons |= (int)BUTTON.FORWARD;
-            if (_cfg.AutorunUseSprint)
-                inp.current.buttons |= (int)BUTTON.SPRINT;
+            ApplyMovementMaskToInputState(inp);
             npc.SendNetworkUpdate();
             return true;
+        }
+
+        private void ApplyMovementMaskToInputState(InputState inp)
+        {
+            if (inp?.current == null) return;
+            _autorunTickPhase++;
+            var mask = (int)BUTTON.FORWARD;
+            if (_cfg.AutorunUseSprint)
+                mask |= (int)BUTTON.SPRINT;
+            // Hamster wheel: alternate strafe so locomotion isn't treated as pure forward-only in some builds.
+            mask |= (_autorunTickPhase & 1) == 0 ? (int)BUTTON.LEFT : (int)BUTTON.RIGHT;
+            mask |= _cfg.AutorunExtraButtonMask;
+            inp.current.buttons |= mask;
+            TrySetInputMessageMouseDeltaReflection(inp.current);
+            if (inp.previous != null)
+            {
+                inp.previous.buttons |= mask;
+                TrySetInputMessageMouseDeltaReflection(inp.previous);
+            }
         }
 
         private bool TryEnsureInputCurrent(InputState inp)
@@ -246,6 +287,47 @@ namespace Oxide.Plugins
             }
         }
 
+        private void TryEnsureInputPrevious(InputState inp)
+        {
+            if (inp == null || inp.previous != null) return;
+            if (_cachedInputMessageType == null) return;
+            if (_cachedInputStatePreviousProp == null && _cachedInputStatePreviousField == null) return;
+            try
+            {
+                var msg = Activator.CreateInstance(_cachedInputMessageType);
+                if (_cachedInputStatePreviousProp != null)
+                    _cachedInputStatePreviousProp.SetValue(inp, msg);
+                else if (_cachedInputStatePreviousField != null)
+                    _cachedInputStatePreviousField.SetValue(inp, msg);
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private static void TrySetInputMessageMouseDeltaReflection(object inputMessage)
+        {
+            if (inputMessage == null) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                foreach (var f in inputMessage.GetType().GetFields(bf))
+                {
+                    if (f.FieldType != typeof(Vector2)) continue;
+                    var n = f.Name;
+                    if (n.IndexOf("mouse", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        n.IndexOf("delta", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                    f.SetValue(inputMessage, new Vector2(2f, 0f));
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
         private bool TryWriteButtonsViaReflection(BasePlayer npc)
         {
             if (npc == null) return false;
@@ -264,62 +346,214 @@ namespace Oxide.Plugins
                 if (stateObj is not InputState alt) continue;
                 if (alt.current == null && !TryEnsureInputCurrent(alt)) continue;
                 if (alt.current == null) continue;
-                alt.current.buttons |= (int)BUTTON.FORWARD;
-                if (_cfg.AutorunUseSprint)
-                    alt.current.buttons |= (int)BUTTON.SPRINT;
+                TryEnsureInputPrevious(alt);
+                ApplyMovementMaskToInputState(alt);
                 npc.SendNetworkUpdate();
                 return true;
+            }
+
+            for (var t = npc.GetType(); t != null && t != typeof(object); t = t.BaseType)
+            {
+                foreach (var field in t.GetFields(bf))
+                {
+                    if (field.FieldType != typeof(InputState)) continue;
+                    if (field.GetValue(npc) is not InputState alt) continue;
+                    if (alt.current == null && !TryEnsureInputCurrent(alt)) continue;
+                    if (alt.current == null) continue;
+                    TryEnsureInputPrevious(alt);
+                    ApplyMovementMaskToInputState(alt);
+                    npc.SendNetworkUpdate();
+                    return true;
+                }
+
+                foreach (var prop in t.GetProperties(bf))
+                {
+                    if (prop.PropertyType != typeof(InputState) || !prop.CanRead || !prop.CanWrite) continue;
+                    if (prop.GetValue(npc) is not InputState alt) continue;
+                    if (alt.current == null && !TryEnsureInputCurrent(alt)) continue;
+                    if (alt.current == null) continue;
+                    TryEnsureInputPrevious(alt);
+                    ApplyMovementMaskToInputState(alt);
+                    npc.SendNetworkUpdate();
+                    return true;
+                }
             }
 
             return false;
         }
 
-        /// <summary>Best-effort: some builds expose generator power as floats on the wheel root.</summary>
-        private void TryBumpWheelPowerViaReflection(BasePlayer npc)
+        private static void TryInvokeInputFlush(BasePlayer npc, ConfigData cfg)
         {
-            var m = npc?.GetMounted();
-            if (m == null) return;
-            for (var ent = m as BaseEntity; ent != null; ent = ent.GetParentEntity())
+            if (npc == null || cfg == null) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
             {
-                foreach (var comp in ent.GetComponents<Component>())
+                if (cfg.AutorunSendNetworkUpdateImmediate)
                 {
-                    if (comp == null) continue;
-                    var tn = comp.GetType().Name;
-                    if (tn.IndexOf("Water", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        tn.IndexOf("Wheel", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        tn.IndexOf("Generator", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        tn.IndexOf("Electric", StringComparison.OrdinalIgnoreCase) < 0)
-                        continue;
-
-                    foreach (var f in comp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                    foreach (var m in typeof(BaseNetworkable).GetMethods(bf))
                     {
-                        if (f.FieldType != typeof(float) && f.FieldType != typeof(double)) continue;
-                        var fn = f.Name;
-                        if (fn.IndexOf("power", StringComparison.OrdinalIgnoreCase) < 0 &&
-                            fn.IndexOf("output", StringComparison.OrdinalIgnoreCase) < 0 &&
-                            fn.IndexOf("energy", StringComparison.OrdinalIgnoreCase) < 0 &&
-                            fn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) < 0)
-                            continue;
-                        try
-                        {
-                            if (f.FieldType == typeof(float))
-                            {
-                                var v = (float)f.GetValue(comp);
-                                f.SetValue(comp, Mathf.Clamp(v + 2f, 0f, 500f));
-                            }
-                            else
-                            {
-                                var v = (double)f.GetValue(comp);
-                                f.SetValue(comp, v + 2.0);
-                            }
-                        }
-                        catch
-                        {
-                            // ignored
-                        }
+                        if (m.Name != "SendNetworkUpdateImmediate" || m.GetParameters().Length != 0) continue;
+                        m.Invoke(npc, null);
+                        break;
+                    }
+                }
+
+                if (cfg.AutorunInvokePlayerServerInput)
+                {
+                    foreach (var m in typeof(BasePlayer).GetMethods(bf))
+                    {
+                        if (m.Name != "PlayerServerInput" || m.GetParameters().Length != 0) continue;
+                        m.Invoke(npc, null);
+                        break;
                     }
                 }
             }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        /// <summary>Best-effort: nudge generator-related floats / one-arg float methods on wheel prefab hierarchy.</summary>
+        private void TryBumpWheelPowerViaReflection(BasePlayer npc)
+        {
+            var m = npc?.GetMounted();
+            if (m == null || m.net == null) return;
+            var mountId = m.net.ID.Value;
+            if (!_wheelBumpComponentCache.TryGetValue(mountId, out var comps) || comps == null)
+            {
+                comps = BuildWheelBumpComponentCache(m);
+                _wheelBumpComponentCache[mountId] = comps;
+            }
+
+            foreach (var comp in comps)
+                BumpWheelComponentFieldsAndMethods(comp);
+        }
+
+        private Component[] BuildWheelBumpComponentCache(BaseMountable mount)
+        {
+            var sub = _cfg.WaterWheelPrefabSubstring ?? "waterwheel";
+            var set = new HashSet<Component>();
+            for (var ent = mount as BaseEntity; ent != null; ent = ent.GetParentEntity())
+            {
+                var pn = ent.PrefabName ?? "";
+                var prefabMatch = pn.IndexOf(sub, StringComparison.OrdinalIgnoreCase) >= 0;
+                foreach (var comp in ent.GetComponentsInChildren<Component>(true))
+                {
+                    if (comp == null) continue;
+                    if (prefabMatch || ComponentTypeLooksWheelRelated(comp.GetType().Name))
+                        set.Add(comp);
+                }
+            }
+
+            // Prefab substring mismatch (config): still collect mount hierarchy so power-field reflection can run once.
+            if (set.Count == 0)
+            {
+                for (var ent = mount as BaseEntity; ent != null; ent = ent.GetParentEntity())
+                {
+                    foreach (var comp in ent.GetComponentsInChildren<Component>(true))
+                    {
+                        if (comp != null) set.Add(comp);
+                    }
+                }
+            }
+
+            var arr = new Component[set.Count];
+            var i = 0;
+            foreach (var c in set)
+                arr[i++] = c;
+            return arr;
+        }
+
+        private void BumpWheelComponentFieldsAndMethods(Component comp)
+        {
+            if (comp == null) return;
+            var tn = comp.GetType().Name;
+            var scanAll = ComponentTypeLooksWheelRelated(tn);
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            foreach (var f in comp.GetType().GetFields(bf))
+            {
+                if (f.FieldType != typeof(float) && f.FieldType != typeof(double)) continue;
+                if (!FieldNameLooksLikePowerSignal(f.Name)) continue;
+                try
+                {
+                    if (f.FieldType == typeof(float))
+                    {
+                        var v = (float)f.GetValue(comp);
+                        f.SetValue(comp, Mathf.Clamp(v + 3f, 0f, 500f));
+                    }
+                    else
+                    {
+                        var v = (double)f.GetValue(comp);
+                        f.SetValue(comp, v + 3.0);
+                    }
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
+
+            if (!scanAll) return;
+            foreach (var method in comp.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (method.ReturnType != typeof(void)) continue;
+                var ps = method.GetParameters();
+                if (ps.Length != 1 || ps[0].ParameterType != typeof(float)) continue;
+                var mn = method.Name;
+                if (mn.IndexOf("power", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("human", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("manual", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("input", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("drive", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                try
+                {
+                    method.Invoke(comp, new object[] { 1f });
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
+        }
+
+        private static bool FieldNameLooksLikePowerSignal(string fn)
+        {
+            if (fn.IndexOf("power", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("output", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("energy", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("rpm", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("torque", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("human", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("manual", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("pedal", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("flow", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("generat", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("watts", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("charge", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("velocity", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fn.IndexOf("rate", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                fn.IndexOf("separate", StringComparison.OrdinalIgnoreCase) < 0) return true;
+            if (fn.IndexOf("current", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                (fn.IndexOf("power", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 fn.IndexOf("energy", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 fn.IndexOf("flow", StringComparison.OrdinalIgnoreCase) >= 0)) return true;
+            return false;
+        }
+
+        private static bool ComponentTypeLooksWheelRelated(string tn)
+        {
+            if (tn.IndexOf("Water", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (tn.IndexOf("Wheel", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (tn.IndexOf("Generator", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (tn.IndexOf("Electric", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (tn.IndexOf("Human", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (tn.IndexOf("Hamster", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (tn.IndexOf("IOEntity", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
         }
 
         private bool PrefabChainLooksLikeWaterWheel(BaseMountable mount)
@@ -346,6 +580,8 @@ namespace Oxide.Plugins
         {
             if (npc?.net == null) return;
             var id = npc.net.ID.Value;
+            if (_npcToTrackedMountNetId.TryGetValue(id, out var mountId))
+                _wheelBumpComponentCache.Remove(mountId);
             _autorunNpcNetIds.Remove(id);
             _npcToTrackedMountNetId.Remove(id);
         }
