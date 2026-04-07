@@ -32,9 +32,6 @@ function quoteRconArg(s: string): string {
   return `"${cleaned}"`;
 }
 
-/** Default wear pipe for TikFinity `bunny1npc` (Roaming bridge replaces outfit only; template stays streamer_patrol). */
-export const MAXX_INVADERS_BUNNY_WEAR_PIPE = "attire.bunny.onesie|attire.bunnyears";
-
 function sanitizeWearPipe(s: string): string {
   return s.replace(/[^a-zA-Z0-9._|]/g, "");
 }

@@ -294,7 +294,7 @@ export const ACTION_META: Record<
   bunny1npc: {
     label: "Bunny viewer bot (spawn)",
     description:
-      "MaxxInvaders spawn using the same Roaming template as normal viewer bots (default streamer_patrol). Only the outfit is overridden to bunny onesie + ears — no separate bunny1 JSON bot key. Optional ?template= to use another Roaming key. Requires MaxxInvaders 1.7.8+ and RoamingNPCs 0.5.23+.",
+      "MaxxInvaders spawn using the same Roaming template as normal viewer bots (default streamer_patrol). Forces outfit profile bunny1 (onesie + ears); ignores ?outfit=. No separate bunny1 JSON bot key. Optional ?template= for another Roaming key. For other outfits use ?action=maxxinvaders&outfit=… (lib/maxxinvaders-outfit-profiles.ts). Requires MaxxInvaders 1.7.8+ and RoamingNPCs 0.5.23+.",
     exampleGifts: ["BunnyBot", "!bunny1npc"],
   },
   npcmaxx: {
@@ -306,7 +306,7 @@ export const ACTION_META: Record<
   maxxinvaders: {
     label: "MaxxInvaders viewer spawn",
     description:
-      "Spawns a RoamingNPCs bot named after the viewer (payload viewerName / TikFinity field). Defaults to template streamer_patrol. Optional anchor: ?anchorSteam=17digit Steam64, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID — bot spawns near that player (online/sleeping). Body: viewerName, optional uniqueId. URL: ?action=maxxinvaders&viewerName={{viewer}}. Optional: ?template=, tier, mode, kit.",
+      "Spawns a RoamingNPCs bot named after the viewer (payload viewerName / TikFinity field). Defaults to template streamer_patrol. **Outfit profiles:** ?outfit=default|crew (template clothes) or bunny1 (onesie + ears), or body outfit / outfitProfile; add names in lib/maxxinvaders-outfit-profiles.ts. Raw pipe: ?outfit=item.one|item.two. Optional anchor: ?anchorSteam=, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID. URL: ?action=maxxinvaders&viewerName={{viewer}}. Optional: ?template=, tier, mode, kit.",
     exampleGifts: ["InvaderSpawn", "ViewerRaid"],
   },
 };

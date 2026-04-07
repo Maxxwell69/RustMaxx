@@ -31,8 +31,10 @@ import {
 import { npcmaxxRconSpawn } from "@/lib/npcmaxx-rcon";
 import {
   maxxinvadersRconSpawn,
-  MAXX_INVADERS_BUNNY_WEAR_PIPE,
 } from "@/lib/maxxinvaders-rcon";
+import {
+  resolveRoamingWearPipeForOutfit,
+} from "@/lib/maxxinvaders-outfit-profiles";
 import { resolveMaxxInvadersAnchorSteam } from "@/lib/maxxinvaders-anchor-steam";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
@@ -214,11 +216,19 @@ const DEFAULT_MAXXINVADERS_ROAMING_BOT = "streamer_patrol";
 function parseMaxxInvadersParams(
   request: NextRequest,
   body: unknown
-): { tier: number; mode: string; kit: string; roamingTemplate: string | null } {
+): {
+  tier: number;
+  mode: string;
+  kit: string;
+  roamingTemplate: string | null;
+  /** Explicit outfit profile or raw pipe from body/query; null = caller uses default. */
+  outfit: string | null;
+} {
   let tier = 1;
   let mode = "roaming";
   let kit = "-";
   let roamingTemplate: string | null = null;
+  let outfit: string | null = null;
 
   if (body && typeof body === "object") {
     const o = body as Record<string, unknown>;
@@ -230,6 +240,9 @@ function parseMaxxInvadersParams(
     if (typeof o.template === "string" && o.template.trim()) roamingTemplate = o.template.trim();
     if (typeof o.roamingTemplate === "string" && o.roamingTemplate.trim())
       roamingTemplate = o.roamingTemplate.trim();
+    if (typeof o.outfit === "string" && o.outfit.trim()) outfit = o.outfit.trim();
+    else if (typeof o.outfitProfile === "string" && o.outfitProfile.trim())
+      outfit = o.outfitProfile.trim();
   }
 
   const tq = request.nextUrl.searchParams.get("tier")?.trim();
@@ -244,8 +257,11 @@ function parseMaxxInvadersParams(
   const tmplQ = request.nextUrl.searchParams.get("template")?.trim();
   if (tmplQ) roamingTemplate = tmplQ;
 
+  const outfitQ = request.nextUrl.searchParams.get("outfit")?.trim();
+  if (outfitQ) outfit = outfitQ;
+
   tier = Math.min(99, Math.max(1, Number.isFinite(tier) ? tier : 1));
-  return { tier, mode: mode.toLowerCase(), kit, roamingTemplate };
+  return { tier, mode: mode.toLowerCase(), kit, roamingTemplate, outfit };
 }
 
 /** GET: same as POST but with empty body (action from ?action= e.g. ?action=scientist). Lets you test from browser or TikFinity GET. */
@@ -555,13 +571,22 @@ async function runWebhook(request: NextRequest, body: unknown) {
       connectionFromAdmin?.server_action === "bunny1npc"
         ? parseNpcTemplateKey(connectionFromAdmin.npc_template_key)
         : null;
-    // bunny1npc = same Roaming template as normal viewer spawns (default streamer_patrol) + bunny wear pipe only.
     const roamingBotKey =
       roamingFromExplicit ??
       roamingFromConnection ??
       DEFAULT_MAXXINVADERS_ROAMING_BOT;
-    const roamingWearPipe =
-      action === "bunny1npc" ? MAXX_INVADERS_BUNNY_WEAR_PIPE : null;
+    // bunny1npc always uses outfit profile bunny1 (ignores ?outfit=). maxxinvaders uses ?outfit= / body / default.
+    const outfitRequest =
+      action === "bunny1npc" ? "bunny1" : miParams.outfit ?? "default";
+    const resolvedOutfit = resolveRoamingWearPipeForOutfit(outfitRequest);
+    if (!resolvedOutfit.knownProfile && !outfitRequest.includes("|")) {
+      console.warn(
+        "[tikfinity webhook] unknown maxxinvaders outfit profile:",
+        outfitRequest,
+        "— using template clothes only"
+      );
+    }
+    const roamingWearPipe = resolvedOutfit.wearPipe;
     const viewerId =
       extractTikTokUniqueIdFromBody(body) ??
       `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -682,16 +707,20 @@ async function runWebhook(request: NextRequest, body: unknown) {
         mode,
         kit,
         roamingBotKey,
+        outfit: resolvedOutfit.resolvedId,
+        outfitProfileKnown: resolvedOutfit.knownProfile,
         roamingWearPipe: roamingWearPipe ?? undefined,
         command: spawnMi.command,
         rconResponse: spawnMi.rconResponse,
         anchorSteam64: anchorSteam64 ?? null,
         debug:
           action === "bunny1npc"
-            ? `bunny1npc: MaxxInvaders + Roaming template "${roamingBotKey}" (default streamer_patrol) with bunny outfit override. No separate bunny1 bot key required. Needs RoamingNPCs 0.5.23+ and MaxxInvaders 1.7.8+.`
-            : anchorSteam64 != null
-              ? "maxxinvaders.spawn used anchor Steam64: spawn ring + RoamingNPCs bridge anchor near that player (must be online or sleeping). Tune MaxxInvaders.json MaxDistanceFromAnchor / MinimumSpawnRadiusFromAnchor to tighten patrol."
-              : "maxxinvaders.spawn succeeded with no anchorSteam — set ?anchorSteam=17digit, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID so the bot stays near you (streamer/base owner must be on server or sleeping).",
+            ? `bunny1npc: profile bunny1 on Roaming template "${roamingBotKey}" (default streamer_patrol). Same spawn path as maxxinvaders; outfit forced to bunny. Add more looks via ?action=maxxinvaders&outfit=… in lib/maxxinvaders-outfit-profiles.ts.`
+            : roamingWearPipe
+              ? `maxxinvaders.spawn with outfit "${resolvedOutfit.resolvedId}" (wear override on template "${roamingBotKey}").`
+              : anchorSteam64 != null
+                ? "maxxinvaders.spawn used anchor Steam64: spawn ring + RoamingNPCs bridge anchor near that player (must be online or sleeping). Tune MaxxInvaders.json MaxDistanceFromAnchor / MinimumSpawnRadiusFromAnchor to tighten patrol."
+                : "maxxinvaders.spawn succeeded with no anchorSteam — set ?anchorSteam=17digit, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID so the bot stays near you (streamer/base owner must be on server or sleeping). Optional ?outfit=bunny1|default|crew or raw pipe shortnames.",
       })
     );
   }

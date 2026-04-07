@@ -39,7 +39,7 @@ maxxinvaders.spawn "<viewerName>" "<viewerId>" <tier> - roaming "streamer_patrol
 
 - Optional **6th argument** is a **RoamingNPCs bot key** (overrides `ViewerRoamingTemplateKey` / tier default for that spawn). RustMaxx TikFinity webhook defaults to **`streamer_patrol`** when you do not pass `?template=`.
 - Optional **7th argument** is **anchor Steam64** (17 digits) or **`-`** to skip anchor: spawn ring + RoamingNPCs bridge use that **online or sleeping** player’s position so the bot stays near the streamer / base owner. Omit for legacy behavior (first online player or world origin). RustMaxx webhook: `?anchorSteam=…`, JSON `anchorSteam`, server dashboard field, or env `TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID`.
-- Optional **8th argument** is **wear override** (pipe-separated item shortnames). Replaces the Roaming template’s clothing only; requires **RoamingNPCs 0.5.23+** and **MaxxInvaders 1.7.8+**. RustMaxx **`bunny1npc`** TikFinity action uses **`streamer_patrol`** + this wear pipe automatically.
+- Optional **8th argument** is **wear override** (pipe-separated item shortnames). Replaces the Roaming template’s clothing only; requires **RoamingNPCs 0.5.23+** and **MaxxInvaders 1.7.8+**. RustMaxx TikFinity: **`bunny1npc`** forces profile **`bunny1`**; **`maxxinvaders`** uses **`?outfit=`** / body fields resolved via **`lib/maxxinvaders-outfit-profiles.ts`** (e.g. **`default`**, **`crew`**, **`bunny1`**, or a raw pipe).
 - **1.5.9+:** When an anchor player is set, **`AnchorPosition` updates every behavior tick** while they stay online (or as a sleeper) so the leash / patrol radius **moves with the streamer** instead of staying at the spawn point.
 - Use `-` for an empty kit name when you have no Kits entry.
 - Quote viewer names that contain spaces.

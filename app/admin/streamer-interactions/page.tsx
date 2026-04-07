@@ -7,6 +7,7 @@ import {
   normalizeTikfinityWebhookUrlForDisplay,
   rustmaxxTikfinityWebhookUrl,
 } from "@/lib/rustmaxx-public-url";
+import { MAXX_INVADERS_OUTFIT_PROFILE_DOCS } from "@/lib/maxxinvaders-outfit-profiles";
 
 /** Keys under RoamingNPCs.json → Bots settings — must match server config. */
 const ROAMING_TEMPLATE_KEYS = [
@@ -373,6 +374,17 @@ export default function AdminStreamerInteractionsPage() {
               <code className="rounded bg-zinc-800 px-1">TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID</code>, but per-server in the dashboard).
             </p>
             <p className="mt-2 text-sm text-zinc-400">
+              <strong className="text-zinc-300">Outfit profiles</strong> (same spawn path; only clothes change):{" "}
+              <code className="rounded bg-zinc-800 px-1">?outfit=</code> or JSON{" "}
+              <code className="rounded bg-zinc-800 px-1">outfit</code> /{" "}
+              <code className="rounded bg-zinc-800 px-1">outfitProfile</code>. Registered profiles:{" "}
+              {MAXX_INVADERS_OUTFIT_PROFILE_DOCS.map((p) => p.id).join(", ")} — extend in{" "}
+              <code className="rounded bg-zinc-800 px-1">lib/maxxinvaders-outfit-profiles.ts</code>. Raw pipe:{" "}
+              <code className="rounded bg-zinc-800 px-1">?outfit=short.one|short.two</code>.{" "}
+              <strong className="text-zinc-300">bunny1npc</strong> always uses profile{" "}
+              <code className="rounded bg-zinc-800 px-1">bunny1</code>.
+            </p>
+            <p className="mt-2 text-sm text-zinc-400">
               <strong className="text-zinc-300">Override:</strong>{" "}
               <code className="rounded bg-zinc-800 px-1">?anchorSteam=7656119…</code> or JSON{" "}
               <code className="rounded bg-zinc-800 px-1">anchorSteam</code>. You must be{" "}
@@ -388,21 +400,41 @@ export default function AdminStreamerInteractionsPage() {
                 <code className="rounded bg-zinc-900 px-1">skipped</code> — not an RCON failure.
               </p>
             )}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
-                {`${webhookUrl}?action=maxxinvaders`}
-              </code>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${webhookUrl}?action=maxxinvaders`);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
-                className="shrink-0 rounded bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
-              >
-                {copied ? "Copied" : "Copy URL"}
-              </button>
+            <div className="mt-3 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                  {`${webhookUrl}?action=maxxinvaders`}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${webhookUrl}?action=maxxinvaders`);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="shrink-0 rounded bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
+                >
+                  {copied ? "Copied" : "Copy URL"}
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                  {`${webhookUrl}?action=maxxinvaders&outfit=bunny1`}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `${webhookUrl}?action=maxxinvaders&outfit=bunny1`
+                    );
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="shrink-0 rounded bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
+                >
+                  Copy bunny outfit
+                </button>
+              </div>
             </div>
           </div>
 
