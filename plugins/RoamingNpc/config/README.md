@@ -31,7 +31,15 @@ Each bot block must have **`"Enable bot?": true`** or `SpawnFromTemplateForBridg
 
 ### MaxxInvaders + RustMaxx **`bunny1npc`** (bunny outfit, `streamer_patrol` brain)
 
-**You do not need a `bunny1` bot key** for TikFinity **`bunny1npc`**. RustMaxx calls **`maxxinvaders.spawn`** with your normal Roaming template (**`streamer_patrol`** by default) and a **wear pipe** (bunny onesie + ears). Update **RoamingNPCs 0.5.23+** and **MaxxInvaders 1.7.8+** on the server.
+**You do not need a `bunny1` bot key** for TikFinity **`bunny1npc`**. RustMaxx calls **`maxxinvaders.spawn`** with your normal Roaming template (**`streamer_patrol`** by default) and a **wear pipe** (bunny onesie + ears). Update **RoamingNPCs 0.5.24+** and **MaxxInvaders 1.7.8+** on the server.
+
+### Opening a live bot’s inventory (viewer / streamer patrol bots)
+
+Rust normally only lets you loot another **player** when they are **sleeping** or **downed**. RoamingNPCs **0.5.24+** adds **`Allow players to open this bot's inventory while alive`** (`AllowPlayerLootInventoryWhileAlive` in JSON) per bot template. When **`true`**, real players can use the usual **use** key on the bot (in range) and open **main / belt / wear**, same as dressing a sleeper.
+
+- The auto-created **`streamer_patrol`** template sets this to **`true`** when the plugin first adds that key to your config.
+- If you already had **`streamer_patrol`** in **`RoamingNPCs.json`**, add the property under that bot’s settings and set it to **`true`**, then reload RoamingNPCs.
+- Other templates default to **`false`** so random roaming bots are not trivially lootable while walking.
 
 ### MaxxInvaders: `No bot key "…" under Bots settings`
 

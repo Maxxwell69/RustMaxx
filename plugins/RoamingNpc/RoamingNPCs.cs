@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.23")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.24")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -1218,6 +1218,11 @@ namespace Oxide.Plugins
 
             [JsonProperty(RU ? "Разрешить скидывать предметы на поясе при смерти?" : "Allow dropping items on belt when dead?")]
             public bool CanDropBeltInventory = false;
+
+            [JsonProperty(RU
+                ? "Разрешить игрокам открывать инвентарь живого бота (E), как у спящего — надевать/снимать предметы"
+                : "Allow real players to open this bot's inventory while alive (use key), like a sleeping player — move items on/off")]
+            public bool AllowPlayerLootInventoryWhileAlive = false;
 
             [JsonProperty(RU ? "Настройка сбора ресурсов" : "Resource collection")]
             public SetupMining MinerState = new();
@@ -2910,6 +2915,20 @@ namespace Oxide.Plugins
 
             return null;
         }
+
+        /// <summary>
+        /// Lets real players open a roaming bot's main/belt/wear while it is awake (vanilla only allows sleeping/wounded).
+        /// Per-bot: <see cref="BotSetup.AllowPlayerLootInventoryWhileAlive"/>.
+        /// </summary>
+        private object CanLootPlayer(BasePlayer target, BasePlayer looter)
+        {
+            if (target == null || looter == null || target == looter) return null;
+            if (!looter.userID.IsSteamId()) return null;
+            if (target is not CustomPet pet) return null;
+            if (pet.IsDestroyed || target.IsDead()) return null;
+            if (pet.Data?.Setup?.AllowPlayerLootInventoryWhileAlive != true) return null;
+            return true;
+        }
         private object OnPlayerDeath(BasePlayer player, HitInfo info)
         {
             if(player == null) return null;
@@ -3008,6 +3027,7 @@ namespace Oxide.Plugins
                 clone.BattleState._protectBridgeAnchorPlayer = true;
                 clone.FullState.BridgeUseAnchorOwnedStorage = true;
                 clone.FullState.BridgeAnchorStorageSearchRadius = 18f;
+                clone.AllowPlayerLootInventoryWhileAlive = true;
                 config.bots[streamerKey] = clone;
                 SaveConfig();
                 PrintWarning(
