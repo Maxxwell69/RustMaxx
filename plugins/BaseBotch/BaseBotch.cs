@@ -1,6 +1,8 @@
-// BaseBot — automation helpers for RustMaxx bots (water wheel mount, etc.).
+// BaseBotch — automation helpers for RustMaxx bots (water wheel mount, etc.).
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using Facepunch;
 using Oxide.Core;
 using Oxide.Core.Plugins;
@@ -9,34 +11,33 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBot", "RustMaxx", "1.1.2")]
+    [Info("BaseBotch", "RustMaxx", "1.2.0")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
-    public class BaseBot : RustPlugin
+    public class BaseBotch : RustPlugin
     {
         private ConfigData _cfg;
         private readonly HashSet<ulong> _autorunNpcNetIds = new();
-        /// <summary>Tracks which mountable the bot was placed on so autorun/dismount work even when prefab names do not include "waterwheel" on the seat entity.</summary>
         private readonly Dictionary<ulong, ulong> _npcToTrackedMountNetId = new();
         private Timer _autorunTimer;
+
+        private static Type _cachedInputMessageType;
+        private static PropertyInfo _cachedInputStateCurrentProp;
+        private static FieldInfo _cachedInputStateCurrentField;
 
         private sealed class ConfigData
         {
             public float LookRayDistanceMeters = 8f;
-
-            /// <summary>Matched against <see cref="BaseEntity.PrefabName"/> (case-insensitive), e.g. waterwheel.</summary>
             public string WaterWheelPrefabSubstring = "waterwheel";
-
-            /// <summary>After a successful water wheel mount, start holding forward/sprint input.</summary>
             public bool AutorunAfterMount = true;
-
-            /// <summary>How often to re-apply movement buttons (seconds).</summary>
-            public float AutorunTickSeconds = 0.05f;
-
-            /// <summary>Hold sprint as well as forward (typical “autorun”).</summary>
+            public float AutorunTickSeconds = 0.02f;
             public bool AutorunUseSprint = true;
-
-            /// <summary>Apply the same button mask again on the next tick (helps if RoamingNPCs/AI clears input between frames).</summary>
             public bool AutorunDoubleApplyNextTick = true;
+
+            /// <summary>If serverInput is missing or current is null, try reflection to find InputState / InputMessage (NPC builds vary).</summary>
+            public bool AutorunTryReflectionInput = true;
+
+            /// <summary>Experimental: nudge float fields on wheel/generator parents (names containing Power/Output/Energy).</summary>
+            public bool AutorunTryWheelPowerReflection = true;
         }
 
         protected override void LoadDefaultConfig()
@@ -56,10 +57,43 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
+            CacheReflectionTypes();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
-            var interval = Mathf.Clamp(_cfg.AutorunTickSeconds, 0.02f, 0.25f);
+            var interval = Mathf.Clamp(_cfg.AutorunTickSeconds, 0.01f, 0.25f);
             _autorunTimer = timer.Every(interval, AutorunTick);
+        }
+
+        private void CacheReflectionTypes()
+        {
+            try
+            {
+                var asm = typeof(BasePlayer).Assembly;
+                _cachedInputMessageType = asm.GetType("Rust.InputMessage") ?? asm.GetType("InputMessage");
+                if (_cachedInputMessageType == null)
+                {
+                    try
+                    {
+                        _cachedInputMessageType = asm.GetTypes().FirstOrDefault(t => t.Name == "InputMessage");
+                    }
+                    catch
+                    {
+                        // ReflectionTypeLoadException on some hosts
+                    }
+                }
+
+                var ist = typeof(InputState);
+                _cachedInputStateCurrentProp = ist.GetProperty(
+                    "current",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _cachedInputStateCurrentField = ist.GetField(
+                    "current",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            }
+            catch
+            {
+                // ignored
+            }
         }
 
         private void Unload()
@@ -122,7 +156,11 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (!TryWriteMovementButtons(npc))
+            var wrote = TryWriteMovementButtons(npc);
+            if (_cfg.AutorunTryWheelPowerReflection)
+                TryBumpWheelPowerViaReflection(npc);
+
+            if (!wrote)
                 return;
 
             if (scheduleDoubleApply && _cfg.AutorunDoubleApplyNextTick)
@@ -138,14 +176,123 @@ namespace Oxide.Plugins
 
         private bool TryWriteMovementButtons(BasePlayer npc)
         {
+            if (TryWriteServerInputButtons(npc))
+                return true;
+            if (_cfg.AutorunTryReflectionInput && TryWriteButtonsViaReflection(npc))
+                return true;
+            return false;
+        }
+
+        private bool TryWriteServerInputButtons(BasePlayer npc)
+        {
             var inp = npc.serverInput;
-            if (inp?.current == null) return false;
+            if (inp == null) return false;
+            if (inp.current == null && !TryEnsureInputCurrent(inp))
+                return false;
+            if (inp.current == null) return false;
 
             inp.current.buttons |= (int)BUTTON.FORWARD;
             if (_cfg.AutorunUseSprint)
                 inp.current.buttons |= (int)BUTTON.SPRINT;
             npc.SendNetworkUpdate();
             return true;
+        }
+
+        private bool TryEnsureInputCurrent(InputState inp)
+        {
+            if (inp?.current != null) return true;
+            if (_cachedInputMessageType == null || _cachedInputStateCurrentProp == null) return false;
+            try
+            {
+                var msg = Activator.CreateInstance(_cachedInputMessageType);
+                if (_cachedInputStateCurrentProp != null)
+                    _cachedInputStateCurrentProp.SetValue(inp, msg);
+                else if (_cachedInputStateCurrentField != null)
+                    _cachedInputStateCurrentField.SetValue(inp, msg);
+                else
+                    return false;
+                return inp.current != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TryWriteButtonsViaReflection(BasePlayer npc)
+        {
+            if (npc == null) return false;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            foreach (var name in new[] { "serverInput", "ServerInput", "userInput", "UserInput", "playerInput", "PlayerInput" })
+            {
+                object stateObj = null;
+                var prop = typeof(BasePlayer).GetProperty(name, bf);
+                if (prop != null) stateObj = prop.GetValue(npc);
+                if (stateObj == null)
+                {
+                    var field = typeof(BasePlayer).GetField(name, bf);
+                    if (field != null) stateObj = field.GetValue(npc);
+                }
+
+                if (stateObj is not InputState alt) continue;
+                if (alt.current == null && !TryEnsureInputCurrent(alt)) continue;
+                if (alt.current == null) continue;
+                alt.current.buttons |= (int)BUTTON.FORWARD;
+                if (_cfg.AutorunUseSprint)
+                    alt.current.buttons |= (int)BUTTON.SPRINT;
+                npc.SendNetworkUpdate();
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Best-effort: some builds expose generator power as floats on the wheel root.</summary>
+        private void TryBumpWheelPowerViaReflection(BasePlayer npc)
+        {
+            var m = npc?.GetMounted();
+            if (m == null) return;
+            for (var ent = m as BaseEntity; ent != null; ent = ent.GetParentEntity())
+            {
+                foreach (var comp in ent.GetComponents<Component>())
+                {
+                    if (comp == null) continue;
+                    var tn = comp.GetType().Name;
+                    if (tn.IndexOf("Water", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        tn.IndexOf("Wheel", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        tn.IndexOf("Generator", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        tn.IndexOf("Electric", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+
+                    foreach (var f in comp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                    {
+                        if (f.FieldType != typeof(float) && f.FieldType != typeof(double)) continue;
+                        var fn = f.Name;
+                        if (fn.IndexOf("power", StringComparison.OrdinalIgnoreCase) < 0 &&
+                            fn.IndexOf("output", StringComparison.OrdinalIgnoreCase) < 0 &&
+                            fn.IndexOf("energy", StringComparison.OrdinalIgnoreCase) < 0 &&
+                            fn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) < 0)
+                            continue;
+                        try
+                        {
+                            if (f.FieldType == typeof(float))
+                            {
+                                var v = (float)f.GetValue(comp);
+                                f.SetValue(comp, Mathf.Clamp(v + 2f, 0f, 500f));
+                            }
+                            else
+                            {
+                                var v = (double)f.GetValue(comp);
+                                f.SetValue(comp, v + 2.0);
+                            }
+                        }
+                        catch
+                        {
+                            // ignored
+                        }
+                    }
+                }
+            }
         }
 
         private bool PrefabChainLooksLikeWaterWheel(BaseMountable mount)
@@ -176,9 +323,6 @@ namespace Oxide.Plugins
             _npcToTrackedMountNetId.Remove(id);
         }
 
-        /// <summary>
-        /// Mounts the NPC identified by <paramref name="npcEntityNetId"/> onto the electric water wheel the issuer is looking at.
-        /// </summary>
         [HookMethod("MountWaterWheelFromLook")]
         public object MountWaterWheelFromLook(ulong npcEntityNetId, BasePlayer issuer)
         {
@@ -186,13 +330,13 @@ namespace Oxide.Plugins
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
             if (npc == null || npc.IsDestroyed)
             {
-                issuer.ChatMessage("[BaseBot] NPC not found.");
+                issuer.ChatMessage("[BaseBotch] NPC not found.");
                 return false;
             }
 
             if (!npc.IsNpc)
             {
-                issuer.ChatMessage("[BaseBot] That entity is not an NPC bot.");
+                issuer.ChatMessage("[BaseBotch] That entity is not an NPC bot.");
                 return false;
             }
 
@@ -207,21 +351,21 @@ namespace Oxide.Plugins
                     QueryTriggerInteraction.Ignore))
             {
                 issuer.ChatMessage(
-                    $"[BaseBot] Nothing hit within {_cfg.LookRayDistanceMeters:F0}m — look at the water wheel.");
+                    $"[BaseBotch] Nothing hit within {_cfg.LookRayDistanceMeters:F0}m — look at the water wheel.");
                 return false;
             }
 
             var hitEnt = hit.GetEntity();
             if (hitEnt == null)
             {
-                issuer.ChatMessage("[BaseBot] Ray hit has no entity.");
+                issuer.ChatMessage("[BaseBotch] Ray hit has no entity.");
                 return false;
             }
 
             var mount = ResolveWaterWheelMountable(hitEnt, _cfg.WaterWheelPrefabSubstring);
             if (mount == null || mount.IsDestroyed)
             {
-                issuer.ChatMessage("[BaseBot] Not looking at an electric water wheel (mountable).");
+                issuer.ChatMessage("[BaseBotch] Not looking at an electric water wheel (mountable).");
                 return false;
             }
 
@@ -234,7 +378,7 @@ namespace Oxide.Plugins
             var ok = npc.GetMounted() != null;
             if (!ok)
             {
-                issuer.ChatMessage("[BaseBot] Mount failed (seat busy or blocked).");
+                issuer.ChatMessage("[BaseBotch] Mount failed (seat busy or blocked).");
                 return false;
             }
 
@@ -248,33 +392,32 @@ namespace Oxide.Plugins
             return true;
         }
 
-        /// <summary>Resume forward/sprint input while still mounted on the water wheel (after STOP).</summary>
         [HookMethod("StartWaterWheelAutorun")]
         public object StartWaterWheelAutorun(ulong npcEntityNetId, BasePlayer issuer)
         {
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
             if (npc == null || npc.IsDestroyed)
             {
-                issuer?.ChatMessage("[BaseBot] NPC not found.");
+                issuer?.ChatMessage("[BaseBotch] NPC not found.");
                 return false;
             }
 
             if (!npc.isMounted)
             {
-                issuer?.ChatMessage("[BaseBot] Bot must be mounted.");
+                issuer?.ChatMessage("[BaseBotch] Bot must be mounted.");
                 return false;
             }
 
             var m = npc.GetMounted();
             if (m == null || m.net == null)
             {
-                issuer?.ChatMessage("[BaseBot] No active mount.");
+                issuer?.ChatMessage("[BaseBotch] No active mount.");
                 return false;
             }
 
             if (!_npcToTrackedMountNetId.ContainsKey(npc.net.ID.Value) && !PrefabChainLooksLikeWaterWheel(m))
             {
-                issuer?.ChatMessage("[BaseBot] Mount does not look like the electric water wheel.");
+                issuer?.ChatMessage("[BaseBotch] Mount does not look like the electric water wheel.");
                 return false;
             }
 
@@ -284,7 +427,6 @@ namespace Oxide.Plugins
             return true;
         }
 
-        /// <summary>Stop applying autorun input; bot stays on the wheel.</summary>
         [HookMethod("StopWaterWheelAutorun")]
         public object StopWaterWheelAutorun(ulong npcEntityNetId, BasePlayer issuer)
         {
@@ -292,7 +434,6 @@ namespace Oxide.Plugins
             return true;
         }
 
-        /// <summary>Stop autorun and dismount the NPC.</summary>
         [HookMethod("DismountWaterWheel")]
         public object DismountWaterWheel(ulong npcEntityNetId, BasePlayer issuer)
         {
@@ -303,7 +444,7 @@ namespace Oxide.Plugins
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
             if (npc == null || npc.IsDestroyed)
             {
-                issuer?.ChatMessage("[BaseBot] NPC not found.");
+                issuer?.ChatMessage("[BaseBotch] NPC not found.");
                 return false;
             }
 
