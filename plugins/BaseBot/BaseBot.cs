@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBot", "RustMaxx", "1.1.0")]
+    [Info("BaseBot", "RustMaxx", "1.1.1")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBot : RustPlugin
     {
@@ -97,9 +97,9 @@ namespace Oxide.Plugins
             var inp = npc.serverInput;
             if (inp?.current == null) return;
 
-            inp.current.buttons |= BUTTON.FORWARD;
+            inp.current.buttons |= (int)BUTTON.FORWARD;
             if (_cfg.AutorunUseSprint)
-                inp.current.buttons |= BUTTON.SPRINT;
+                inp.current.buttons |= (int)BUTTON.SPRINT;
         }
 
         private bool IsNpcOnWaterWheelMount(BasePlayer npc)
