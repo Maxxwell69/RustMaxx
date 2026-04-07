@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.1")]
+    [Info("BaseBotch", "RustMaxx", "1.3.2")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -30,6 +30,11 @@ namespace Oxide.Plugins
         {
             public string TaskKeyword;
             public ulong AnchorSteam;
+
+            /// <summary>False when only navigator snapshot (e.g. StartWaterWheelAutorun without MountWaterWheelFromLook).</summary>
+            public bool SnapshotBridgeTask = true;
+
+            public bool? PriorCanNavigateMounted;
         }
 
         private static Type _cachedInputMessageType;
@@ -65,6 +70,15 @@ namespace Oxide.Plugins
 
             /// <summary>Before mounting, snapshot bridge task and set RoamingNPCs task to idle so pathing does not fight the wheel.</summary>
             public bool PauseRoamingAiWhileOnWheel = true;
+
+            /// <summary>Match PersonalNPC vehicle mount: set modelState.mounted / poseType from mountPose and flush network.</summary>
+            public bool SyncModelStateAfterWheelMount = true;
+
+            /// <summary>Roaming NPCs use NPCPlayerNavigator; pathing can fight wheel input. Capture/restore CanNavigateMounted and Stop() while autorunning.</summary>
+            public bool TameNavigatorWhileOnWheel = true;
+
+            /// <summary>Value applied to NPCPlayerNavigator.CanNavigateMounted while on wheel (usually true so mounted locomotion can run).</summary>
+            public bool WheelSessionCanNavigateMounted = true;
         }
 
         protected override void LoadDefaultConfig()
@@ -145,9 +159,11 @@ namespace Oxide.Plugins
             if (entity is BasePlayer bp && bp.net != null)
             {
                 var id = bp.net.ID.Value;
+                if (_npcToTrackedMountNetId.TryGetValue(id, out var mountId))
+                    _wheelBumpComponentCache.Remove(mountId);
                 _autorunNpcNetIds.Remove(id);
                 _npcToTrackedMountNetId.Remove(id);
-                _wheelRestorePending.Remove(id);
+                TryRestoreWheelRoamTask(id);
             }
         }
 
@@ -202,6 +218,8 @@ namespace Oxide.Plugins
                 _autorunNpcNetIds.Remove(npcNetId);
                 return;
             }
+
+            TryStifleNavigatorWhileAutorunning(npc);
 
             var wrote = TryWriteMovementButtons(npc);
             if (_cfg.AutorunTryWheelPowerReflection)
@@ -641,7 +659,12 @@ namespace Oxide.Plugins
                 }
             }
 
-            _wheelRestorePending[id] = new WheelRestoreState { TaskKeyword = taskKw, AnchorSteam = anchorSteam };
+            _wheelRestorePending[id] = new WheelRestoreState
+            {
+                TaskKeyword = taskKw,
+                AnchorSteam = anchorSteam,
+                SnapshotBridgeTask = true
+            };
 
             if (!_cfg.PauseRoamingAiWhileOnWheel || RoamingNPCs == null || !RoamingNPCs.IsLoaded) return;
             try
@@ -658,8 +681,9 @@ namespace Oxide.Plugins
         {
             if (!_wheelRestorePending.TryGetValue(npcNetId, out var st)) return;
             _wheelRestorePending.Remove(npcNetId);
+            TryRestoreNavigatorFromWheelState(npcNetId, st);
             if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return;
-            if (string.IsNullOrEmpty(st.TaskKeyword)) return;
+            if (!st.SnapshotBridgeTask || string.IsNullOrEmpty(st.TaskKeyword)) return;
             try
             {
                 RoamingNPCs.Call("ApplyBridgeTask", npcNetId, st.AnchorSteam, st.TaskKeyword);
@@ -667,6 +691,146 @@ namespace Oxide.Plugins
             catch (Exception ex)
             {
                 PrintWarning($"[BaseBotch] Restore bridge task after wheel: {ex.Message}");
+            }
+        }
+
+        private void TryRestoreNavigatorFromWheelState(ulong npcNetId, WheelRestoreState st)
+        {
+            if (st?.PriorCanNavigateMounted == null) return;
+            var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcNetId)) as BasePlayer;
+            if (npc == null || npc.IsDestroyed) return;
+            var nav = TryGetNavigatorFromPlayer(npc);
+            TrySetCanNavigateMounted(nav, st.PriorCanNavigateMounted.Value);
+        }
+
+        private static object TryGetNavigatorFromPlayer(BasePlayer npc)
+        {
+            if (npc == null) return null;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                var brainProp = npc.GetType().GetProperty("Brain", bf);
+                var brain = brainProp?.GetValue(npc);
+                if (brain == null) return null;
+                var navProp = brain.GetType().GetProperty("Navigator", bf);
+                return navProp?.GetValue(brain);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool? TryGetCanNavigateMounted(object navigator)
+        {
+            if (navigator == null) return null;
+            try
+            {
+                var p = navigator.GetType().GetProperty("CanNavigateMounted");
+                if (p == null) return null;
+                return (bool)p.GetValue(navigator);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void TrySetCanNavigateMounted(object navigator, bool value)
+        {
+            if (navigator == null) return;
+            try
+            {
+                var p = navigator.GetType().GetProperty("CanNavigateMounted");
+                if (p == null || !p.CanWrite) return;
+                p.SetValue(navigator, value);
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private static void TryNavigatorStop(object navigator)
+        {
+            if (navigator == null) return;
+            try
+            {
+                var m = navigator.GetType().GetMethod("Stop", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                m?.Invoke(navigator, null);
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private void TryCaptureAndApplyNavigatorForWheel(BasePlayer npc)
+        {
+            if (!_cfg.TameNavigatorWhileOnWheel || npc?.net == null) return;
+            var id = npc.net.ID.Value;
+            if (!_wheelRestorePending.TryGetValue(id, out var st))
+            {
+                st = new WheelRestoreState { TaskKeyword = "", AnchorSteam = 0, SnapshotBridgeTask = false };
+                _wheelRestorePending[id] = st;
+            }
+
+            var nav = TryGetNavigatorFromPlayer(npc);
+            if (nav == null) return;
+            if (st.PriorCanNavigateMounted == null)
+                st.PriorCanNavigateMounted = TryGetCanNavigateMounted(nav);
+            TrySetCanNavigateMounted(nav, _cfg.WheelSessionCanNavigateMounted);
+        }
+
+        private void TryStifleNavigatorWhileAutorunning(BasePlayer npc)
+        {
+            if (!_cfg.TameNavigatorWhileOnWheel || npc == null) return;
+            TryNavigatorStop(TryGetNavigatorFromPlayer(npc));
+        }
+
+        private void TrySyncModelStateAfterWheelMount(BasePlayer npc, BaseMountable mount)
+        {
+            if (!_cfg.SyncModelStateAfterWheelMount || npc?.modelState == null || mount == null) return;
+            try
+            {
+                npc.modelState.mounted = true;
+                int? pose = null;
+                var mp = mount.GetType().GetProperty("mountPose");
+                if (mp != null)
+                {
+                    var v = mp.GetValue(mount);
+                    if (v != null) pose = Convert.ToInt32(v);
+                }
+
+                if (pose == null)
+                {
+                    for (var e = mount as BaseEntity; e != null && pose == null; e = e.GetParentEntity())
+                    {
+                        foreach (var propName in new[] { "mountPose", "vehicleMountPose" })
+                        {
+                            var p = e.GetType().GetProperty(propName);
+                            if (p == null) continue;
+                            var v = p.GetValue(e);
+                            if (v == null) continue;
+                            pose = Convert.ToInt32(v);
+                            break;
+                        }
+                    }
+                }
+
+                if (pose != null)
+                    npc.modelState.poseType = pose.Value;
+                npc.SendNetworkUpdate();
+                foreach (var m in typeof(BaseNetworkable).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    if (m.Name != "SendNetworkUpdateImmediate" || m.GetParameters().Length != 0) continue;
+                    m.Invoke(npc, null);
+                    break;
+                }
+            }
+            catch
+            {
+                // ignored
             }
         }
 
@@ -734,6 +898,8 @@ namespace Oxide.Plugins
             }
 
             RememberMountForNpc(npc, mount);
+            TrySyncModelStateAfterWheelMount(npc, mount);
+            TryCaptureAndApplyNavigatorForWheel(npc);
             if (_cfg.AutorunAfterMount)
             {
                 _autorunNpcNetIds.Add(npc.net.ID.Value);
@@ -773,6 +939,8 @@ namespace Oxide.Plugins
             }
 
             RememberMountForNpc(npc, m);
+            TrySyncModelStateAfterWheelMount(npc, m);
+            TryCaptureAndApplyNavigatorForWheel(npc);
             _autorunNpcNetIds.Add(npc.net.ID.Value);
             ApplyAutorunInput(npc.net.ID.Value, true);
             return true;
@@ -789,6 +957,8 @@ namespace Oxide.Plugins
         public object DismountWaterWheel(ulong npcEntityNetId, BasePlayer issuer, object anchorSteamObj = null)
         {
             if (npcEntityNetId == 0UL) return false;
+            if (_npcToTrackedMountNetId.TryGetValue(npcEntityNetId, out var mountCacheId))
+                _wheelBumpComponentCache.Remove(mountCacheId);
             _autorunNpcNetIds.Remove(npcEntityNetId);
             _npcToTrackedMountNetId.Remove(npcEntityNetId);
 
