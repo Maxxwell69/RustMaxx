@@ -10,6 +10,7 @@ import {
   getGiftValueFromPayload,
   getDefaultGiftValue,
   extractViewerNameFromWebhookBody,
+  getViewerNameFromQueryString,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
 import {
@@ -364,6 +365,11 @@ async function runWebhook(request: NextRequest, body: unknown) {
     payload = { viewerName: viewerFromBody(), giftName: action };
   }
 
+  {
+    const qv = getViewerNameFromQueryString(request.nextUrl.searchParams);
+    if (qv && payload) payload = { ...payload, viewerName: qv };
+  }
+
   if (!TIKFINITY_SERVER_ID) {
     console.error("[tikfinity webhook] TIKFINITY_SERVER_ID not set");
     return withCors(
@@ -567,10 +573,6 @@ async function runWebhook(request: NextRequest, body: unknown) {
   ] as const;
 
   if ((maxxInvadersProfileActions as readonly string[]).includes(action)) {
-    const viewerNameFromQuery = request.nextUrl.searchParams.get("viewerName")?.trim();
-    if (viewerNameFromQuery) {
-      payload = { ...payload, viewerName: viewerNameFromQuery };
-    }
     const miParams = parseMaxxInvadersParams(request, body);
     const { tier, mode, kit } = miParams;
     const roamingFromExplicit = parseNpcTemplateKey(miParams.roamingTemplate);

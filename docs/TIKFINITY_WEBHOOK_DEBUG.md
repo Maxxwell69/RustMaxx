@@ -68,7 +68,7 @@ curl -sS "https://www.rustmaxx.com/api/tikfinity/webhook?action=npcmaxx&template
 
 ### MaxxInvaders viewer spawn (`action=maxxinvaders`)
 
-Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot (so the NPC shows the TikTok viewer’s name). Pass the name in JSON **`viewerName`**, or use **`?viewerName=...`** in the URL (TikFinity can map a variable into the query string).
+Sends RCON `maxxinvaders.spawn` with the **viewer’s display name** on the bot (so the NPC shows the TikTok viewer’s name above the head). Pass the name in JSON **`nickname`**, **`name`**, or **`viewerName`** (RustMaxx checks several TikTok fields), or in the URL as **`?viewerName=`**, **`?nickname=`**, **`?name=`**, **`?displayName=`** (first non-empty wins). If the name is missing, the bot may show **`Viewer`**.
 
 **Roaming template:** defaults to **`streamer_patrol`**. Override with **`?template=your_bot_key`** or JSON **`template`** / **`roamingTemplate`**, or a TikFinity connection (server action MaxxInvaders) with a Roaming template. Other defaults: **`tier=1`**, **`mode=roaming`**, **`kit=-`**.
 

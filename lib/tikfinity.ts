@@ -369,23 +369,33 @@ function trimNonEmptyString(v: unknown): string | null {
 }
 
 /**
- * Best-effort TikTok / TikFinity viewer id for RCON chat. Prefers handle (uniqueId) over display nickname.
+ * Best-effort TikTok / TikFinity **display** name for the NPC nameplate (what appears above the head).
+ * Prefer nickname / display name over @handle (`uniqueId`) so the bot shows the person’s visible name.
  */
 function viewerNameFromRecord(o: Record<string, unknown>): string | null {
+  const viewerStr = o.viewer;
+  if (typeof viewerStr === "string" && viewerStr.trim()) {
+    const v = trimNonEmptyString(viewerStr);
+    if (v) return v;
+  }
   const directKeys = [
-    "uniqueId",
-    "unique_id",
+    "nickname",
+    "displayName",
+    "display_name",
     "viewerName",
     "viewer_name",
+    "name",
     "userName",
     "user_name",
     "username",
+    "sender",
     "tiktokUsername",
     "tiktok_username",
-    "nickname",
-    "sender",
-    "displayName",
-    "display_name",
+    "profileName",
+    "commenterName",
+    "commenter",
+    "uniqueId",
+    "unique_id",
   ];
   for (const k of directKeys) {
     const v = trimNonEmptyString(o[k]);
@@ -398,6 +408,29 @@ function viewerNameFromRecord(o: Record<string, unknown>): string | null {
       const v = viewerNameFromRecord(inner as Record<string, unknown>);
       if (v) return v;
     }
+  }
+  return null;
+}
+
+/**
+ * TikFinity often maps the viewer’s name into the **query string** (e.g. `?nickname={{name}}`).
+ * First non-empty wins; use alongside JSON `viewerName` / `nickname` / `name` fields.
+ */
+export function getViewerNameFromQueryString(
+  searchParams: URLSearchParams
+): string | null {
+  const keys = [
+    "viewerName",
+    "nickname",
+    "displayName",
+    "name",
+    "user",
+    "username",
+    "viewer",
+  ];
+  for (const k of keys) {
+    const v = searchParams.get(k)?.trim();
+    if (v) return v.replace(/^@+/, "");
   }
   return null;
 }
