@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.2")]
+    [Info("BaseBotch", "RustMaxx", "1.4.3")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -715,6 +715,7 @@ namespace Oxide.Plugins
 
             TryDriveWaterWheelMountablePlayerInput(comp, npc);
             TryInvokeWaterWheelMountedPlayerSync(comp);
+            TryInvokeWaterWheelMountableTickMethods(comp);
         }
 
         private static void TryInvokeElectricWheelUpdateMethods(Component comp)
@@ -850,6 +851,31 @@ namespace Oxide.Plugins
             {
                 var m = comp.GetType().GetMethod("MountedPlayerSync", bf, null, Type.EmptyTypes, null);
                 m?.Invoke(comp, null);
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private static void TryInvokeWaterWheelMountableTickMethods(Component comp)
+        {
+            if (comp == null) return;
+            var tn = comp.GetType().Name;
+            if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) < 0) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                foreach (var m in comp.GetType().GetMethods(bf))
+                {
+                    if (m.ReturnType != typeof(void) || m.GetParameters().Length != 0) continue;
+                    if (m.Name == "UpdateMountFlags" ||
+                        m.Name == "VehicleFixedUpdate" ||
+                        m.Name == "PostVehicleFixedUpdate")
+                    {
+                        m.Invoke(comp, null);
+                    }
+                }
             }
             catch
             {
