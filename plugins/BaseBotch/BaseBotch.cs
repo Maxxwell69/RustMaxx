@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.4")]
+    [Info("BaseBotch", "RustMaxx", "1.3.5")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -84,6 +84,9 @@ namespace Oxide.Plugins
 
             /// <summary>When true, logs throttled autorun diagnostics (write failures, mount/navigator state).</summary>
             public bool DebugWheelAutorun = false;
+
+            /// <summary>Invoke wheel-specific methods via reflection (experimental; can be disabled if mounts drop).</summary>
+            public bool AutorunInvokeWheelMethods = false;
         }
 
         protected override void LoadDefaultConfig()
@@ -595,7 +598,8 @@ namespace Oxide.Plugins
                 }
             }
 
-            TryInvokeWheelInputLikeMethods(comp, npc);
+            if (_cfg.AutorunInvokeWheelMethods)
+                TryInvokeWheelInputLikeMethods(comp, npc);
         }
 
         private void TryInvokeWheelInputLikeMethods(Component comp, BasePlayer npc)
@@ -610,13 +614,7 @@ namespace Oxide.Plugins
             foreach (var method in comp.GetType().GetMethods(bf))
             {
                 var mn = method.Name;
-                if (mn.IndexOf("input", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mn.IndexOf("player", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mn.IndexOf("rider", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mn.IndexOf("pedal", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mn.IndexOf("human", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    mn.IndexOf("drive", StringComparison.OrdinalIgnoreCase) < 0)
+                if (!LooksLikeSafeWheelDriverMethod(mn))
                     continue;
 
                 try
@@ -650,6 +648,32 @@ namespace Oxide.Plugins
                     // ignored
                 }
             }
+        }
+
+        private static bool LooksLikeSafeWheelDriverMethod(string methodName)
+        {
+            if (string.IsNullOrEmpty(methodName)) return false;
+            // Never call lifecycle / mount management methods from blind reflection.
+            if (methodName.IndexOf("mount", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("dismount", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("unmount", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("detach", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("eject", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("drop", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("remove", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("kill", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("destroy", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("exit", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (methodName.IndexOf("leave", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+
+            if (methodName.IndexOf("pedal", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (methodName.IndexOf("spin", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (methodName.IndexOf("power", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (methodName.IndexOf("human", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (methodName.IndexOf("manual", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (methodName.IndexOf("drive", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            // Avoid broad "player"/"input" names by default; those often include enter/exit hooks.
+            return false;
         }
 
         private static void TryForceMovementModelState(BasePlayer npc)
