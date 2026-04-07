@@ -20,6 +20,7 @@ Each **top-level key** under `"Bots settings"` is a **template key** you can use
 | `john_looter`       | Looter preset |
 | `alfred_hunter`     | Hunter preset |
 | `austin_fighter`    | Fighter preset |
+| `bunny1`            | Bunny onesie + ears viewer bot (RustChaos `bunny1npc` or `npcmaxx.spawn bunny1 …`) |
 
 Set **`CREW_RNPC_TEMPLATE_KEY`** (Railway / `.env`) to **one** of these strings — exactly as written, case-sensitive.
 

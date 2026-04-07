@@ -61,7 +61,17 @@ RustChaos is called as:
 
 The webhook picks **viewer name** from typical TikTok fields: `uniqueId`, `viewerName`, `nickname`, `userName`, nested `user` / `sender` / `author`, etc. If missing, it uses `Viewer`.
 
-## 5. Bunny costume (`bunny1`) — three working setups
+## 5. Bunny: streamer outfit vs spawning a character
+
+| Action | What it does |
+|--------|----------------|
+| **`bunny1`** | Puts the **bunny costume on the streamer** only (clears wear, equips onesie + ears). **Does not spawn** a new character. |
+| **`bunny1npc`** | Spawns a **viewer-named Roaming NPC** using the **`bunny1`** template (bunny clothes). Bot is **anchored to patrol near the streamer**. Requires **RoamingNPCs** loaded and **`bunny1`** enabled in `RoamingNPCs.json`. |
+| **`npcmaxx` + `template=bunny1`** | Same kind of spawn as above via **NPCMaxx** (`npcmaxx.spawn bunny1 Name`). Template must still be **enabled**. |
+
+If you expected a **character to appear in the world** but used **`bunny1`**, switch the webhook to **`bunny1npc`** (or `npcmaxx` with `template=bunny1`).
+
+### 5a. Bunny costume (`bunny1`) — working setups
 
 **A. Query (simplest, recommended for a dedicated TikFinity action)**
 
@@ -89,10 +99,30 @@ Content-Type: application/json
 1. RustMaxx → **Admin → Streamer interactions** → add connection **name** `!bunny1` or `bunny1`, **server action** `Bunny costume` / `bunny1`.  
 2. In TikFinity, point the webhook at the **same base URL** (no `?action=` required if the payload includes the connection name in `event` / `action` / chat fields as configured).
 
+### 5b. Bunny viewer bot (`bunny1npc`) — spawn a character
+
+**Query:**
+
+```http
+POST https://www.rustmaxx.com/api/tikfinity/webhook?action=bunny1npc
+Content-Type: application/json
+
+{"nickname":"TikTokViewer"}
+```
+
+**Chat-style:**
+
+```json
+{ "message": "!bunny1npc", "nickname": "TikTokViewer" }
+```
+
+**Server:** **RoamingNPCs** + **RustChaos** 1.15.21+; **`bunny1`** bot block must have **`"Enable bot?": true`** (reference config in this repo ships it enabled).
+
 ## 6. Game server checklist (why it might still “not work”)
 
 - **RustChaos** loaded on the server; **`oxide.reload RustChaos`** after updating the plugin.  
-- **`StreamerName`** in `oxide/config/RustChaos.json` matches the in-game name of the streamer (the player who should wear the costume).  
+- **`StreamerName`** in `oxide/config/RustChaos.json` matches the in-game name of the streamer (for **`bunny1`** costume and **`bunny1npc`** anchor).  
+- For **spawned bots**: **RoamingNPCs** loaded; **`bunny1`** template exists and is **enabled**; watch **F1 console** for `[RoamingNPCs]` / `[RustChaos]`.  
 - **RCON** in RustMaxx matches the live server (host/port/password; firewall).  
 - Webhook response **`ok: true`** but no effect → check server console for `[RustChaos]` lines and RCON errors.
 
@@ -102,6 +132,7 @@ Content-Type: application/json
 |---------|---------|
 | Query | `.../webhook?action=wolf` |
 | Roaming NPC | `.../webhook?action=npcmaxx&template=bob_resources_farmer` |
+| Bunny viewer bot | `.../webhook?action=bunny1npc` |
 | Crew registry | `.../webhook?event=join` (see `TIKFINITY_CREW_RNPC_SETUP.md`) |
 
 ## 8. Quick PowerShell test (replace host and body)
@@ -128,4 +159,5 @@ Invoke-RestMethod -Uri $uri -Method POST -ContentType "application/json; charset
 - Action list + chat parsing: `lib/tikfinity.ts`  
 - Admin connections: `lib/tikfinity-connections.ts`  
 - Crew + Roaming NPC setup: `docs/TIKFINITY_CREW_RNPC_SETUP.md`  
-- Plugin: `plugins/RustChaos/RustChaos.cs` (action `bunny1`)
+- Plugin: `plugins/RustChaos/RustChaos.cs` (actions `bunny1`, `bunny1npc`)  
+- Roaming template: `plugins/RoamingNpc/config/RoamingNPCs.json` → key `bunny1`

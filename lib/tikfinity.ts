@@ -31,6 +31,7 @@ export const TIKTRIGGER_ACTIONS = [
   "revivechaos",
   "chaosheli",
   "bunny1",
+  "bunny1npc",
   "npcmaxx",
   "maxxinvaders",
 ] as const;
@@ -89,6 +90,9 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Bunny1: "bunny1",
   bunny1: "bunny1",
   "!bunny1": "bunny1",
+  Bunny1Npc: "bunny1npc",
+  bunny1npc: "bunny1npc",
+  "!bunny1npc": "bunny1npc",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -284,8 +288,14 @@ export const ACTION_META: Record<
   bunny1: {
     label: "Bunny costume",
     description:
-      "Clears the streamer’s clothing slots and equips the bunny onesie and bunny ears live (RustChaos bunny1). Map TikFinity chat e.g. !bunny1 to this action; leading ! is stripped when matching.",
+      "Clears the streamer’s clothing slots and equips the bunny onesie and bunny ears live (RustChaos bunny1). Does not spawn an NPC. Map TikFinity chat e.g. !bunny1 to this action; leading ! is stripped when matching.",
     exampleGifts: ["Bunny1", "!bunny1"],
+  },
+  bunny1npc: {
+    label: "Bunny viewer bot (spawn)",
+    description:
+      "Spawns a RoamingNPCs bot using the bunny1 template, named after the viewer, anchored to patrol near the configured streamer (RustChaos bunny1npc). Requires RoamingNPCs loaded and bunny1 template enabled in RoamingNPCs.json.",
+    exampleGifts: ["BunnyBot", "!bunny1npc"],
   },
   npcmaxx: {
     label: "Roaming NPC (viewer bot)",
@@ -550,6 +560,8 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   chaosheli: "chaosheli",
   bunny1: "bunny1",
   "!bunny1": "bunny1",
+  bunny1npc: "bunny1npc",
+  "!bunny1npc": "bunny1npc",
   npcmaxx: "npcmaxx",
   maxxinvaders: "maxxinvaders",
   invaders: "maxxinvaders",

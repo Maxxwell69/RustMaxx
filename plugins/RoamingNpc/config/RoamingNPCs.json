@@ -2109,7 +2109,7 @@
       }
     },
     "bunny1": {
-      "Enable bot?": false,
+      "Enable bot?": true,
       "How many of these bots can be spawned?": 1,
       "Bot appearance (used if bot's amount - 1, use the id in the range of the specified number of digits for the bot ID generator or leave 0 for random appearance)": 100000000,
       "Bot name (leave empty for random)": "Bunny",
