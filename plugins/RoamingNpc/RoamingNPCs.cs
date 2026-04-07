@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.25")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.26")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -56,6 +56,11 @@ namespace Oxide.Plugins
 
         public OnBotCreatedEvent OnBotCreated = new OnBotCreatedEvent();
         private readonly Dictionary<ulong, Timer> respawnTimers = new();
+
+        /// <summary>PersonalNPC-style fake corpse per looter so the client accepts <c>RPC_OpenLootPanel</c> (live NPC as loot source does not).</summary>
+        private readonly Dictionary<ulong, LootableCorpse> _roamingInventoryLootProxies = new();
+
+        private readonly Dictionary<ulong, float> _roamingLootUseDebounce = new();
 
         #region Configuration
         public class Configuration
@@ -2852,6 +2857,19 @@ namespace Oxide.Plugins
             if (_bridgePatrolTimer != null && !_bridgePatrolTimer.Destroyed) _bridgePatrolTimer.Destroy();
             visibleAdmins.Clear();
             visibleAdminsStash.Clear();
+            foreach (var kv in _roamingInventoryLootProxies)
+            {
+                try
+                {
+                    kv.Value?.Kill();
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            }
+            _roamingInventoryLootProxies.Clear();
+            _roamingLootUseDebounce.Clear();
             SaveBots();
             KillBotsUnload();
             PluginEntityComponent.UnloadPlugin();
@@ -2944,17 +2962,17 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private static readonly int LootRoamingUseLayerMask =
-            LayerMask.GetMask("Player (Server)", "Player Movement", "Deployed", "Default");
+        /// <summary>PersonalNPC uses ~2m ray with default layers (not a narrow mask).</summary>
+        private const float LootRoamingRayDistance = 2.5f;
 
-        private const float LootRoamingUseMaxDistance = 3.35f;
+        private const float LootRoamingMaxSeparation = 3.5f;
 
         private static bool TryGetCustomPetUnderPlayerRay(BasePlayer player, float maxDist, out CustomPet pet)
         {
             pet = null;
             if (player?.eyes == null) return false;
-            var ray = player.eyes.HeadRay();
-            if (!Physics.Raycast(ray, out RaycastHit hit, maxDist, LootRoamingUseLayerMask, QueryTriggerInteraction.Ignore))
+            if (!Physics.Raycast(player.eyes.HeadRay(), out RaycastHit hit, maxDist, Physics.DefaultRaycastLayers,
+                    QueryTriggerInteraction.Ignore))
                 return false;
             var ent = hit.GetEntity();
             for (var i = 0; i < 8 && ent != null; i++)
@@ -2969,42 +2987,100 @@ namespace Oxide.Plugins
             return false;
         }
 
-        /// <summary>Same RPC path as vanilla loot player / PersonalNPC <c>RPC_OpenLootPanel</c>.</summary>
-        private static bool TryOpenRoamingPlayerInventory(BasePlayer looter, CustomPet target)
+        /// <summary>
+        /// Same approach as PersonalNPC <c>OpenInventory</c>: temporary <see cref="LootableCorpse"/> + <c>SendAsSnapshot</c>;
+        /// <c>StartLootingEntity</c> on the live bot does not open the client UI reliably.
+        /// </summary>
+        private bool TryOpenRoamingPlayerInventory(BasePlayer looter, CustomPet target)
         {
             if (looter == null || target == null || !ShouldAllowPlayerLootRoamingAlive(target, looter)) return false;
             if (looter.inventory?.loot == null || target.inventory == null) return false;
+            if (looter.Connection == null) return false;
+
             looter.EndLooting();
+
+            if (_roamingInventoryLootProxies.TryGetValue(looter.userID, out var existing) && existing != null &&
+                !existing.IsDestroyed)
+                existing.Kill();
+            _roamingInventoryLootProxies.Remove(looter.userID);
+
             looter.inventory.loot.Clear();
-            if (!looter.inventory.loot.StartLootingEntity(target, false)) return false;
-            looter.inventory.loot.entitySource = target;
+
+            var corpse =
+                GameManager.server.CreateEntity("assets/prefabs/player/player_corpse.prefab", Vector3.zero) as
+                    LootableCorpse;
+            if (corpse == null) return false;
+
+            corpse.CancelInvoke("RemoveCorpse");
+            corpse.syncPosition = false;
+            corpse.limitNetworking = true;
+            corpse.enableSaving = false;
+            corpse.playerName = target.GetResolvedDisplayName();
+            corpse.playerSteamID = 0UL;
+            corpse.Spawn();
+            corpse.SetFlag(BaseEntity.Flags.Locked, true);
+
+            if (corpse.TryGetComponent<Buoyancy>(out var buoyancy))
+                UnityEngine.Object.Destroy(buoyancy);
+            if (corpse.TryGetComponent<Rigidbody>(out var rigidbody))
+                UnityEngine.Object.Destroy(rigidbody);
+
+            corpse.SendAsSnapshot(looter.Connection);
+
+            looter.inventory.loot.Clear();
+            looter.inventory.loot.PositionChecks = false;
+            corpse.containers = new ItemContainer[0];
+
+            if (!looter.inventory.loot.StartLootingEntity(corpse, false))
+            {
+                corpse.Kill();
+                return false;
+            }
+
             looter.inventory.loot.AddContainer(target.inventory.containerMain);
             looter.inventory.loot.AddContainer(target.inventory.containerWear);
             looter.inventory.loot.AddContainer(target.inventory.containerBelt);
-            looter.RadioactiveLootCheck(looter.inventory.loot.containers);
+
             looter.inventory.loot.SendImmediate();
-            looter.ClientRPC(RpcTarget.Player("RPC_OpenLootPanel", looter), "player_corpse");
+            looter.inventory.loot.MarkDirty();
+
+            _roamingInventoryLootProxies[looter.userID] = corpse;
+
+            timer.Once(0.25f, () =>
+            {
+                if (looter == null || !looter.IsConnected) return;
+                looter.ClientRPC(RpcTarget.Player("RPC_OpenLootPanel", looter), "player_corpse");
+            });
+
             return true;
         }
 
         /// <summary>
-        /// Awake NPCs do not get a client loot prompt; opening on Use (E) when looking at an allowed bot.
+        /// Awake NPCs do not get a client loot prompt; opening on Use (E) when looking at an allowed bot (PersonalNPC-style ray).
         /// </summary>
         private void OnPlayerInput(BasePlayer player, InputState input)
         {
             if (player == null || !player.userID.IsSteamId()) return;
             if (player.IsSleeping() || player.IsDead() || player.IsWounded()) return;
             if (!input.WasJustPressed(BUTTON.USE)) return;
-            if (!TryGetCustomPetUnderPlayerRay(player, LootRoamingUseMaxDistance, out var pet)) return;
+            if (_roamingLootUseDebounce.TryGetValue(player.userID, out var last) &&
+                Time.realtimeSinceStartup < last + 0.12f)
+                return;
+            if (!TryGetCustomPetUnderPlayerRay(player, LootRoamingRayDistance, out var pet)) return;
             if (!ShouldAllowPlayerLootRoamingAlive(pet, player)) return;
+            if (Vector3.Distance(player.transform.position, pet.transform.position) > LootRoamingMaxSeparation) return;
 
-            NextTick(() =>
-            {
-                if (player == null || !player.IsConnected || pet == null || pet.IsDestroyed) return;
-                if (Vector3.Distance(player.transform.position, pet.transform.position) > LootRoamingUseMaxDistance + 0.65f)
-                    return;
-                TryOpenRoamingPlayerInventory(player, pet);
-            });
+            _roamingLootUseDebounce[player.userID] = Time.realtimeSinceStartup;
+            TryOpenRoamingPlayerInventory(player, pet);
+        }
+
+        private void OnPlayerDisconnected(BasePlayer player, string reason)
+        {
+            if (player == null) return;
+            if (_roamingInventoryLootProxies.TryGetValue(player.userID, out var c) && c != null && !c.IsDestroyed)
+                c.Kill();
+            _roamingInventoryLootProxies.Remove(player.userID);
+            _roamingLootUseDebounce.Remove(player.userID);
         }
 
         [ChatCommand("lootnpc")]
@@ -3012,7 +3088,7 @@ namespace Oxide.Plugins
         {
             if (player == null) return;
             CustomPet nearest = null;
-            var best = LootRoamingUseMaxDistance + 1.5f;
+            var best = LootRoamingMaxSeparation + 1.5f;
             foreach (var kv in listNpcPlayers)
             {
                 var pet = kv.Value;
@@ -3028,7 +3104,7 @@ namespace Oxide.Plugins
             {
                 player.ChatMessage(RU
                     ? "Рядом нет бота, чей инвентарь можно открыть."
-                    : "No roaming bot with loot access nearby (within ~4m).");
+                    : "No roaming bot with loot access nearby (within ~5m).");
                 return;
             }
             if (!TryOpenRoamingPlayerInventory(player, nearest))
