@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.10")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.11")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -4440,7 +4440,180 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>Task tab: bridge RoamingNPCs — apply task to <b>all</b> Roaming bots + deposit.</summary>
+        /// <summary>Scroll list: every tracked invader with per-bot task + deposit (Roaming only).</summary>
+        private void AddScrollableTaskInvadersList(
+            CuiElementContainer container,
+            string scrollHostParent,
+            IReadOnlyList<InvaderRuntime> bots)
+        {
+            const int rowH = 68;
+            const string uiCard = "0.12 0.12 0.15 0.94";
+            const string cWood = "0.35 0.32 0.15 0.95";
+            const string cStone = "0.28 0.32 0.38 0.95";
+            const string cCloth = "0.42 0.28 0.48 0.95";
+            const string cHunt = "0.55 0.22 0.18 0.95";
+            const string cProt = "0.55 0.35 0.15 0.95";
+            const string cGather = "0.18 0.48 0.28 0.95";
+            const string cIdle = "0.22 0.22 0.26 0.95";
+            const string cDep = "0.22 0.45 0.55 0.95";
+
+            var n = bots.Count;
+            var contentH = Mathf.Max(rowH * Mathf.Max(n, 1) + 8, rowH + 8);
+            var panelSize = -contentH;
+
+            var scrollerName = Guid.NewGuid().ToString("N");
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = scrollerName,
+                    Parent = scrollHostParent,
+                    Components =
+                    {
+                        new CuiNeedsCursorComponent(),
+                        new CuiImageComponent
+                        {
+                            Color = "0.08 0.08 0.11 0.95",
+                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                            ImageType = Image.Type.Tiled,
+                        },
+                        new CuiScrollViewComponent
+                        {
+                            ContentTransform = new CuiRectTransform
+                            {
+                                AnchorMin = "0 0.98",
+                                AnchorMax = "1 0.98",
+                                OffsetMin = $"0 {panelSize}",
+                                OffsetMax = "0 0",
+                            },
+                            Vertical = true,
+                            Horizontal = false,
+                            MovementType = ScrollRect.MovementType.Clamped,
+                            Elasticity = 0.25f,
+                            Inertia = true,
+                            DecelerationRate = 0.3f,
+                            ScrollSensitivity = 24f,
+                            VerticalScrollbar = new CuiScrollbar { AutoHide = true, Size = 18 },
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    },
+                });
+
+            if (n == 0)
+            {
+                AddCuiText(
+                    container,
+                    scrollerName,
+                    "No active invaders.\nSpawn from the Invaders tab or TikFinity.",
+                    "0.05 0.45",
+                    "0.95 0.92",
+                    14,
+                    TextAnchor.MiddleCenter,
+                    "0.8 0.85 0.92 1");
+                return;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var r = bots[i];
+                var offsetMin = -i * rowH - rowH;
+                var offsetMax = -i * rowH;
+                var rowName = Guid.NewGuid().ToString("N");
+                AddRawCuiElement(
+                    container,
+                    new CuiElement
+                    {
+                        Name = rowName,
+                        Parent = scrollerName,
+                        Components =
+                        {
+                            new CuiImageComponent
+                            {
+                                Color = uiCard,
+                                Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                                ImageType = Image.Type.Tiled,
+                            },
+                            new CuiRectTransformComponent
+                            {
+                                AnchorMin = "0 0.998",
+                                AnchorMax = "1 0.998",
+                                OffsetMin = $"0 {offsetMin}",
+                                OffsetMax = $"0 {offsetMax}",
+                            },
+                        },
+                    });
+
+                var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
+                var nm = StripCuiMarkup(ResolveViewerNameForWorldTag(r));
+                var nid = StripCuiMarkup(r.NpcId ?? "?");
+                var tmpl = r.IsRoamingNpc
+                    ? StripCuiMarkup(r.RoamingTemplateKey ?? _cfg.DefaultRoamingTemplateKey ?? "")
+                    : "(scientist)";
+                var line1 = $"{nm}  {nid}";
+                var line2 =
+                    $"T{r.Tier}  HP {hp:F0}  {(r.IsRoamingNpc ? "Roam" : "Sci")}  {tmpl}";
+                AddCuiText(
+                    container,
+                    rowName,
+                    line1 + "\n" + line2,
+                    "0.02 0.48",
+                    "0.98 0.95",
+                    10,
+                    TextAnchor.UpperLeft,
+                    "0.95 0.97 1 1");
+
+                if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+                {
+                    AddCuiText(
+                        container,
+                        rowName,
+                        r.NpcPlayer == null || r.NpcPlayer.IsDestroyed
+                            ? "— gone —"
+                            : "Scientist - bridge tasks N/A",
+                        "0.02 0.05",
+                        "0.98 0.44",
+                        10,
+                        TextAnchor.MiddleCenter,
+                        "0.45 0.5 0.55 1");
+                    continue;
+                }
+
+                var nidSafe = (r.NpcId ?? "").Trim();
+                if (string.IsNullOrEmpty(nidSafe)) nidSafe = "?";
+
+                void TaskBtn(string task, string label, string col, float x0, float x1)
+                {
+                    AddCuiButtonWithText(
+                        container,
+                        rowName,
+                        $"maxxinvaders.gui tasksingle {nidSafe} {task}",
+                        col,
+                        label,
+                        $"{x0.ToString("F3", CultureInfo.InvariantCulture)} 0.06",
+                        $"{x1.ToString("F3", CultureInfo.InvariantCulture)} 0.42",
+                        8);
+                }
+
+                TaskBtn("wood", "Wd", cWood, 0.02f, 0.115f);
+                TaskBtn("stone", "St", cStone, 0.12f, 0.215f);
+                TaskBtn("cloth", "Cl", cCloth, 0.22f, 0.315f);
+                TaskBtn("hunt", "Hu", cHunt, 0.32f, 0.415f);
+                TaskBtn("protect", "Pr", cProt, 0.42f, 0.515f);
+                TaskBtn("gather", "Ga", cGather, 0.52f, 0.615f);
+                TaskBtn("idle", "Id", cIdle, 0.62f, 0.715f);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui deposit {nidSafe}",
+                    cDep,
+                    "Dep",
+                    "0.72 0.06",
+                    "0.84 0.42",
+                    8);
+            }
+        }
+
+        /// <summary>Task tab: per-invader tasks (scroll) + apply to all (bottom strip).</summary>
         private void AddTaskTabContent(
             CuiElementContainer container,
             string contentPanel,
@@ -4456,30 +4629,32 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                "Bridge tasks (RoamingNPCs)",
-                "0.03 0.90",
+                "Tasks — each invader + apply to all",
+                "0.03 0.93",
                 "0.97 0.98",
-                16,
+                15,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
             AddCuiText(
                 container,
                 contentPanel,
-                "Each button applies to every Roaming bot on the map. Scientists are skipped. Set anchor via spawn or follow; deposit uses assigned box or nearest anchor-owned storage.",
-                "0.03 0.78",
-                "0.97 0.88",
-                11,
+                $"On map: {bots.Count} invader(s) · Roaming (bridge): {roam}. Scroll the list; Wd=wood, St=stone, Cl=cloth, Hu=hunt, Pr=protect, Ga=gather, Id=idle, Dep=deposit.",
+                "0.03 0.875",
+                "0.97 0.925",
+                10,
                 TextAnchor.UpperLeft,
-                "0.72 0.78 0.88 1");
-            AddCuiText(
-                container,
-                contentPanel,
-                $"Roaming bots on map: {roam}",
-                "0.03 0.72",
-                "0.97 0.77",
-                11,
-                TextAnchor.MiddleLeft,
-                "0.55 0.65 0.75 1");
+                "0.65 0.75 0.88 1");
+
+            var scrollHost = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.07 0.08 0.10 0.96" },
+                    RectTransform = { AnchorMin = "0.02 0.33", AnchorMax = "0.98 0.87" },
+                    CursorEnabled = true,
+                },
+                contentPanel);
+
+            AddScrollableTaskInvadersList(container, scrollHost, bots);
 
             const string cWood = "0.35 0.32 0.15 0.95";
             const string cStone = "0.28 0.32 0.38 0.95";
@@ -4493,75 +4668,74 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                "Gather — one category",
-                "0.03 0.62",
-                "0.97 0.66",
-                12,
+                "Apply to every Roaming bot (scientists skipped)",
+                "0.03 0.26",
+                "0.97 0.30",
+                11,
                 TextAnchor.MiddleLeft,
-                "0.85 0.9 1 1");
+                "0.75 0.82 0.95 1");
+            AddCuiText(
+                container,
+                contentPanel,
+                "Gather one type",
+                "0.03 0.20",
+                "0.97 0.24",
+                10,
+                TextAnchor.MiddleLeft,
+                "0.55 0.65 0.75 1");
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall wood",
                 cWood,
                 "ALL WOOD",
-                "0.03 0.50",
-                "0.31 0.60",
-                12);
+                "0.03 0.11",
+                "0.24 0.19",
+                11);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall stone",
                 cStone,
                 "ALL STONE",
-                "0.33 0.50",
-                "0.61 0.60",
-                12);
+                "0.25 0.11",
+                "0.46 0.19",
+                11);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall cloth",
                 cCloth,
                 "ALL CLOTH",
-                "0.63 0.50",
-                "0.97 0.60",
-                12);
-
-            AddCuiText(
-                container,
-                contentPanel,
-                "Hunt / protect / full gather / idle",
-                "0.03 0.44",
-                "0.97 0.48",
-                12,
-                TextAnchor.MiddleLeft,
-                "0.85 0.9 1 1");
+                "0.47 0.11",
+                "0.68 0.19",
+                11);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall hunt",
                 cHunt,
                 "ALL HUNT",
-                "0.03 0.32",
-                "0.245 0.42",
-                11);
+                "0.69 0.11",
+                "0.80 0.19",
+                10);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall protect",
                 cProt,
-                "ALL PROTECT",
-                "0.255 0.32",
-                "0.495 0.42",
-                11);
+                "ALL PRT",
+                "0.81 0.11",
+                "0.92 0.19",
+                10);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall gather",
                 cGather,
                 "ALL GATHER",
-                "0.505 0.32",
-                "0.745 0.42",
+                "0.03 0.02",
+                "0.32 0.09",
                 11);
             AddCuiButtonWithText(
                 container,
@@ -4569,39 +4743,20 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui taskall idle",
                 cIdle,
                 "ALL IDLE",
-                "0.755 0.32",
-                "0.97 0.42",
+                "0.33 0.02",
+                "0.52 0.09",
                 11);
-
-            AddCuiText(
-                container,
-                contentPanel,
-                "Deposit inventory to storage (anchor box)",
-                "0.03 0.24",
-                "0.97 0.28",
-                12,
-                TextAnchor.MiddleLeft,
-                "0.85 0.9 1 1");
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui deposit all",
                 cDep,
                 "ALL DEPOSIT",
-                "0.18 0.10",
-                "0.82 0.22",
-                14,
-                TextAnchor.MiddleCenter,
-                "0.95 0.97 1 1");
-            AddCuiText(
-                container,
-                contentPanel,
-                "Per-bot: Invaders tab row buttons · Chat: /maxxinvaders task … · Box: /maxxinvaders box … look",
-                "0.03 0.02",
-                "0.97 0.08",
+                "0.53 0.02",
+                "0.97 0.09",
                 11,
                 TextAnchor.MiddleCenter,
-                "0.5 0.55 0.65 1");
+                "0.95 0.97 1 1");
         }
 
         private void OpenGui(BasePlayer player, int page)
@@ -5111,6 +5266,18 @@ namespace Oxide.Plugins
             {
                 var task = args[1].Trim().ToLowerInvariant();
                 ApplyBridgeTaskToAllRoaming(player, task);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "tasksingle" && args.Length > 2)
+            {
+                var nid = args[1].Trim();
+                var task = args[2].Trim().ToLowerInvariant();
+                if (!TryFindInvader(nid, out var tr))
+                    player.ChatMessage("[MaxxInvaders] NPC not found.");
+                else
+                    ApplyBridgeTaskSingle(player, tr, task);
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
