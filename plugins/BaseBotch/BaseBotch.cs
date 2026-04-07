@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.8")]
+    [Info("BaseBotch", "RustMaxx", "1.3.9")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -501,6 +501,9 @@ namespace Oxide.Plugins
                 if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) < 0) continue;
                 try
                 {
+                    var syncField = c.GetType().GetField("syncsMountedPlayers", bf);
+                    if (syncField != null && syncField.FieldType == typeof(bool))
+                        syncField.SetValue(c, true);
                     var m = c.GetType().GetMethod("EnableMountedPlayerSync", bf, null, Type.EmptyTypes, null);
                     m?.Invoke(c, null);
                 }
@@ -649,6 +652,16 @@ namespace Oxide.Plugins
                     if (!p.CanWrite || p.PropertyType != typeof(bool) || !BoolNameLooksLikeRunSignal(p.Name)) continue;
                     try { p.SetValue(comp, true, null); } catch { }
                 }
+
+                // Concrete runtime members seen in debug dumps.
+                foreach (var f in comp.GetType().GetFields(bf))
+                {
+                    if (f.FieldType != typeof(bool)) continue;
+                    if (f.Name == "syncsMountedPlayers" || f.Name == "ensureOutputsUpdated")
+                    {
+                        try { f.SetValue(comp, true); } catch { }
+                    }
+                }
                 TryInvokeIoEntityRefresh(comp);
             }
 
@@ -656,6 +669,7 @@ namespace Oxide.Plugins
                 TryInvokeWheelInputLikeMethods(comp, npc);
 
             TryDriveWaterWheelMountablePlayerInput(comp, npc);
+            TryInvokeWaterWheelMountedPlayerSync(comp);
         }
 
         private static void TryDriveWaterWheelMountablePlayerInput(Component comp, BasePlayer npc)
@@ -677,6 +691,23 @@ namespace Oxide.Plugins
                     m.Invoke(comp, new object[] { npc, npc.serverInput });
                     return;
                 }
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private static void TryInvokeWaterWheelMountedPlayerSync(Component comp)
+        {
+            if (comp == null) return;
+            var tn = comp.GetType().Name;
+            if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) < 0) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                var m = comp.GetType().GetMethod("MountedPlayerSync", bf, null, Type.EmptyTypes, null);
+                m?.Invoke(comp, null);
             }
             catch
             {
