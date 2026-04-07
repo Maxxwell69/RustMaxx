@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.3")]
+    [Info("BaseBotch", "RustMaxx", "1.4.4")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -47,6 +47,7 @@ namespace Oxide.Plugins
         private static FieldInfo _cachedInputStatePreviousField;
         private static int _autorunTickPhase;
         private readonly Dictionary<ulong, float> _nextAutorunDebugAt = new();
+        private readonly Dictionary<ulong, float> _nextWheelSignalDebugAt = new();
 
         private sealed class ConfigData
         {
@@ -55,6 +56,7 @@ namespace Oxide.Plugins
             public bool AutorunAfterMount = true;
             public float AutorunTickSeconds = 0.02f;
             public bool AutorunUseSprint = true;
+            public bool AutorunUseUseButton = true;
             public bool AutorunDoubleApplyNextTick = true;
 
             /// <summary>If serverInput is missing or current is null, try reflection to find InputState / InputMessage (NPC builds vary).</summary>
@@ -166,6 +168,7 @@ namespace Oxide.Plugins
             _wheelMemberDumped?.Clear();
             _wheelMountedSyncEnabled?.Clear();
             _nextAutorunDebugAt?.Clear();
+            _nextWheelSignalDebugAt?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
             _autorunTimer = null;
@@ -297,6 +300,8 @@ namespace Oxide.Plugins
             var mask = (int)BUTTON.FORWARD;
             if (_cfg.AutorunUseSprint)
                 mask |= (int)BUTTON.SPRINT;
+            if (_cfg.AutorunUseUseButton)
+                mask |= (int)BUTTON.USE;
             // Hamster wheel: alternate strafe so locomotion isn't treated as pure forward-only in some builds.
             mask |= (_autorunTickPhase & 1) == 0 ? (int)BUTTON.LEFT : (int)BUTTON.RIGHT;
             mask |= _cfg.AutorunExtraButtonMask;
@@ -487,7 +492,44 @@ namespace Oxide.Plugins
             }
 
             foreach (var comp in comps)
+            {
                 BumpWheelComponentFieldsAndMethods(comp, npc);
+                if (_cfg.DebugWheelAutorun)
+                    TryLogWheelSignalValues(comp, npc, mountId);
+            }
+        }
+
+        private void TryLogWheelSignalValues(Component comp, BasePlayer npc, ulong mountId)
+        {
+            if (comp == null || npc == null) return;
+            var now = Time.realtimeSinceStartup;
+            if (_nextWheelSignalDebugAt.TryGetValue(mountId, out var nextAt) && now < nextAt) return;
+            _nextWheelSignalDebugAt[mountId] = now + 4f;
+
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                var tn = comp.GetType().Name;
+                if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    object mounted = null;
+                    var m = comp.GetType().GetMethod("PlayerIsMounted", bf);
+                    if (m != null && m.GetParameters().Length == 1)
+                        mounted = m.Invoke(comp, new object[] { npc });
+                    Puts($"[BaseBotch][debug] wheelSignal mount={mountId} type={tn} PlayerIsMounted={mounted ?? "n/a"}");
+                }
+                else if (tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    object maxOut = null;
+                    var m = comp.GetType().GetMethod("MaximalPowerOutput", bf, null, Type.EmptyTypes, null);
+                    if (m != null) maxOut = m.Invoke(comp, null);
+                    Puts($"[BaseBotch][debug] wheelSignal mount={mountId} type={tn} MaximalPowerOutput={maxOut ?? "n/a"}");
+                }
+            }
+            catch
+            {
+                // ignored
+            }
         }
 
         private static void TryEnableMountedPlayerSync(Component[] comps)
