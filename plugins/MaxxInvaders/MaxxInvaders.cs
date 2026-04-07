@@ -57,6 +57,8 @@ namespace Oxide.Plugins
 
         [PluginReference] private Plugin RoamingNPCs;
 
+        [PluginReference] private Plugin BaseBot;
+
         #endregion
 
         #region State
