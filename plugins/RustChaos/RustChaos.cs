@@ -21,7 +21,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.21")]
+    [Info("RustChaos", "RustMaxx", "1.15.22")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. bunny1npc: RoamingNPCs viewer bot (bunny1 template). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -346,7 +346,13 @@ namespace Oxide.Plugins
             // Log every trigger to server console.
             Puts($"{LogPrefix} {viewerName} triggered action '{action}' from gift '{giftName}'" + (scrapAmount > 0 ? $" (+{scrapAmount} scrap)" : ""));
 
-            ExecuteAction(action, viewerName, giftName, scrapAmount, customMessage);
+            string failReply = ExecuteAction(action, viewerName, giftName, scrapAmount, customMessage);
+            if (!string.IsNullOrEmpty(failReply))
+            {
+                arg.ReplyWith(failReply);
+                return;
+            }
+
             arg.ReplyWith($"OK: {action}" + (scrapAmount > 0 ? $" +{scrapAmount} scrap" : ""));
         }
 
@@ -385,13 +391,15 @@ namespace Oxide.Plugins
 
         #region Action execution
 
-        private void ExecuteAction(string action, string viewerName, string giftName, int scrapAmount, string customMessage = null)
+        /// <summary>Runs the action. Returns null on success; otherwise a single-line RCON reply starting with FAILED: (or other error) for webhooks.</summary>
+        private string ExecuteAction(string action, string viewerName, string giftName, int scrapAmount, string customMessage = null)
         {
             BasePlayer target = GetStreamerPlayer();
             if (target == null && ActionRequiresPlayer(action))
             {
-                PrintWarning($"{LogPrefix} Streamer '{_config.StreamerName}' not online. Action '{action}' cancelled.");
-                return;
+                string sn = _config?.StreamerName?.Trim() ?? "(empty)";
+                PrintWarning($"{LogPrefix} Streamer '{sn}' not online or name mismatch. Action '{action}' cancelled.");
+                return $"FAILED: Streamer not found. Set RustChaos.json StreamerName to their exact display name; they must be awake online OR sleeping on the server (not fully disconnected). Configured: '{sn}'.";
             }
 
             string ChatMsg(string fallback) => !string.IsNullOrEmpty(customMessage) ? customMessage : fallback;
@@ -567,6 +575,7 @@ namespace Oxide.Plugins
                         {
                             BroadcastChat(ChatMsg($"{viewerName}: bunny bot could not spawn — load RoamingNPCs, enable template '{BunnyViewerNpcTemplateKey}', check server console."));
                             PrintWarning($"{LogPrefix} bunny1npc failed (RoamingNPCs missing, template disabled, or bridge rejected name). template={BunnyViewerNpcTemplateKey} name={npcLabel}");
+                            return "FAILED: Bunny NPC spawn failed. Load RoamingNPCs, oxide.reload RoamingNPCs, set Bots settings bunny1 Enable=true in RoamingNPCs.json. If using RustMaxx fork, ensure SpawnFromTemplateForBridge exists. Check F1 console for [RoamingNPCs].";
                         }
                     }
                     break;
@@ -753,6 +762,8 @@ namespace Oxide.Plugins
             {
                 PrintWarning($"{LogPrefix} Streamer not online – scrap not given ({scrapAmount} would have been given).");
             }
+
+            return null;
         }
 
         private void StartHeliChaosEvent(BasePlayer target, Func<string, string> chatMsg, string viewerName, string giftName)
@@ -938,7 +949,14 @@ namespace Oxide.Plugins
         {
             if (string.IsNullOrWhiteSpace(displayName) || streamerAnchor == null || !streamerAnchor.IsValid()) return false;
             Plugin roam = plugins.Find("RoamingNPCs");
-            if (roam == null) return false;
+            if (roam == null || !roam.IsLoaded)
+                roam = plugins.Find("Roaming NPCs");
+            if (roam == null || !roam.IsLoaded)
+            {
+                PrintWarning($"{LogPrefix} bunny1npc: RoamingNPCs plugin not loaded (tried Find RoamingNPCs and Roaming NPCs).");
+                return false;
+            }
+
             try
             {
                 object r = roam.Call("SpawnFromTemplateForBridge", BunnyViewerNpcTemplateKey, displayName.Trim(), null, streamerAnchor.userID);
@@ -2670,6 +2688,15 @@ namespace Oxide.Plugins
                 if (string.Equals(player.displayName, name, StringComparison.OrdinalIgnoreCase))
                     return player;
             }
+
+            // Sleeping bag / offline body: not in activePlayerList but still valid for Steam id (e.g. bunny1npc anchor).
+            foreach (var player in BasePlayer.sleepingPlayerList)
+            {
+                if (player == null || player.IsDestroyed || player.IsDead()) continue;
+                if (string.Equals(player.displayName, name, StringComparison.OrdinalIgnoreCase))
+                    return player;
+            }
+
             return null;
         }
 

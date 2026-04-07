@@ -16,7 +16,7 @@ import {
   getConnectionByEventName,
   parseNpcTemplateKey,
 } from "@/lib/tikfinity-connections";
-import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
+import { ensureConnection, runAndWait, sendCommand } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
 import { insertRnpcSpawnEvent } from "@/lib/rnpc-spawn-events";
 import {
@@ -722,12 +722,15 @@ async function runWebhook(request: NextRequest, body: unknown) {
       );
     }
 
-  const result = sendCommand(server.id, command);
-  if (!result.ok) {
-    console.error("[tikfinity webhook] RCON send failed:", result.error);
+  let rconResponse = "";
+  try {
+    rconResponse = (await runAndWait(server.id, command, 15000)).trim();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[tikfinity webhook] RCON run failed:", msg);
     audit("tikfinity", "webhook.failed", {
-      reason: "RCON send failed",
-      error: result.error,
+      reason: "RCON response timeout or error",
+      error: msg,
       viewerName: payload.viewerName,
       giftName: payload.giftName,
       action,
@@ -738,9 +741,10 @@ async function runWebhook(request: NextRequest, body: unknown) {
       NextResponse.json(
         {
           ok: false,
-          error: result.error ?? "Command send failed",
-          debug: "RCON connected but run failed. Check server has RustChaos plugin loaded.",
-          step: "rcon_send",
+          error: msg,
+          debug:
+            "RCON did not return within 15s or the socket errored. If the server is busy, try again; otherwise check WebRCON and RustChaos console output.",
+          step: "rcon_wait",
           command,
         },
         { status: 502 }
@@ -748,7 +752,39 @@ async function runWebhook(request: NextRequest, body: unknown) {
     );
   }
 
-  console.log("[tikfinity webhook] OK", { action, command, serverId: server.id });
+  const failed =
+    /^FAILED:/i.test(rconResponse) ||
+    /^Unknown action:/i.test(rconResponse) ||
+    /^Error:/i.test(rconResponse);
+
+  if (failed) {
+    console.warn("[tikfinity webhook] RCON reported failure:", rconResponse);
+    audit("tikfinity", "webhook.trigger_failed", {
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      action,
+      serverId: server.id,
+      command,
+      rconResponse,
+    }).catch(() => {});
+    return withCors(
+      NextResponse.json({
+        ok: false,
+        action: action as TikTriggerAction,
+        viewerName: payload.viewerName,
+        giftName: payload.giftName,
+        command,
+        scrapAmount: giftValue > 0 ? giftValue : undefined,
+        rconResponse,
+        debug:
+          action === "bunny1npc"
+            ? "RustChaos bunny1npc did not spawn the bot. Typical causes: streamer not online or StreamerName mismatch; RoamingNPCs unloaded; bunny1 template disabled in RoamingNPCs.json; vanilla RoamingNPCs without SpawnFromTemplateForBridge (use RustMaxx Integration RoamingNPCs.cs)."
+            : "Game server rejected the action. Fix rconResponse (streamer online, RustChaos.json StreamerName, plugin version).",
+      })
+    );
+  }
+
+  console.log("[tikfinity webhook] OK", { action, command, serverId: server.id, rconResponse });
   audit("tikfinity", "webhook.trigger", {
     viewerName: payload.viewerName,
     giftName: payload.giftName,
@@ -756,6 +792,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
     serverId: server.id,
     command,
     scrapAmount: giftValue ? giftValue : undefined,
+    rconResponse,
   }).catch(() => {});
 
   return withCors(
@@ -766,7 +803,11 @@ async function runWebhook(request: NextRequest, body: unknown) {
       giftName: payload.giftName,
       command,
       scrapAmount: giftValue > 0 ? giftValue : undefined,
-      debug: "Command sent. If scientist did not spawn: streamer must be online, plugin config StreamerName must match in-game name, and check server console for [RustChaos].",
+      rconResponse: rconResponse || undefined,
+      debug:
+        action === "bunny1npc"
+          ? "RCON OK. Bot may take a few seconds to appear near the streamer; check F1 for [RoamingNPCs] / [RustChaos]."
+          : "RCON OK. If an expected effect or NPC did not appear, check streamer online + RustChaos.json StreamerName + server console [RustChaos].",
     })
   );
 }
