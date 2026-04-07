@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.5")]
+    [Info("BaseBotch", "RustMaxx", "1.4.6")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -1191,6 +1191,33 @@ namespace Oxide.Plugins
                     Puts($"[BaseBotch][debug] wheelMethodsMountable mount={mountId} methods=[{string.Join(", ", mountableMethodHints.ToArray())}]");
                 if (electricMethodHints.Count > 0)
                     Puts($"[BaseBotch][debug] wheelMethodsElectric mount={mountId} methods=[{string.Join(", ", electricMethodHints.ToArray())}]");
+                DumpAllElectricWheelMethodsForDebug(mountId, comps);
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private void DumpAllElectricWheelMethodsForDebug(ulong mountId, Component[] comps)
+        {
+            try
+            {
+                const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                foreach (var c in comps)
+                {
+                    if (c == null) continue;
+                    var tn = c.GetType().Name;
+                    if (tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    var all = new List<string>();
+                    foreach (var m in c.GetType().GetMethods(bf))
+                    {
+                        all.Add($"{m.Name}({m.GetParameters().Length})");
+                        if (all.Count >= 160) break;
+                    }
+                    Puts($"[BaseBotch][debug] wheelMethodsElectricAll mount={mountId} methods=[{string.Join(", ", all.ToArray())}]");
+                    break;
+                }
             }
             catch
             {
