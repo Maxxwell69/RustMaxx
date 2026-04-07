@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.21")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.22")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -158,6 +158,7 @@ namespace Oxide.Plugins
             public bool PreventDuplicateViewerNPCs { get; set; } = true;
             public float MinimumSpawnRadiusFromAnchor { get; set; } = 1f;
             public float DefaultSpawnRadius { get; set; } = 10f;
+            /// <summary>Emergency leash: teleport bot back if farther than this from <see cref="InvaderRuntime.AnchorPosition"/> (streamer when anchored). Lower (e.g. 60–90) if bots still wander too far after companion patrol.</summary>
             public float MaxDistanceFromAnchor { get; set; } = 140f;
             public float MinimumDistanceFromPlayers { get; set; } = 8f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
@@ -1069,6 +1070,12 @@ namespace Oxide.Plugins
             var npcId = NextNpcId();
             var netId = npcPlayer.net.ID.Value;
 
+            var anchorSteamResolved = anchorPlayer != null && anchorPlayer.IsValid() ? anchorPlayer.userID : 0UL;
+            // Leash + follow use streamer position when anchored — not the random ring point (avoids stale center).
+            var anchorPosForRuntime = anchorPlayer != null && anchorPlayer.IsValid()
+                ? anchorPlayer.transform.position
+                : pos;
+
             var runtime = new InvaderRuntime
             {
                 NpcId = npcId,
@@ -1081,13 +1088,17 @@ namespace Oxide.Plugins
                 NpcPlayer = npcPlayer,
                 IsRoamingNpc = isRoaming,
                 RoamingTemplateKey = roamingTemplate ?? "",
-                AnchorPosition = pos,
-                AnchorSteamId = anchorPlayer != null && anchorPlayer.IsValid() ? anchorPlayer.userID : 0UL,
+                AnchorPosition = anchorPosForRuntime,
+                AnchorSteamId = anchorSteamResolved,
                 SpawnedAtUtc = DateTime.UtcNow,
                 ExpiresAtUtc = lifetime > 0 ? DateTime.UtcNow.AddSeconds(lifetime) : null,
             };
 
             _registry.Register(runtime);
+
+            // Without this, RoamingNPCs uses raw template wander (often far from base). Companion pins patrol + protect to anchor.
+            if (isRoaming && anchorSteamResolved != 0UL)
+                TryRoamingApplySquadCompanion(runtime, anchorSteamResolved);
 
             if (_cfg.PerViewerCooldownSeconds > 0)
                 _viewerCooldownUntil[viewerId] = DateTime.UtcNow.AddSeconds(_cfg.PerViewerCooldownSeconds);
