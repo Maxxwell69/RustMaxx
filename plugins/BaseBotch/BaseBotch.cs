@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.6")]
+    [Info("BaseBotch", "RustMaxx", "1.4.7")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -1215,7 +1215,15 @@ namespace Oxide.Plugins
                         all.Add($"{m.Name}({m.GetParameters().Length})");
                         if (all.Count >= 160) break;
                     }
-                    Puts($"[BaseBotch][debug] wheelMethodsElectricAll mount={mountId} methods=[{string.Join(", ", all.ToArray())}]");
+                    const int chunkSize = 18;
+                    var chunkIndex = 0;
+                    for (var i = 0; i < all.Count; i += chunkSize)
+                    {
+                        var count = Math.Min(chunkSize, all.Count - i);
+                        var slice = all.GetRange(i, count);
+                        Puts($"[BaseBotch][debug] wheelMethodsElectricAll mount={mountId} chunk={chunkIndex} methods=[{string.Join(", ", slice.ToArray())}]");
+                        chunkIndex++;
+                    }
                     break;
                 }
             }
