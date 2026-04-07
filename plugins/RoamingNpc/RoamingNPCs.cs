@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.27")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.28")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -59,6 +59,8 @@ namespace Oxide.Plugins
 
         /// <summary>PersonalNPC-style fake corpse per looter so the client accepts <c>RPC_OpenLootPanel</c> (live NPC as loot source does not).</summary>
         private readonly Dictionary<ulong, LootableCorpse> _roamingInventoryLootProxies = new();
+        /// <summary>While a player has bridge NPC inventory open (corpse proxy), maps looter Steam id → live <see cref="CustomPet"/> net id.</summary>
+        private readonly Dictionary<ulong, ulong> _bridgeLootPetNetByLooter = new();
 
         private readonly Dictionary<ulong, float> _roamingLootUseDebounce = new();
 
@@ -2348,6 +2350,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public float BridgePatrolNextMoveAt;
             /// <summary>MaxxInvaders: optional <see cref="StorageContainer"/> net ID for <c>deposit</c> (OwnerID must match anchor).</summary>
             [JsonIgnore] public ulong BridgeDepositContainerNetId;
+            /// <summary>Last <see cref="ApplyBridgeTask"/> keyword applied (runtime only; not saved).</summary>
+            [JsonIgnore] public string BridgeLastAppliedTask;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -2859,6 +2863,7 @@ namespace Oxide.Plugins
             if (_bridgePatrolTimer != null && !_bridgePatrolTimer.Destroyed) _bridgePatrolTimer.Destroy();
             visibleAdmins.Clear();
             visibleAdminsStash.Clear();
+            _bridgeLootPetNetByLooter.Clear();
             foreach (var kv in _roamingInventoryLootProxies)
             {
                 try
@@ -3047,6 +3052,7 @@ namespace Oxide.Plugins
             looter.inventory.loot.MarkDirty();
 
             _roamingInventoryLootProxies[looter.userID] = corpse;
+            _bridgeLootPetNetByLooter[looter.userID] = target.net.ID.Value;
 
             timer.Once(0.25f, () =>
             {
@@ -3082,6 +3088,7 @@ namespace Oxide.Plugins
             if (_roamingInventoryLootProxies.TryGetValue(player.userID, out var c) && c != null && !c.IsDestroyed)
                 c.Kill();
             _roamingInventoryLootProxies.Remove(player.userID);
+            _bridgeLootPetNetByLooter.Remove(player.userID);
             _roamingLootUseDebounce.Remove(player.userID);
         }
 
@@ -9203,6 +9210,8 @@ namespace Oxide.Plugins
                 if (!enableGatherProtectDeposit)
                     return true;
 
+                pet.Data.BridgeLastAppliedTask = "gather";
+
                 if (pet.Data.Setup.BattleState != null)
                 {
                     pet.Data.Setup.BattleState._protectBridgeAnchorPlayer = true;
@@ -9424,12 +9433,114 @@ namespace Oxide.Plugins
                         return false;
                 }
 
+                pet.Data.BridgeLastAppliedTask = t == "all" ? "gather" : t;
                 pet.CustomBrain?.ChangeState(null);
                 return true;
             }
             catch (Exception ex)
             {
                 PrintError($"[RoamingNPCs] ApplyBridgeTask: {ex}");
+                return false;
+            }
+        }
+
+        private static string InferBridgeTaskLabel(BotSetup setup)
+        {
+            if (setup?.MinerState == null) return "";
+            var m = setup.MinerState;
+            var h = setup.HunterState;
+            var b = setup.BattleState;
+            var bp = setup.BridgePatrol;
+            var fs = setup.FullState;
+
+            bool MinerOff()
+            {
+                return !m.CanMiningWood && !m.CanFuelUseFromChainsaw && !m.CanMiningOre && !m.CanMiningBarrel &&
+                       !m.CanMiningRoadSign && !m.CanPickupCollectibleItems && !m.CanPickupDroppedItems &&
+                       !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse;
+            }
+
+            bool MinerGatherAll()
+            {
+                return m.CanMiningWood && m.CanFuelUseFromChainsaw && m.CanMiningOre && m.CanMiningBarrel &&
+                       m.CanMiningRoadSign && m.CanPickupCollectibleItems && m.CanPickupDroppedItems &&
+                       m.CanLootedContainer && m.CanLootedCorpse && m.CanButcherCorpse;
+            }
+
+            var hunt = h != null && h.CanHunt;
+            var prot = b != null && b._protectBridgeAnchorPlayer;
+            var patrol = bp != null && bp.Enable;
+            var stor = fs != null && fs.BridgeUseAnchorOwnedStorage;
+
+            if (hunt && MinerOff()) return "hunt";
+            if (MinerGatherAll() && prot && patrol && stor) return "gather";
+            if (MinerOff() && !hunt && prot && patrol) return "protect";
+            if (m.CanMiningWood && m.CanFuelUseFromChainsaw && !m.CanMiningOre && !m.CanMiningBarrel &&
+                !m.CanMiningRoadSign && !m.CanPickupCollectibleItems && !m.CanPickupDroppedItems &&
+                !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse)
+                return "wood";
+            if (!m.CanMiningWood && !m.CanFuelUseFromChainsaw && m.CanMiningOre && !m.CanMiningBarrel &&
+                !m.CanMiningRoadSign && !m.CanPickupCollectibleItems && !m.CanPickupDroppedItems &&
+                !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse)
+                return "stone";
+            if (!m.CanMiningWood && !m.CanFuelUseFromChainsaw && !m.CanMiningOre && !m.CanMiningBarrel &&
+                !m.CanMiningRoadSign && m.CanPickupCollectibleItems && !m.CanPickupDroppedItems &&
+                !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse)
+                return "cloth";
+            if (MinerOff() && !hunt) return "idle";
+            return "mixed";
+        }
+
+        /// <summary>MaxxInvaders: human-readable bridge task (last applied or inferred from miner/hunter flags).</summary>
+        [HookMethod("GetBridgeTaskLabel")]
+        public object GetBridgeTaskLabel(ulong petEntityNetId)
+        {
+            try
+            {
+                if (listNpcPlayers == null || !listNpcPlayers.TryGetValue(petEntityNetId, out var pet) || pet == null ||
+                    pet.IsDestroyed)
+                    return "";
+                var hint = pet.Data?.BridgeLastAppliedTask?.Trim();
+                if (!string.IsNullOrEmpty(hint)) return hint;
+                return InferBridgeTaskLabel(pet.Data?.Setup);
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] GetBridgeTaskLabel: {ex}");
+                return "";
+            }
+        }
+
+        /// <summary>MaxxInvaders: while this player has bridge NPC inventory open, returns that bot's entity net id; else 0.</summary>
+        [HookMethod("GetBridgeLootPetNetIdForPlayer")]
+        public object GetBridgeLootPetNetIdForPlayer(ulong looterUserId)
+        {
+            try
+            {
+                if (_bridgeLootPetNetByLooter != null &&
+                    _bridgeLootPetNetByLooter.TryGetValue(looterUserId, out var id))
+                    return id;
+                return 0UL;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] GetBridgeLootPetNetIdForPlayer: {ex}");
+                return 0UL;
+            }
+        }
+
+        /// <summary>MaxxInvaders: clear looter→pet map when loot UI closes (see poll in MaxxInvaders).</summary>
+        [HookMethod("ClearBridgeLootMappingForPlayer")]
+        public object ClearBridgeLootMappingForPlayer(ulong looterUserId)
+        {
+            try
+            {
+                _bridgeLootPetNetByLooter?.Remove(looterUserId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] ClearBridgeLootMappingForPlayer: {ex}");
                 return false;
             }
         }
@@ -9501,7 +9612,7 @@ namespace Oxide.Plugins
                 sb.AppendLine();
                 sb.AppendLine($"Version: {Version}");
                 sb.AppendLine(
-                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, DepositItemsToAnchorOwnedStorage, ApplyBridgeTask, SetBridgeDepositBox, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
+                    "Bridge API: SpawnFromTemplateForBridge, ApplySquadCompanionMode, DepositItemsToAnchorOwnedStorage, ApplyBridgeTask, SetBridgeDepositBox, GetBridgeTaskLabel, GetBridgeLootPetNetIdForPlayer, ClearBridgeLootMappingForPlayer, IsBridgeTemplateReady, GetMaxxInvadersGuiSummary");
                 sb.AppendLine();
                 if (config?.bots == null)
                 {

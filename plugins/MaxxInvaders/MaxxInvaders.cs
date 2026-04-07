@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.12")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.13")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -36,6 +36,7 @@ namespace Oxide.Plugins
         private const string DataFile = "MaxxInvaders/MaxxInvadersData";
         private const string UiName = "MaxxInvaders.AdminUI";
         private const string HudOverlayUiName = "MaxxInvaders.HudOverlay";
+        private const string LootTaskOverlayUiName = "MaxxInvaders.LootTaskOverlay";
         private const int GuiSchemaCurrent = 2;
         private const float InvaderOverlayDrawDuration = 0.45f;
 
@@ -69,6 +70,8 @@ namespace Oxide.Plugins
         private Timer _overlayTimer;
         private bool _debugRuntime;
         private readonly Dictionary<ulong, string> _lastHudContentByUser = new();
+        private readonly Dictionary<ulong, string> _lastLootTaskOverlayContentByUser = new();
+        private readonly Dictionary<ulong, bool> _prevPlayerLootUiOpen = new();
         /// <summary>Streamer/admin hid the right INVADERS panel via <c>maxxinvaders.hudtoggle</c> (e.g. bind F9).</summary>
         private readonly HashSet<ulong> _hudOverlayHiddenByUser = new HashSet<ulong>();
         /// <summary>Admin has main MaxxInvaders CUI open — hide right INVADERS overlay so it does not stack on the GUI.</summary>
@@ -99,6 +102,9 @@ namespace Oxide.Plugins
             _hudOverlayHiddenByUser.Remove(player.userID);
             _lastMiddleMouseDepositBoxAt.Remove(player.userID);
             CuiHelper.DestroyUi(player, HudOverlayUiName);
+            CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
+            _lastLootTaskOverlayContentByUser.Remove(player.userID);
+            _prevPlayerLootUiOpen.Remove(player.userID);
         }
 
         private void OnServerInitialized()
@@ -120,6 +126,7 @@ namespace Oxide.Plugins
             {
                 CuiHelper.DestroyUi(player, UiName);
                 CuiHelper.DestroyUi(player, HudOverlayUiName);
+                CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
             }
 
             _spawnDrafts.Clear();
@@ -1676,6 +1683,40 @@ namespace Oxide.Plugins
             }
         }
 
+        private string TryRoamingGetBridgeTaskLabel(ulong entityNetId)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return "";
+            try
+            {
+                var raw = RoamingNPCs.Call("GetBridgeTaskLabel", entityNetId);
+                return raw?.ToString()?.Trim() ?? "";
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} RoamingNPCs.GetBridgeTaskLabel: {ex.Message}");
+                return "";
+            }
+        }
+
+        private ulong TryRoamingGetBridgeLootPetNetForPlayer(ulong looterUserId)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return 0UL;
+            try
+            {
+                var raw = RoamingNPCs.Call("GetBridgeLootPetNetIdForPlayer", looterUserId);
+                if (raw is ulong u) return u;
+                if (raw is long l) return (ulong)l;
+                if (ulong.TryParse(raw?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var p))
+                    return p;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} RoamingNPCs.GetBridgeLootPetNetIdForPlayer: {ex.Message}");
+            }
+
+            return 0UL;
+        }
+
         private void ApplyBridgeTaskToAllRoaming(BasePlayer issuer, string task)
         {
             if (issuer == null) return;
@@ -3035,6 +3076,19 @@ namespace Oxide.Plugins
 
         #region Streamer HUD overlays
 
+        private Dictionary<ulong, string> BuildBridgeTaskLabelCache(List<InvaderRuntime> bots)
+        {
+            var d = new Dictionary<ulong, string>();
+            foreach (var r in bots)
+            {
+                if (r == null || !r.IsRoamingNpc) continue;
+                var t = TryRoamingGetBridgeTaskLabel(r.EntityId);
+                d[r.EntityId] = string.IsNullOrEmpty(t) ? "—" : StripCuiMarkup(t);
+            }
+
+            return d;
+        }
+
         private void RefreshInvaderStreamerOverlays()
         {
             if (_cfg == null || !_cfg.EnablePlugin) return;
@@ -3043,20 +3097,43 @@ namespace Oxide.Plugins
                 .OrderBy(r => r.NpcId, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
+            var bridgeTaskByEntity = BuildBridgeTaskLabelCache(bots);
+
             foreach (var player in BasePlayer.activePlayerList)
             {
                 if (player == null || player.IsNpc || player.IsDestroyed) continue;
+
+                var lootNowOpen = IsPlayerLootInventoryUiOpen(player);
+                if (_prevPlayerLootUiOpen.TryGetValue(player.userID, out var wasLootOpen) && wasLootOpen &&
+                    !lootNowOpen && RoamingNPCs != null && RoamingNPCs.IsLoaded)
+                {
+                    try
+                    {
+                        RoamingNPCs.Call("ClearBridgeLootMappingForPlayer", player.userID);
+                    }
+                    catch
+                    {
+                        /* ignored */
+                    }
+                }
+
+                _prevPlayerLootUiOpen[player.userID] = lootNowOpen;
+
                 if (!CanAdmin(player)) continue;
 
                 if (_adminMainGuiOpen.Contains(player.userID))
                 {
                     _lastHudContentByUser.Remove(player.userID);
                     CuiHelper.DestroyUi(player, HudOverlayUiName);
+                    CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
+                    _lastLootTaskOverlayContentByUser.Remove(player.userID);
                 }
                 else if (_hudOverlayHiddenByUser.Contains(player.userID))
                 {
                     _lastHudContentByUser.Remove(player.userID);
                     CuiHelper.DestroyUi(player, HudOverlayUiName);
+                    CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
+                    _lastLootTaskOverlayContentByUser.Remove(player.userID);
                 }
                 else if (_cfg.Gui.ShowInvaderHudList)
                 {
@@ -3068,7 +3145,7 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        UpdateInvaderHudPanel(player, bots);
+                        UpdateInvaderHudPanel(player, bots, bridgeTaskByEntity);
                     }
                 }
                 else
@@ -3084,8 +3161,10 @@ namespace Oxide.Plugins
                     var npc = r.NpcPlayer;
                     if (npc == null) continue;
                     var dist = Vector3.Distance(player.transform.position, npc.transform.position);
-                    DrawInvaderNameOnly(player, r, dist);
+                    DrawInvaderNameOnly(player, r, dist, bridgeTaskByEntity);
                 }
+
+                UpdateLootTaskOverlayForPlayer(player, bots, bridgeTaskByEntity);
             }
         }
 
@@ -3105,7 +3184,10 @@ namespace Oxide.Plugins
             }
         }
 
-        private void UpdateInvaderHudPanel(BasePlayer player, List<InvaderRuntime> bots)
+        private void UpdateInvaderHudPanel(
+            BasePlayer player,
+            List<InvaderRuntime> bots,
+            Dictionary<ulong, string> bridgeTaskByEntity)
         {
             var sb = new StringBuilder(256);
             if (bots.Count == 0)
@@ -3119,10 +3201,17 @@ namespace Oxide.Plugins
                     var hpPct = GetHealthPercentDisplay(npc);
                     var nm = StripCuiMarkup(ResolveViewerNameForWorldTag(r));
                     var mode = GetInvaderHudSquadModeLabel(r);
+                    var taskCol = r.IsRoamingNpc
+                        ? (bridgeTaskByEntity != null && bridgeTaskByEntity.TryGetValue(r.EntityId, out var tl)
+                            ? tl
+                            : "—")
+                        : "sci";
                     sb.Append("<color=#99ccff>T");
                     sb.Append(r.Tier.ToString(CultureInfo.InvariantCulture));
                     sb.Append("</color> <color=#ffcc66>");
                     sb.Append(mode);
+                    sb.Append("</color> <color=#ccaaff>");
+                    sb.Append(taskCol);
                     sb.Append("</color> <color=#ffee55>");
                     sb.Append(nm);
                     sb.Append("</color> — <color=#55ff88>");
@@ -3144,7 +3233,7 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.05 0.06 0.08 0.82" },
-                    RectTransform = { AnchorMin = "0.72 0.28", AnchorMax = "0.992 0.72" },
+                    RectTransform = { AnchorMin = "0.72 0.26", AnchorMax = "0.992 0.74" },
                     CursorEnabled = false,
                 },
                 "Overlay",
@@ -3155,13 +3244,156 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text =
-                            $"<size=12><color=#ccddee><b>INVADERS</b></color></size>\n<size=9><color=#8899aa>level · squad · name — HP% — distance</color></size>\n<size=8><color=#667788>F9: bind f9 maxxinvaders.hudtoggle</color></size>\n\n{body}",
+                            $"<size=12><color=#ccddee><b>INVADERS</b></color></size>\n<size=9><color=#8899aa>level · squad · task · name — HP% — distance</color></size>\n<size=8><color=#667788>F9: bind f9 maxxinvaders.hudtoggle</color></size>\n\n{body}",
                         FontSize = 11,
                         Align = TextAnchor.UpperLeft,
                     },
                     RectTransform = { AnchorMin = "0.03 0.03", AnchorMax = "0.97 0.97" },
                 },
                 root);
+            CuiHelper.AddUi(player, container);
+        }
+
+        /// <summary>Bridge NPC inventory (corpse proxy): show task + quick buttons without opening the main admin GUI.</summary>
+        private void UpdateLootTaskOverlayForPlayer(
+            BasePlayer player,
+            List<InvaderRuntime> bots,
+            Dictionary<ulong, string> bridgeTaskByEntity)
+        {
+            if (player == null || bridgeTaskByEntity == null) return;
+            if (_adminMainGuiOpen.Contains(player.userID) || !IsPlayerLootInventoryUiOpen(player))
+            {
+                CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
+                _lastLootTaskOverlayContentByUser.Remove(player.userID);
+                return;
+            }
+
+            var petNet = TryRoamingGetBridgeLootPetNetForPlayer(player.userID);
+            if (petNet == 0UL)
+            {
+                CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
+                _lastLootTaskOverlayContentByUser.Remove(player.userID);
+                return;
+            }
+
+            InvaderRuntime match = null;
+            foreach (var r in bots)
+            {
+                if (r.EntityId == petNet && r.IsRoamingNpc)
+                {
+                    match = r;
+                    break;
+                }
+            }
+
+            if (match == null)
+            {
+                foreach (var r in _registry.All())
+                {
+                    if (r.EntityId == petNet && r.IsRoamingNpc)
+                    {
+                        match = r;
+                        break;
+                    }
+                }
+            }
+
+            if (match == null || match.NpcPlayer == null || match.NpcPlayer.IsDestroyed)
+            {
+                CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
+                _lastLootTaskOverlayContentByUser.Remove(player.userID);
+                return;
+            }
+
+            var taskNow = bridgeTaskByEntity.TryGetValue(match.EntityId, out var cached) ? cached : TryRoamingGetBridgeTaskLabel(match.EntityId);
+            if (string.IsNullOrEmpty(taskNow)) taskNow = "—";
+            taskNow = StripCuiMarkup(taskNow);
+            var nid = (match.NpcId ?? "?").Trim();
+            if (string.IsNullOrEmpty(nid)) nid = "?";
+            var sig = $"{petNet}|{taskNow}|{nid}";
+            if (_lastLootTaskOverlayContentByUser.TryGetValue(player.userID, out var lastSig) && lastSig == sig)
+                return;
+            _lastLootTaskOverlayContentByUser[player.userID] = sig;
+
+            CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
+            var container = new CuiElementContainer();
+            var root = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.06 0.07 0.10 0.92" },
+                    RectTransform = { AnchorMin = "0.02 0.32", AnchorMax = "0.30 0.68" },
+                    CursorEnabled = true,
+                },
+                "Overlay",
+                LootTaskOverlayUiName);
+
+            const string cWood = "0.35 0.32 0.15 0.95";
+            const string cStone = "0.28 0.32 0.38 0.95";
+            const string cCloth = "0.42 0.28 0.48 0.95";
+            const string cHunt = "0.55 0.22 0.18 0.95";
+            const string cProt = "0.55 0.35 0.15 0.95";
+            const string cGather = "0.18 0.48 0.28 0.95";
+            const string cIdle = "0.22 0.22 0.26 0.95";
+            const string cDep = "0.22 0.45 0.55 0.95";
+
+            AddCuiText(
+                container,
+                root,
+                "<b>Invader task</b>",
+                "0.04 0.88",
+                "0.96 0.98",
+                13,
+                TextAnchor.MiddleLeft,
+                "0.95 0.97 1 1");
+            AddCuiText(
+                container,
+                root,
+                $"{nid}  ·  now: <color=#ddccff>{taskNow}</color>",
+                "0.04 0.78",
+                "0.96 0.86",
+                11,
+                TextAnchor.UpperLeft,
+                "0.85 0.9 1 1");
+            AddCuiText(
+                container,
+                root,
+                "Buttons use quiet mode (inventory stays open).",
+                "0.04 0.70",
+                "0.96 0.76",
+                9,
+                TextAnchor.UpperLeft,
+                "0.55 0.65 0.78 1");
+
+            void RowBtn(string task, string label, string col, float y0, float y1, float x0, float x1)
+            {
+                AddCuiButtonWithText(
+                    container,
+                    root,
+                    $"maxxinvaders.gui tasksingle {nid} {task} 1",
+                    col,
+                    label,
+                    $"{x0.ToString("F3", CultureInfo.InvariantCulture)} {y0.ToString("F3", CultureInfo.InvariantCulture)}",
+                    $"{x1.ToString("F3", CultureInfo.InvariantCulture)} {y1.ToString("F3", CultureInfo.InvariantCulture)}",
+                    9);
+            }
+
+            RowBtn("wood", "Wd", cWood, 0.58f, 0.66f, 0.04f, 0.31f);
+            RowBtn("stone", "St", cStone, 0.58f, 0.66f, 0.33f, 0.60f);
+            RowBtn("cloth", "Cl", cCloth, 0.58f, 0.66f, 0.62f, 0.96f);
+            RowBtn("hunt", "Hu", cHunt, 0.48f, 0.56f, 0.04f, 0.31f);
+            RowBtn("protect", "Pr", cProt, 0.48f, 0.56f, 0.33f, 0.60f);
+            RowBtn("gather", "Ga", cGather, 0.48f, 0.56f, 0.62f, 0.96f);
+            RowBtn("idle", "Id", cIdle, 0.38f, 0.46f, 0.04f, 0.48f);
+            AddCuiButtonWithText(
+                container,
+                root,
+                $"maxxinvaders.gui deposit {nid} 1",
+                cDep,
+                "Dep",
+                "0.50 0.38",
+                "0.72 0.46",
+                9);
+
             CuiHelper.AddUi(player, container);
         }
 
@@ -3200,7 +3432,11 @@ namespace Oxide.Plugins
         /// Draw name above the bot head that stays visible at distance.
         /// Uses HP% thresholds to color the name (green/yellow/red).
         /// </summary>
-        private static void DrawInvaderNameOnly(BasePlayer viewer, InvaderRuntime r, float distMeters)
+        private static void DrawInvaderNameOnly(
+            BasePlayer viewer,
+            InvaderRuntime r,
+            float distMeters,
+            Dictionary<ulong, string> bridgeTaskByEntity)
         {
             if (viewer == null || r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed) return;
 
@@ -3222,6 +3458,17 @@ namespace Oxide.Plugins
             var root = r.NpcPlayer.transform.position + Vector3.up * 2.15f;
             var txt = $"<size={sz}>{nameRaw}</size>";
             viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, color, root, txt, NoFade);
+
+            if (r.IsRoamingNpc && bridgeTaskByEntity != null &&
+                bridgeTaskByEntity.TryGetValue(r.EntityId, out var tlab) && !string.IsNullOrEmpty(tlab) &&
+                tlab != "—")
+            {
+                var tpos = r.NpcPlayer.transform.position + Vector3.up * 1.88f;
+                var tc = new Color(0.78f, 0.82f, 1f, 1f);
+                var tsz = Mathf.Clamp(sz - 3, 6, 11);
+                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, tc, tpos,
+                    $"<size={tsz}>{tlab}</size>", NoFade);
+            }
         }
 
         #endregion
@@ -4887,6 +5134,8 @@ namespace Oxide.Plugins
             _adminMainGuiOpen.Add(player.userID);
             _lastHudContentByUser.Remove(player.userID);
             CuiHelper.DestroyUi(player, HudOverlayUiName);
+            CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
+            _lastLootTaskOverlayContentByUser.Remove(player.userID);
             CuiHelper.DestroyUi(player, UiName);
             _guiPage[player.userID] = page;
             if (!_guiMainTab.TryGetValue(player.userID, out var mainTab)) mainTab = 0;
@@ -5396,11 +5645,19 @@ namespace Oxide.Plugins
             {
                 var nid = args[1].Trim();
                 var task = args[2].Trim().ToLowerInvariant();
+                var quiet = args.Length > 3 && args[3] == "1";
                 if (!TryFindInvader(nid, out var tr))
                     player.ChatMessage("[MaxxInvaders] NPC not found.");
                 else
                     ApplyBridgeTaskSingle(player, tr, task);
-                OpenGui(player, GetGuiPage(player.userID));
+                if (!quiet)
+                    OpenGui(player, GetGuiPage(player.userID));
+                else
+                {
+                    _lastLootTaskOverlayContentByUser.Remove(player.userID);
+                    _lastHudContentByUser.Remove(player.userID);
+                }
+
                 return;
             }
 
@@ -5746,6 +6003,7 @@ namespace Oxide.Plugins
             if (args[0] == "deposit" && args.Length > 1)
             {
                 var nid = args[1].Trim();
+                var quiet = args.Length > 2 && args[2] == "1";
                 if (nid.Equals("all", StringComparison.OrdinalIgnoreCase))
                     DepositAllRoamingBotsToAnchor(player);
                 else if (TryFindInvader(nid, out var depR))
@@ -5754,7 +6012,14 @@ namespace Oxide.Plugins
                     player.ChatMessage("[MaxxInvaders] NPC not found for deposit.");
 
                 LogIf(_cfg.Logging.LogGui, $"gui deposit {player.displayName} {nid}", false);
-                OpenGui(player, GetGuiPage(player.userID));
+                if (!quiet)
+                    OpenGui(player, GetGuiPage(player.userID));
+                else
+                {
+                    _lastLootTaskOverlayContentByUser.Remove(player.userID);
+                    _lastHudContentByUser.Remove(player.userID);
+                }
+
                 return;
             }
 
