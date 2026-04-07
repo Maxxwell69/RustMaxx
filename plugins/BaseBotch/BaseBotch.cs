@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.0")]
+    [Info("BaseBotch", "RustMaxx", "1.4.1")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -684,6 +684,8 @@ namespace Oxide.Plugins
                             // ignored
                         }
                     }
+
+                    TryInvokeElectricWheelUpdateMethods(comp);
                 }
 
                 if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -712,6 +714,35 @@ namespace Oxide.Plugins
 
             TryDriveWaterWheelMountablePlayerInput(comp, npc);
             TryInvokeWaterWheelMountedPlayerSync(comp);
+        }
+
+        private static void TryInvokeElectricWheelUpdateMethods(Component comp)
+        {
+            if (comp == null) return;
+            var tn = comp.GetType().Name;
+            if (tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) < 0) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                foreach (var m in comp.GetType().GetMethods(bf))
+                {
+                    if (m.ReturnType != typeof(void) || m.GetParameters().Length != 0) continue;
+                    var n = m.Name;
+                    if (n.IndexOf("Update", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("Refresh", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("Recalculate", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("MarkDirty", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("OnCycle", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("Tick", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        m.Invoke(comp, null);
+                    }
+                }
+            }
+            catch
+            {
+                // ignored
+            }
         }
 
         private static void TryDriveWaterWheelMountablePlayerInput(Component comp, BasePlayer npc)
@@ -980,9 +1011,8 @@ namespace Oxide.Plugins
                     var n = c.GetType().Name;
                     if (!names.Contains(n))
                         names.Add(n);
-                    if ((n.IndexOf("WaterWheel", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         n.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) >= 0) &&
-                        wheelMethodHints.Count == 0)
+                    if (n.IndexOf("WaterWheel", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
                         foreach (var m in c.GetType().GetMethods(bf))
@@ -994,9 +1024,16 @@ namespace Oxide.Plugins
                                 mn.IndexOf("pedal", StringComparison.OrdinalIgnoreCase) < 0 &&
                                 mn.IndexOf("human", StringComparison.OrdinalIgnoreCase) < 0 &&
                                 mn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) < 0 &&
-                                mn.IndexOf("drive", StringComparison.OrdinalIgnoreCase) < 0)
+                                mn.IndexOf("drive", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("update", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("refresh", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("tick", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("output", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("power", StringComparison.OrdinalIgnoreCase) < 0)
                                 continue;
-                            wheelMethodHints.Add($"{mn}({m.GetParameters().Length})");
+                            var sig = $"{n}.{mn}({m.GetParameters().Length})";
+                            if (!wheelMethodHints.Contains(sig))
+                                wheelMethodHints.Add(sig);
                             if (wheelMethodHints.Count >= 20) break;
                         }
                     }
