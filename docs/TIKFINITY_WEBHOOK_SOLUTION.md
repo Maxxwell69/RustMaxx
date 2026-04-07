@@ -68,9 +68,9 @@ The webhook picks **viewer name** from typical TikTok fields: `uniqueId`, `viewe
 | **`bunny1`** | Puts the **bunny costume on the streamer** only (clears wear, equips onesie + ears). **Does not spawn** a new character. |
 | **`bunny1npc`** | **MaxxInvaders** viewer spawn with the **same Roaming template as usual** (default **`streamer_patrol`**). Always uses outfit profile **`bunny1`** (bunny onesie + ears); **`?outfit=`** is ignored. **No** separate `bunny1` bot key in JSON. Optional **`?template=`** for another Roaming key. |
 | **`maxxinvaders`** | Same pipeline. **Outfit:** default **`default`** / **`crew`** = template clothes only; **`bunny1`** = same wear as `bunny1npc`; or **`?outfit=`** with a **pipe-separated** list of item shortnames. Named profiles live in **`lib/maxxinvaders-outfit-profiles.ts`** (add more there). |
-| **`gingynpc`** | **MaxxInvaders** spawn with fixed Roaming template **`gingy`** (gingerbread suit, AK, jackhammer, pickaxe, tree hatchet, meds + gathering). **`?template=`** / **`?outfit=`** ignored. Requires **`gingy`** under **Bots settings** in RoamingNPCs. |
-| **`eggnpc`** | Same, template **`egg`** (egg suit, LR-300, chainsaw, meds + gathering). Requires **`egg`** in RoamingNPCs. |
-| **`vampnpc`** | Same, template **`vamp`** (Dracula cape, mask, pants, bow + baseball bat, meds + gathering). Requires **`vamp`** in RoamingNPCs. |
+| **`gingynpc`** | **MaxxInvaders** spawn: **`streamer_patrol`** + outfit **`gingy`** (gingerbread suit) — same idea as **`bunny1npc`**, **no** `gingy` bot key required. For full AK/tools preset from the repo, merge **`gingy`** into RoamingNPCs or use **`maxxinvaders&template=gingy`**. |
+| **`eggnpc`** | **`streamer_patrol`** + outfit **`egg`**. Optional full preset: merge **`egg`** or **`template=egg`**. |
+| **`vampnpc`** | **`streamer_patrol`** + outfit **`vamp`**. Optional full preset: merge **`vamp`** or **`template=vamp`**. |
 | **`npcmaxx` + `template=…`** | **NPCMaxx** direct spawn (`npcmaxx.spawn …`) — separate from MaxxInvaders; still needs that template key in RoamingNPCs. |
 
 If you expected a **character in the world** but used **`bunny1`** (RustChaos), use **`bunny1npc`** or **`maxxinvaders`**, not the costume action.
@@ -141,7 +141,7 @@ Register new named profiles in **`lib/maxxinvaders-outfit-profiles.ts`**.
 - **RustChaos** loaded on the server; **`oxide.reload RustChaos`** after updating the plugin.  
 - **`StreamerName`** in `oxide/config/RustChaos.json` matches the in-game name of the streamer (for **`bunny1`** costume and **`bunny1npc`** anchor).  
 - For **viewer bots** (`bunny1npc`, `maxxinvaders`, **`gingynpc`** / **`eggnpc`** / **`vampnpc`**): **MaxxInvaders** and **RoamingNPCs** must both be loaded. If the webhook JSON shows **`rconResponse`** like **`RoamingNPCs is not loaded`**, the site is working — fix the game host: install **`RoamingNPCs`**, run **`oxide.reload RoamingNPCs`**, confirm **`RoamingNPCs`** appears under **`oxide.plugins`**. Then ensure **`oxide/config/RoamingNPCs.json`** contains the bot keys you use (**`streamer_patrol`**, **`gingy`**, **`egg`**, **`vamp`**, etc.) and **`Enable bot?`** is true.  
-- If **`rconResponse`** says **`No bot key "gingy"`** (or egg/vamp): the **Rust server** never received those presets — they only exist in the GitHub repo until you **merge** them into **`oxide/config/RoamingNPCs.json`**. Use **`plugins/RoamingNpc/config/gingy-egg-vamp.merge-fragment.json`** from the RustMaxx repo: paste the three keys under **`Bots settings`**, save, **`oxide.reload RoamingNPCs`**. The webhook cannot create config on the server.  
+- If **`rconResponse`** says **`No bot key "gingy"`** while using **`maxxinvaders&template=gingy`**: merge **`gingy-egg-vamp.merge-fragment.json`** into **`oxide/config/RoamingNPCs.json`**, then **`oxide.reload RoamingNPCs`**. The TikFinity actions **`gingynpc`** / **`eggnpc`** / **`vampnpc`** use **`streamer_patrol`** + wear only and do **not** require those keys.  
 - **`streamer_patrol`** (or your `?template=`) **enabled**; **`bunny1npc`** / wear pipes need compatible **MaxxInvaders** + **RoamingNPCs** versions (see above).  
 - **RCON** in RustMaxx matches the live server (host/port/password; firewall).  
 - Webhook response **`ok: true`** but no effect → check server console for `[RustChaos]` lines and RCON errors.

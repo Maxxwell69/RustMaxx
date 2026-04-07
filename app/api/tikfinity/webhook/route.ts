@@ -593,20 +593,19 @@ async function runWebhook(request: NextRequest, body: unknown) {
       roamingFromExplicit ??
       roamingFromConnection ??
       DEFAULT_MAXXINVADERS_ROAMING_BOT;
-    if (action === "gingynpc") {
-      roamingBotKey = "gingy";
-    } else if (action === "eggnpc") {
-      roamingBotKey = "egg";
-    } else if (action === "vampnpc") {
-      roamingBotKey = "vamp";
-    }
-    // bunny1npc: outfit bunny1 on default template. gingynpc/eggnpc/vampnpc: fixed Roaming preset, no wear pipe.
+    // gingynpc / eggnpc / vampnpc: same as bunny1npc — streamer_patrol + named outfit (wear pipe only).
+    // Forcing template "gingy"/"egg"/"vamp" required those keys in RoamingNPCs.json on the server; many hosts never merged them.
+    // Full weapon/tool presets from the repo still live under plugins/.../RoamingNPCs.json — merge or use ?action=maxxinvaders&template=gingy.
     const outfitRequest =
       action === "bunny1npc"
         ? "bunny1"
-        : action === "gingynpc" || action === "eggnpc" || action === "vampnpc"
-          ? "default"
-          : miParams.outfit ?? "default";
+        : action === "gingynpc"
+          ? "gingy"
+          : action === "eggnpc"
+            ? "egg"
+            : action === "vampnpc"
+              ? "vamp"
+              : miParams.outfit ?? "default";
     const resolvedOutfit = resolveRoamingWearPipeForOutfit(outfitRequest);
     if (!resolvedOutfit.knownProfile && !outfitRequest.includes("|")) {
       console.warn(
@@ -760,7 +759,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
           action === "bunny1npc"
             ? `bunny1npc: profile bunny1 on Roaming template "${roamingBotKey}" (default streamer_patrol). Same spawn path as maxxinvaders; outfit forced to bunny. Add more looks via ?action=maxxinvaders&outfit=… in lib/maxxinvaders-outfit-profiles.ts.`
             : action === "gingynpc" || action === "eggnpc" || action === "vampnpc"
-              ? `${action}: fixed Roaming template "${roamingBotKey}" (wear + loadout from RoamingNPCs.json). ?template= and ?outfit= ignored for this action.`
+              ? `${action}: Roaming template "${roamingBotKey}" + outfit profile ${resolvedOutfit.resolvedId} (wear only, like bunny1npc). For full AK/tools presets merge repo bot keys into RoamingNPCs.json or use ?action=maxxinvaders&template=gingy.`
             : roamingWearPipe
               ? `maxxinvaders.spawn with outfit "${resolvedOutfit.resolvedId}" (wear override on template "${roamingBotKey}").`
               : anchorSteam64 != null

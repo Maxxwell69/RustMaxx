@@ -21,7 +21,7 @@ Each **top-level key** under `"Bots settings"` is a **template key** you can use
 | `alfred_hunter`     | Hunter preset |
 | `austin_fighter`    | Fighter preset |
 | `bunny1`            | *(Optional)* Full bot preset with bunny clothes — only if you use **`npcmaxx.spawn bunny1`**. RustMaxx **`bunny1npc`** uses **`streamer_patrol`** + wear override instead (no `bunny1` key required). |
-| `gingy`, `egg`, `vamp` | Full presets for TikFinity **`gingynpc`** / **`eggnpc`** / **`vampnpc`**. **Must exist on the live server** under `oxide/config/RoamingNPCs.json` — copy the three keys from **`gingy-egg-vamp.merge-fragment.json`** in this folder into your server’s **`Bots settings`** object, then **`oxide.reload RoamingNPCs`**. The webhook URL alone does not create these keys. |
+| `gingy`, `egg`, `vamp` | **Optional** full weapon/tool presets (AK, LR-300, bow, etc.). TikFinity actions **`gingynpc`** / **`eggnpc`** / **`vampnpc`** use **`streamer_patrol`** + wear only (like **`bunny1npc`**) — **no merge required** to spawn. Merge **`gingy-egg-vamp.merge-fragment.json`** into the server’s **`Bots settings`** if you want those loadouts with **`maxxinvaders&template=gingy`** (etc.). |
 
 Set **`CREW_RNPC_TEMPLATE_KEY`** (Railway / `.env`) to **one** of these strings — exactly as written, case-sensitive.
 

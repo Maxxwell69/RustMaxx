@@ -384,9 +384,12 @@ export default function AdminStreamerInteractionsPage() {
               <strong className="text-zinc-300">bunny1npc</strong> always uses profile{" "}
               <code className="rounded bg-zinc-800 px-1">bunny1</code>.{" "}
               <strong className="text-zinc-300">gingynpc</strong> / <strong className="text-zinc-300">eggnpc</strong> /{" "}
-              <strong className="text-zinc-300">vampnpc</strong> use fixed Roaming templates{" "}
-              <code className="rounded bg-zinc-800 px-1">gingy</code>, <code className="rounded bg-zinc-800 px-1">egg</code>,{" "}
-              <code className="rounded bg-zinc-800 px-1">vamp</code> (wear + weapons from server JSON).
+              <strong className="text-zinc-300">vampnpc</strong> use{" "}
+              <code className="rounded bg-zinc-800 px-1">streamer_patrol</code> + outfit profiles{" "}
+              <code className="rounded bg-zinc-800 px-1">gingy</code> / <code className="rounded bg-zinc-800 px-1">egg</code> /{" "}
+              <code className="rounded bg-zinc-800 px-1">vamp</code> (like <strong className="text-zinc-300">bunny1npc</strong>
+              ). Full weapon presets from the repo need merging RoamingNPCs or{" "}
+              <code className="rounded bg-zinc-800 px-1">maxxinvaders&amp;template=gingy</code>.
             </p>
             <p className="mt-2 text-sm text-zinc-400">
               <strong className="text-zinc-300">Override:</strong>{" "}

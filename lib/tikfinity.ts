@@ -312,19 +312,19 @@ export const ACTION_META: Record<
   gingynpc: {
     label: "Gingy viewer bot (spawn)",
     description:
-      "MaxxInvaders spawn using Roaming template **`gingy`** (gingerbread suit, AK rifle, jackhammer, pickaxe, prototype tree hatchet, syringes + gathering). Forces that template and default outfit (no wear pipe); ignores ?outfit= and ?template=. Requires RoamingNPCs config with Bots settings **`gingy`**.",
+      "MaxxInvaders: streamer_patrol + outfit profile gingy (gingerbread suit). Same requirements as bunny1npc — no gingy bot key in JSON. For full AK/tools preset from the repo, merge gingy into RoamingNPCs.json or use maxxinvaders with template=gingy.",
     exampleGifts: ["GingyNpc", "!gingynpc"],
   },
   eggnpc: {
     label: "Egg viewer bot (spawn)",
     description:
-      "MaxxInvaders spawn using Roaming template **`egg`** (egg suit, LR-300, chainsaw + fuel-capable gathering, syringes). Forces template **`egg`**. Requires **`egg`** in RoamingNPCs.",
+      "streamer_patrol + outfit egg (egg suit). No egg bot key required. Full LR/chainsaw preset: merge repo template or maxxinvaders with template=egg.",
     exampleGifts: ["EggNpc", "!eggnpc"],
   },
   vampnpc: {
     label: "Vamp viewer bot (spawn)",
     description:
-      "MaxxInvaders spawn using Roaming template **`vamp`** (Dracula cape, mask, pants, hunting bow + baseball bat, syringes + gathering). Forces template **`vamp`**. Requires **`vamp`** in RoamingNPCs.",
+      "streamer_patrol + outfit vamp (Dracula cape, mask, pants). No vamp bot key required. Full bow/bat preset: merge repo template or maxxinvaders with template=vamp.",
     exampleGifts: ["VampNpc", "!vampnpc"],
   },
   npcmaxx: {
