@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.33")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.34")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3335,8 +3335,9 @@ namespace Oxide.Plugins
             if (pet.MoveController?.Navigator == null) return;
             if (UnityEngine.Time.realtimeSinceStartup < pet.Data.BridgePatrolNextMoveAt) return;
 
+            Vector3 homePos = default;
             var useHomeCupboard = pet.Data.BridgeHomeCupboardNetId != 0UL &&
-                                  TryGetBridgeHomeCupboardPosition(pet, out var homePos);
+                                  TryGetBridgeHomeCupboardPosition(pet, out homePos);
 
             Vector3 anchorPos;
             float radius;
