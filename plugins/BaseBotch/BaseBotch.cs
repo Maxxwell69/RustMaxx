@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.16")]
+    [Info("BaseBotch", "RustMaxx", "1.4.17")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -1766,10 +1766,15 @@ namespace Oxide.Plugins
             _wheelRestorePending.Remove(npcNetId);
             TryRestoreNavigatorFromWheelState(npcNetId, st);
             if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return;
-            if (!st.SnapshotBridgeTask || string.IsNullOrEmpty(st.TaskKeyword)) return;
+            if (!st.SnapshotBridgeTask) return;
+            // Never restore literal "idle" — snapshot may have read idle while RoamingNPCs was already paused,
+            // leaving bots doing nothing after dismount. Empty/bad snapshots fall back to mixed.
+            var kw = (st.TaskKeyword ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(kw) || kw == "idle")
+                kw = "mixed";
             try
             {
-                RoamingNPCs.Call("ApplyBridgeTask", npcNetId, st.AnchorSteam, st.TaskKeyword);
+                RoamingNPCs.Call("ApplyBridgeTask", npcNetId, st.AnchorSteam, kw);
             }
             catch (Exception ex)
             {
@@ -1866,11 +1871,10 @@ namespace Oxide.Plugins
         {
             if (!_cfg.TameNavigatorWhileOnWheel || npc?.net == null) return;
             var id = npc.net.ID.Value;
+            // Do not insert an empty wheel session here — mount path must have run SaveWheelSessionAndPauseRoam first.
+            // A bogus SnapshotBridgeTask=false entry would skip Roaming task restore and leave bots stuck on idle.
             if (!_wheelRestorePending.TryGetValue(id, out var st))
-            {
-                st = new WheelRestoreState { TaskKeyword = "", AnchorSteam = 0, SnapshotBridgeTask = false };
-                _wheelRestorePending[id] = st;
-            }
+                return;
 
             var nav = TryGetNavigatorFromPlayer(npc);
             if (nav == null) return;
@@ -2015,6 +2019,10 @@ namespace Oxide.Plugins
                 issuer?.ChatMessage("[BaseBotch] NPC not found.");
                 return false;
             }
+
+            // If autorun was started without MountWaterWheelFromLook, ensure we snapshot + pause roam so dismount can restore.
+            if (npc.net != null && !_wheelRestorePending.ContainsKey(npc.net.ID.Value))
+                SaveWheelSessionAndPauseRoam(npc, issuer != null ? issuer.userID : 0UL);
 
             if (!npc.isMounted)
             {

@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.20")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.21")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2363,6 +2363,36 @@ namespace Oxide.Plugins
 
             if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task)) arg.ReplyWith("OK");
             else arg.ReplyWith("Error: task_failed_invalid_name_or_roamingnpcs");
+        }
+
+        /// <summary>RCON recovery: apply a bridge task to every active Roaming bot (e.g. after water-wheel idle stuck).</summary>
+        [ConsoleCommand("maxxinvaders.taskall")]
+        private void CmdConsoleTaskAll(ConsoleSystem.Arg arg)
+        {
+            if (arg.Connection != null)
+            {
+                arg.ReplyWith("Run from server console or RCON only.");
+                return;
+            }
+
+            var parts = ParseQuotedArgs(arg);
+            if (parts.Count < 1)
+            {
+                arg.ReplyWith(
+                    "Usage: maxxinvaders.taskall <wood|stone|cloth|hunt|protect|gather|mixed|idle>  —  applies to all Roaming bridge bots.");
+                return;
+            }
+
+            var task = parts[0].Trim().ToLowerInvariant();
+            var n = 0;
+            foreach (var r in _registry.All().ToArray())
+            {
+                if (r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed || !r.IsRoamingNpc) continue;
+                var anchor = ResolveBridgeAnchorSteam(r, null);
+                if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task)) n++;
+            }
+
+            arg.ReplyWith(n > 0 ? $"OK applied={n} task={task}" : "Error: no_roaming_bots_or_task_failed");
         }
 
         [ConsoleCommand("maxxinvaders.box")]
