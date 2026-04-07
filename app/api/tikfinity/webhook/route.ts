@@ -539,7 +539,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
     );
   }
 
-  if (action === "maxxinvaders") {
+  if (action === "maxxinvaders" || action === "bunny1npc") {
     const viewerNameFromQuery = request.nextUrl.searchParams.get("viewerName")?.trim();
     if (viewerNameFromQuery) {
       payload = { ...payload, viewerName: viewerNameFromQuery };
@@ -548,11 +548,14 @@ async function runWebhook(request: NextRequest, body: unknown) {
     const { tier, mode, kit } = miParams;
     const roamingFromExplicit = parseNpcTemplateKey(miParams.roamingTemplate);
     const roamingFromConnection =
-      connectionFromAdmin?.server_action === "maxxinvaders"
+      connectionFromAdmin?.server_action === "maxxinvaders" ||
+      connectionFromAdmin?.server_action === "bunny1npc"
         ? parseNpcTemplateKey(connectionFromAdmin.npc_template_key)
         : null;
     const roamingBotKey =
-      roamingFromExplicit ?? roamingFromConnection ?? DEFAULT_MAXXINVADERS_ROAMING_BOT;
+      action === "bunny1npc"
+        ? (roamingFromExplicit ?? roamingFromConnection ?? "bunny1")
+        : (roamingFromExplicit ?? roamingFromConnection ?? DEFAULT_MAXXINVADERS_ROAMING_BOT);
     const viewerId =
       extractTikTokUniqueIdFromBody(body) ??
       `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -574,7 +577,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
             ok: false,
             skipped: true,
             reason: "missing_tiktok_unique_id",
-            action: "maxxinvaders" as TikTriggerAction,
+            action: action as TikTriggerAction,
             debug:
               "NPCMAXX_REQUIRE_CREW_REGISTRY is on: include userId/uniqueId in the webhook body for a stable viewer id and crew check.",
           })
@@ -593,7 +596,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
             ok: false,
             skipped: true,
             reason: "not_in_crew_registry",
-            action: "maxxinvaders" as TikTriggerAction,
+            action: action as TikTriggerAction,
             debug:
               "Viewer is not in the crew RNPC registry. They must hit the ?event=join webhook as a subscriber first, or turn off NPCMAXX_REQUIRE_CREW_REGISTRY.",
           })
@@ -663,7 +666,8 @@ async function runWebhook(request: NextRequest, body: unknown) {
     return withCors(
       NextResponse.json({
         ok: true,
-        action: "maxxinvaders" as TikTriggerAction,
+        action: action as TikTriggerAction,
+        spawnEngine: "maxxinvaders",
         viewerName: payload.viewerName,
         giftName: payload.giftName,
         viewerId,
@@ -675,9 +679,11 @@ async function runWebhook(request: NextRequest, body: unknown) {
         rconResponse: spawnMi.rconResponse,
         anchorSteam64: anchorSteam64 ?? null,
         debug:
-          anchorSteam64 != null
-            ? "maxxinvaders.spawn used anchor Steam64: spawn ring + RoamingNPCs bridge anchor near that player (must be online or sleeping). Tune MaxxInvaders.json MaxDistanceFromAnchor / MinimumSpawnRadiusFromAnchor to tighten patrol."
-            : "maxxinvaders.spawn succeeded with no anchorSteam — set ?anchorSteam=17digit, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID so the bot stays near you (streamer/base owner must be on server or sleeping).",
+          action === "bunny1npc"
+            ? "bunny1npc uses MaxxInvaders maxxinvaders.spawn with RoamingNPCs template bunny1 (override with ?template=). Requires MaxxInvaders + RoamingNPCs on the server."
+            : anchorSteam64 != null
+              ? "maxxinvaders.spawn used anchor Steam64: spawn ring + RoamingNPCs bridge anchor near that player (must be online or sleeping). Tune MaxxInvaders.json MaxDistanceFromAnchor / MinimumSpawnRadiusFromAnchor to tighten patrol."
+              : "maxxinvaders.spawn succeeded with no anchorSteam — set ?anchorSteam=17digit, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID so the bot stays near you (streamer/base owner must be on server or sleeping).",
       })
     );
   }
@@ -777,9 +783,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
         scrapAmount: giftValue > 0 ? giftValue : undefined,
         rconResponse,
         debug:
-          action === "bunny1npc"
-            ? "RustChaos bunny1npc did not spawn the bot. Typical causes: streamer not online or StreamerName mismatch; RoamingNPCs unloaded; bunny1 template disabled in RoamingNPCs.json; vanilla RoamingNPCs without SpawnFromTemplateForBridge (use RustMaxx Integration RoamingNPCs.cs)."
-            : "Game server rejected the action. Fix rconResponse (streamer online, RustChaos.json StreamerName, plugin version).",
+          "Game server rejected the action. Read rconResponse; check RustChaos plugin version, StreamerName in RustChaos.json, and server console [RustChaos].",
       })
     );
   }
@@ -805,9 +809,7 @@ async function runWebhook(request: NextRequest, body: unknown) {
       scrapAmount: giftValue > 0 ? giftValue : undefined,
       rconResponse: rconResponse || undefined,
       debug:
-        action === "bunny1npc"
-          ? "RCON OK. Bot may take a few seconds to appear near the streamer; check F1 for [RoamingNPCs] / [RustChaos]."
-          : "RCON OK. If an expected effect or NPC did not appear, check streamer online + RustChaos.json StreamerName + server console [RustChaos].",
+        "RCON OK. If an expected effect or NPC did not appear, check streamer online + RustChaos.json StreamerName + server console [RustChaos].",
     })
   );
 }

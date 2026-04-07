@@ -17,12 +17,11 @@ using UnityEngine;
 using Rust;
 using Oxide.Game.Rust.Cui;
 using Oxide.Core;
-using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.22")]
-    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. bunny1npc: RoamingNPCs viewer bot (bunny1 template). chaosheli: crate + patrol heli + homing launcher.")]
+    [Info("RustChaos", "RustMaxx", "1.15.23")]
+    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
         #region Configuration
@@ -183,10 +182,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "tiger", "panther", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "bunny1npc" };
-
-        /// <summary>RoamingNPCs config key for bunny outfit viewer bot.</summary>
-        private const string BunnyViewerNpcTemplateKey = "bunny1";
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "tiger", "panther", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -562,24 +558,6 @@ namespace Oxide.Plugins
                     }
                     break;
 
-                case "bunny1npc":
-                    if (target != null)
-                    {
-                        string npcLabel = string.IsNullOrWhiteSpace(viewerName) ? "Viewer" : viewerName.Trim();
-                        if (SpawnBunnyViewerNpc(npcLabel, target))
-                        {
-                            BroadcastChat(ChatMsg($"{viewerName} joined the game as a BUNNY (viewer bot)!"));
-                            Puts($"{LogPrefix} bunny1npc: spawned RoamingNPCs template={BunnyViewerNpcTemplateKey} name={npcLabel} anchor={target.displayName}");
-                        }
-                        else
-                        {
-                            BroadcastChat(ChatMsg($"{viewerName}: bunny bot could not spawn — load RoamingNPCs, enable template '{BunnyViewerNpcTemplateKey}', check server console."));
-                            PrintWarning($"{LogPrefix} bunny1npc failed (RoamingNPCs missing, template disabled, or bridge rejected name). template={BunnyViewerNpcTemplateKey} name={npcLabel}");
-                            return "FAILED: Bunny NPC spawn failed. Load RoamingNPCs, oxide.reload RoamingNPCs, set Bots settings bunny1 Enable=true in RoamingNPCs.json. If using RustMaxx fork, ensure SpawnFromTemplateForBridge exists. Check F1 console for [RoamingNPCs].";
-                        }
-                    }
-                    break;
-
                 case "revivechaos":
                     if (target != null)
                     {
@@ -945,30 +923,6 @@ namespace Oxide.Plugins
         }
 
         /// <summary>Spawn a RoamingNPCs bot from the bunny template named after the viewer; patrol/protect anchor = streamer Steam id.</summary>
-        private bool SpawnBunnyViewerNpc(string displayName, BasePlayer streamerAnchor)
-        {
-            if (string.IsNullOrWhiteSpace(displayName) || streamerAnchor == null || !streamerAnchor.IsValid()) return false;
-            Plugin roam = plugins.Find("RoamingNPCs");
-            if (roam == null || !roam.IsLoaded)
-                roam = plugins.Find("Roaming NPCs");
-            if (roam == null || !roam.IsLoaded)
-            {
-                PrintWarning($"{LogPrefix} bunny1npc: RoamingNPCs plugin not loaded (tried Find RoamingNPCs and Roaming NPCs).");
-                return false;
-            }
-
-            try
-            {
-                object r = roam.Call("SpawnFromTemplateForBridge", BunnyViewerNpcTemplateKey, displayName.Trim(), null, streamerAnchor.userID);
-                return r != null;
-            }
-            catch (Exception ex)
-            {
-                PrintWarning($"{LogPrefix} bunny1npc bridge call: {ex.Message}");
-                return false;
-            }
-        }
-
         /// <summary>Strip current wear and equip bunny onesie + ears (TikFinity / RCON <c>bunny1</c>). Returns count successfully moved to wear.</summary>
         private static int TryApplyBunnyCostumeToStreamer(BasePlayer player)
         {
@@ -1178,8 +1132,7 @@ namespace Oxide.Plugins
                    action == "chaoswaverandom" ||
                    action == "revivechaos" ||
                    action == "chaosheli" ||
-                   action == "bunny1" ||
-                   action == "bunny1npc";
+                   action == "bunny1";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)

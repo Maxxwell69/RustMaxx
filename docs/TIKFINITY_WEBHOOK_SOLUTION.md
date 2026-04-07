@@ -66,10 +66,11 @@ The webhook picks **viewer name** from typical TikTok fields: `uniqueId`, `viewe
 | Action | What it does |
 |--------|----------------|
 | **`bunny1`** | Puts the **bunny costume on the streamer** only (clears wear, equips onesie + ears). **Does not spawn** a new character. |
-| **`bunny1npc`** | Spawns a **viewer-named Roaming NPC** using the **`bunny1`** template (bunny clothes). Bot is **anchored to patrol near the streamer**. Requires **RoamingNPCs** loaded and **`bunny1`** enabled in `RoamingNPCs.json`. |
-| **`npcmaxx` + `template=bunny1`** | Same kind of spawn as above via **NPCMaxx** (`npcmaxx.spawn bunny1 Name`). Template must still be **enabled**. |
+| **`bunny1npc`** | Spawns a **viewer bot** through **MaxxInvaders** (`maxxinvaders.spawn` … Roaming template **`bunny1`**). This is **not** RustChaos. Requires **MaxxInvaders** + **RoamingNPCs**; optional anchor Steam (same as `maxxinvaders`). |
+| **`maxxinvaders`** | General viewer spawn with tier/mode/kit and Roaming template (default `streamer_patrol` unless overridden). |
+| **`npcmaxx` + `template=bunny1`** | Spawns via **NPCMaxx** only (`npcmaxx.spawn bunny1 Name`) — no MaxxInvaders tier/kit. Template must be **enabled**. |
 
-If you expected a **character to appear in the world** but used **`bunny1`**, switch the webhook to **`bunny1npc`** (or `npcmaxx` with `template=bunny1`).
+If you expected a **character in the world** but used **`bunny1`**, use **`bunny1npc`** or **`maxxinvaders`** with `template=bunny1`, not the costume action.
 
 ### 5a. Bunny costume (`bunny1`) — working setups
 
@@ -99,7 +100,7 @@ Content-Type: application/json
 1. RustMaxx → **Admin → Streamer interactions** → add connection **name** `!bunny1` or `bunny1`, **server action** `Bunny costume` / `bunny1`.  
 2. In TikFinity, point the webhook at the **same base URL** (no `?action=` required if the payload includes the connection name in `event` / `action` / chat fields as configured).
 
-### 5b. Bunny viewer bot (`bunny1npc`) — spawn a character
+### 5b. Bunny viewer bot (`bunny1npc`) — MaxxInvaders spawn
 
 **Query:**
 
@@ -116,13 +117,15 @@ Content-Type: application/json
 { "message": "!bunny1npc", "nickname": "TikTokViewer" }
 ```
 
-**Server:** **RoamingNPCs** + **RustChaos** 1.15.21+; **`bunny1`** bot block must have **`"Enable bot?": true`** (reference config in this repo ships it enabled).
+**Server:** **MaxxInvaders** + **RoamingNPCs**; **`bunny1`** template enabled in `RoamingNPCs.json`. The webhook sends **`maxxinvaders.spawn`** (see JSON field **`spawnEngine`: `"maxxinvaders"`**). Optional: **`?template=other_key`** to use another Roaming bot key instead of `bunny1`.
+
+**RustChaos** is only for **`bunny1`** (costume on streamer), not for **`bunny1npc`**.
 
 ## 6. Game server checklist (why it might still “not work”)
 
 - **RustChaos** loaded on the server; **`oxide.reload RustChaos`** after updating the plugin.  
 - **`StreamerName`** in `oxide/config/RustChaos.json` matches the in-game name of the streamer (for **`bunny1`** costume and **`bunny1npc`** anchor).  
-- For **spawned bots**: **RoamingNPCs** loaded; **`bunny1`** template exists and is **enabled**; watch **F1 console** for `[RoamingNPCs]` / `[RustChaos]`.  
+- For **viewer bots** (`bunny1npc`, `maxxinvaders`): **MaxxInvaders** + **RoamingNPCs**; **`bunny1`** (or chosen template) **enabled**; watch **F1** for `[MaxxInvaders]` / `[RoamingNPCs]`.  
 - **RCON** in RustMaxx matches the live server (host/port/password; firewall).  
 - Webhook response **`ok: true`** but no effect → check server console for `[RustChaos]` lines and RCON errors.
 
@@ -159,5 +162,6 @@ Invoke-RestMethod -Uri $uri -Method POST -ContentType "application/json; charset
 - Action list + chat parsing: `lib/tikfinity.ts`  
 - Admin connections: `lib/tikfinity-connections.ts`  
 - Crew + Roaming NPC setup: `docs/TIKFINITY_CREW_RNPC_SETUP.md`  
-- Plugin: `plugins/RustChaos/RustChaos.cs` (actions `bunny1`, `bunny1npc`)  
+- Costume: `plugins/RustChaos/RustChaos.cs` → `bunny1`  
+- Viewer spawns: `plugins/MaxxInvaders/MaxxInvaders.cs` → `maxxinvaders.spawn`; webhook `bunny1npc` uses that path  
 - Roaming template: `plugins/RoamingNpc/config/RoamingNPCs.json` → key `bunny1`
