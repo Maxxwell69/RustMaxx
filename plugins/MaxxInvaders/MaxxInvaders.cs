@@ -1276,7 +1276,9 @@ namespace Oxide.Plugins
                 if (WaterLevel.Test(tryPos, true, true)) continue;
                 if (!ResolveNavMeshPosition(tryPos, out tryPos)) continue;
 
-                var excludeAnchor = anchorPlayer != null && anchorPlayer.IsValid() ? anchorPlayer.userID : 0UL;
+                ulong excludeAnchor = 0UL;
+                if (anchorPlayer != null && anchorPlayer.IsValid())
+                    excludeAnchor = anchorPlayer.userID;
                 if (TooCloseToPlayers(tryPos, _cfg.MinimumDistanceFromPlayers, excludeAnchor)) continue;
 
                 pos = tryPos;
