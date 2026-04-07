@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.6")]
+    [Info("BaseBotch", "RustMaxx", "1.3.7")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -25,6 +25,7 @@ namespace Oxide.Plugins
         /// <summary>Mount net ID → components touched for power reflection (built once per mount).</summary>
         private readonly Dictionary<ulong, Component[]> _wheelBumpComponentCache = new();
         private readonly Dictionary<ulong, bool> _wheelComponentDumped = new();
+        private readonly Dictionary<ulong, bool> _wheelMemberDumped = new();
         private Timer _autorunTimer;
 
         private sealed class WheelRestoreState
@@ -161,6 +162,7 @@ namespace Oxide.Plugins
             _wheelRestorePending?.Clear();
             _wheelBumpComponentCache?.Clear();
             _wheelComponentDumped?.Clear();
+            _wheelMemberDumped?.Clear();
             _nextAutorunDebugAt?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
@@ -176,6 +178,7 @@ namespace Oxide.Plugins
                 {
                     _wheelBumpComponentCache.Remove(mountId);
                     _wheelComponentDumped.Remove(mountId);
+                    _wheelMemberDumped.Remove(mountId);
                 }
                 _autorunNpcNetIds.Remove(id);
                 _npcToTrackedMountNetId.Remove(id);
@@ -469,6 +472,11 @@ namespace Oxide.Plugins
                 _wheelComponentDumped[mountId] = true;
                 DumpWheelComponentsForDebug(mountId, comps);
             }
+            if (_cfg.DebugWheelAutorun && !_wheelMemberDumped.ContainsKey(mountId))
+            {
+                _wheelMemberDumped[mountId] = true;
+                DumpElectricWheelMembersForDebug(mountId, comps);
+            }
 
             foreach (var comp in comps)
                 BumpWheelComponentFieldsAndMethods(comp, npc);
@@ -612,6 +620,7 @@ namespace Oxide.Plugins
                     if (!p.CanWrite || p.PropertyType != typeof(bool) || !BoolNameLooksLikeRunSignal(p.Name)) continue;
                     try { p.SetValue(comp, true, null); } catch { }
                 }
+                TryInvokeIoEntityRefresh(comp);
             }
 
             if (_cfg.AutorunInvokeWheelMethods)
@@ -787,6 +796,34 @@ namespace Oxide.Plugins
             return false;
         }
 
+        private static void TryInvokeIoEntityRefresh(Component comp)
+        {
+            if (comp == null) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                foreach (var m in comp.GetType().GetMethods(bf))
+                {
+                    if (m.ReturnType != typeof(void)) continue;
+                    if (m.GetParameters().Length != 0) continue;
+                    var n = m.Name;
+                    if (n.IndexOf("MarkDirty", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("UpdateOutputs", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("UpdateHasPower", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("Refresh", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("NetworkUpdate", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("SendChanged", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        m.Invoke(comp, null);
+                    }
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
         private void TryLogAutorunDebug(BasePlayer npc, BaseMountable mount, bool wrote)
         {
             if (npc?.net == null) return;
@@ -847,6 +884,46 @@ namespace Oxide.Plugins
             }
         }
 
+        private void DumpElectricWheelMembersForDebug(ulong mountId, Component[] comps)
+        {
+            try
+            {
+                const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                foreach (var c in comps)
+                {
+                    if (c == null) continue;
+                    var tn = c.GetType().Name;
+                    if (tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+
+                    var fields = new List<string>();
+                    foreach (var f in c.GetType().GetFields(bf))
+                    {
+                        if (f.FieldType == typeof(float) || f.FieldType == typeof(double) || f.FieldType == typeof(bool))
+                            fields.Add($"{f.Name}:{f.FieldType.Name}");
+                        if (fields.Count >= 40) break;
+                    }
+
+                    var props = new List<string>();
+                    foreach (var p in c.GetType().GetProperties(bf))
+                    {
+                        if (!p.CanRead) continue;
+                        var pt = p.PropertyType;
+                        if (pt == typeof(float) || pt == typeof(double) || pt == typeof(bool))
+                            props.Add($"{p.Name}:{pt.Name}:{(p.CanWrite ? "rw" : "ro")}");
+                        if (props.Count >= 40) break;
+                    }
+
+                    Puts($"[BaseBotch][debug] wheelMembers mount={mountId} type={tn} fields=[{string.Join(", ", fields.ToArray())}] props=[{string.Join(", ", props.ToArray())}]");
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
         private bool PrefabChainLooksLikeWaterWheel(BaseMountable mount)
         {
             if (mount == null) return false;
@@ -875,6 +952,7 @@ namespace Oxide.Plugins
             {
                 _wheelBumpComponentCache.Remove(mountId);
                 _wheelComponentDumped.Remove(mountId);
+                _wheelMemberDumped.Remove(mountId);
             }
             _autorunNpcNetIds.Remove(id);
             _npcToTrackedMountNetId.Remove(id);
@@ -1251,6 +1329,7 @@ namespace Oxide.Plugins
             {
                 _wheelBumpComponentCache.Remove(mountCacheId);
                 _wheelComponentDumped.Remove(mountCacheId);
+                _wheelMemberDumped.Remove(mountCacheId);
             }
             _autorunNpcNetIds.Remove(npcEntityNetId);
             _npcToTrackedMountNetId.Remove(npcEntityNetId);
