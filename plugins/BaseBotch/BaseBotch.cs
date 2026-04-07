@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.3.3")]
+    [Info("BaseBotch", "RustMaxx", "1.3.4")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -235,6 +235,7 @@ namespace Oxide.Plugins
             TryStifleNavigatorWhileAutorunning(npc);
 
             var wrote = TryWriteMovementButtons(npc);
+            TryForceMovementModelState(npc);
             if (_cfg.AutorunTryWheelPowerReflection)
                 TryBumpWheelPowerViaReflection(npc);
 
@@ -467,7 +468,7 @@ namespace Oxide.Plugins
             }
 
             foreach (var comp in comps)
-                BumpWheelComponentFieldsAndMethods(comp);
+                BumpWheelComponentFieldsAndMethods(comp, npc);
         }
 
         private Component[] BuildWheelBumpComponentCache(BaseMountable mount)
@@ -505,7 +506,7 @@ namespace Oxide.Plugins
             return arr;
         }
 
-        private void BumpWheelComponentFieldsAndMethods(Component comp)
+        private void BumpWheelComponentFieldsAndMethods(Component comp, BasePlayer npc)
         {
             if (comp == null) return;
             var tn = comp.GetType().Name;
@@ -593,6 +594,101 @@ namespace Oxide.Plugins
                     // ignored
                 }
             }
+
+            TryInvokeWheelInputLikeMethods(comp, npc);
+        }
+
+        private void TryInvokeWheelInputLikeMethods(Component comp, BasePlayer npc)
+        {
+            if (comp == null || npc == null) return;
+            var tn = comp.GetType().Name;
+            if (tn.IndexOf("WaterWheel", StringComparison.OrdinalIgnoreCase) < 0 &&
+                tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) < 0)
+                return;
+
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            foreach (var method in comp.GetType().GetMethods(bf))
+            {
+                var mn = method.Name;
+                if (mn.IndexOf("input", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("player", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("rider", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("pedal", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("human", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    mn.IndexOf("drive", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                try
+                {
+                    var ps = method.GetParameters();
+                    if (ps.Length == 0 && method.ReturnType == typeof(void))
+                    {
+                        method.Invoke(comp, null);
+                    }
+                    else if (ps.Length == 1)
+                    {
+                        if (ps[0].ParameterType == typeof(float))
+                            method.Invoke(comp, new object[] { 1f });
+                        else if (typeof(BasePlayer).IsAssignableFrom(ps[0].ParameterType))
+                            method.Invoke(comp, new object[] { npc });
+                        else if (typeof(InputState).IsAssignableFrom(ps[0].ParameterType))
+                            method.Invoke(comp, new object[] { npc.serverInput });
+                    }
+                    else if (ps.Length == 2)
+                    {
+                        if (typeof(BasePlayer).IsAssignableFrom(ps[0].ParameterType) &&
+                            typeof(InputState).IsAssignableFrom(ps[1].ParameterType))
+                            method.Invoke(comp, new object[] { npc, npc.serverInput });
+                        else if (typeof(BasePlayer).IsAssignableFrom(ps[0].ParameterType) &&
+                                 ps[1].ParameterType == typeof(float))
+                            method.Invoke(comp, new object[] { npc, 1f });
+                    }
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
+        }
+
+        private static void TryForceMovementModelState(BasePlayer npc)
+        {
+            if (npc?.modelState == null) return;
+            var ms = npc.modelState;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                foreach (var p in ms.GetType().GetProperties(bf))
+                {
+                    if (!p.CanWrite || p.PropertyType != typeof(bool)) continue;
+                    var n = p.Name;
+                    if (n.IndexOf("sprint", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("run", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("moving", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("onground", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        p.SetValue(ms, true, null);
+                    }
+                }
+
+                foreach (var f in ms.GetType().GetFields(bf))
+                {
+                    if (f.FieldType != typeof(bool)) continue;
+                    var n = f.Name;
+                    if (n.IndexOf("sprint", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("run", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("moving", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        n.IndexOf("onground", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        f.SetValue(ms, true);
+                    }
+                }
+            }
+            catch
+            {
+                // ignored
+            }
         }
 
         private static bool FieldNameLooksLikePowerSignal(string fn)
@@ -651,17 +747,40 @@ namespace Oxide.Plugins
             try
             {
                 var names = new List<string>();
+                var wheelMethodHints = new List<string>();
                 foreach (var c in comps)
                 {
                     if (c == null) continue;
                     var n = c.GetType().Name;
                     if (!names.Contains(n))
                         names.Add(n);
+                    if ((n.IndexOf("WaterWheel", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         n.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) >= 0) &&
+                        wheelMethodHints.Count == 0)
+                    {
+                        const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                        foreach (var m in c.GetType().GetMethods(bf))
+                        {
+                            var mn = m.Name;
+                            if (mn.IndexOf("input", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("player", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("rider", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("pedal", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("human", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("spin", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                mn.IndexOf("drive", StringComparison.OrdinalIgnoreCase) < 0)
+                                continue;
+                            wheelMethodHints.Add($"{mn}({m.GetParameters().Length})");
+                            if (wheelMethodHints.Count >= 20) break;
+                        }
+                    }
                     if (names.Count >= 24)
                         break;
                 }
 
                 Puts($"[BaseBotch][debug] wheelComponents mount={mountId} count={comps?.Length ?? 0} types=[{string.Join(", ", names.ToArray())}]");
+                if (wheelMethodHints.Count > 0)
+                    Puts($"[BaseBotch][debug] wheelMethods mount={mountId} methods=[{string.Join(", ", wheelMethodHints.ToArray())}]");
             }
             catch
             {
