@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.19")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.20")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -156,8 +156,8 @@ namespace Oxide.Plugins
             public bool DebugMode { get; set; } = false;
             public int MaxActiveNPCs { get; set; } = 24;
             public bool PreventDuplicateViewerNPCs { get; set; } = true;
-            public float MinimumSpawnRadiusFromAnchor { get; set; } = 5f;
-            public float DefaultSpawnRadius { get; set; } = 22f;
+            public float MinimumSpawnRadiusFromAnchor { get; set; } = 1f;
+            public float DefaultSpawnRadius { get; set; } = 10f;
             public float MaxDistanceFromAnchor { get; set; } = 140f;
             public float MinimumDistanceFromPlayers { get; set; } = 8f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
@@ -1276,7 +1276,8 @@ namespace Oxide.Plugins
                 if (WaterLevel.Test(tryPos, true, true)) continue;
                 if (!ResolveNavMeshPosition(tryPos, out tryPos)) continue;
 
-                if (TooCloseToPlayers(tryPos, _cfg.MinimumDistanceFromPlayers)) continue;
+                var excludeAnchor = anchorPlayer != null && anchorPlayer.IsValid() ? anchorPlayer.userID : 0UL;
+                if (TooCloseToPlayers(tryPos, _cfg.MinimumDistanceFromPlayers, excludeAnchor)) continue;
 
                 pos = tryPos;
                 return true;
@@ -5575,7 +5576,7 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                "Look at the wheel: WHEEL mounts + starts autorun. STOP stops input (stay mounted). RUN resumes. OUT dismounts.",
+                "WHEEL: mount + autorun (Roaming task → idle while on wheel; restored on Out). Look at the wheel first.",
                 "0.03 0.875",
                 "0.97 0.925",
                 10,
@@ -5642,7 +5643,8 @@ namespace Oxide.Plugins
 
             try
             {
-                var o = BaseBotch.Call("MountWaterWheelFromLook", r.EntityId, player);
+                var o = BaseBotch.Call("MountWaterWheelFromLook", r.EntityId, player,
+                    ResolveBridgeAnchorSteam(r, player));
                 if (!(o is bool b && b))
                     player.ChatMessage(
                         "[MaxxInvaders] BaseBotch: mount failed — look at the electric water wheel within range.");
@@ -5671,7 +5673,8 @@ namespace Oxide.Plugins
                     continue;
                 try
                 {
-                    var o = BaseBotch.Call("MountWaterWheelFromLook", r.EntityId, player);
+                    var o = BaseBotch.Call("MountWaterWheelFromLook", r.EntityId, player,
+                        ResolveBridgeAnchorSteam(r, player));
                     if (o is bool b && b) ok++;
                 }
                 catch (Exception ex)
@@ -5817,7 +5820,7 @@ namespace Oxide.Plugins
 
             try
             {
-                BaseBotch.Call("DismountWaterWheel", r.EntityId, player);
+                BaseBotch.Call("DismountWaterWheel", r.EntityId, player, ResolveBridgeAnchorSteam(r, player));
             }
             catch (Exception ex)
             {
@@ -5843,7 +5846,7 @@ namespace Oxide.Plugins
                     continue;
                 try
                 {
-                    BaseBotch.Call("DismountWaterWheel", r.EntityId, player);
+                    BaseBotch.Call("DismountWaterWheel", r.EntityId, player, ResolveBridgeAnchorSteam(r, player));
                     n++;
                 }
                 catch (Exception ex)

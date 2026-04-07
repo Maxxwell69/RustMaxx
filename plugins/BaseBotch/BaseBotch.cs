@@ -1,6 +1,7 @@
 // BaseBotch — automation helpers for RustMaxx bots (water wheel mount, etc.).
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using Facepunch;
@@ -11,14 +12,23 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.2.0")]
+    [Info("BaseBotch", "RustMaxx", "1.3.0")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
+        [PluginReference] private Plugin RoamingNPCs;
+
         private ConfigData _cfg;
         private readonly HashSet<ulong> _autorunNpcNetIds = new();
         private readonly Dictionary<ulong, ulong> _npcToTrackedMountNetId = new();
+        private readonly Dictionary<ulong, WheelRestoreState> _wheelRestorePending = new();
         private Timer _autorunTimer;
+
+        private sealed class WheelRestoreState
+        {
+            public string TaskKeyword;
+            public ulong AnchorSteam;
+        }
 
         private static Type _cachedInputMessageType;
         private static PropertyInfo _cachedInputStateCurrentProp;
@@ -38,6 +48,9 @@ namespace Oxide.Plugins
 
             /// <summary>Experimental: nudge float fields on wheel/generator parents (names containing Power/Output/Energy).</summary>
             public bool AutorunTryWheelPowerReflection = true;
+
+            /// <summary>Before mounting, snapshot bridge task and set RoamingNPCs task to idle so pathing does not fight the wheel.</summary>
+            public bool PauseRoamingAiWhileOnWheel = true;
         }
 
         protected override void LoadDefaultConfig()
@@ -100,6 +113,7 @@ namespace Oxide.Plugins
         {
             _autorunNpcNetIds?.Clear();
             _npcToTrackedMountNetId?.Clear();
+            _wheelRestorePending?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
             _autorunTimer = null;
@@ -112,6 +126,7 @@ namespace Oxide.Plugins
                 var id = bp.net.ID.Value;
                 _autorunNpcNetIds.Remove(id);
                 _npcToTrackedMountNetId.Remove(id);
+                _wheelRestorePending.Remove(id);
             }
         }
 
@@ -126,10 +141,19 @@ namespace Oxide.Plugins
         private void ApplyAutorunInput(ulong npcNetId, bool scheduleDoubleApply)
         {
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcNetId)) as BasePlayer;
-            if (npc == null || npc.IsDestroyed || !npc.isMounted)
+            if (npc == null || npc.IsDestroyed)
             {
                 _autorunNpcNetIds.Remove(npcNetId);
                 _npcToTrackedMountNetId.Remove(npcNetId);
+                TryRestoreWheelRoamTask(npcNetId);
+                return;
+            }
+
+            if (!npc.isMounted)
+            {
+                _autorunNpcNetIds.Remove(npcNetId);
+                _npcToTrackedMountNetId.Remove(npcNetId);
+                TryRestoreWheelRoamTask(npcNetId);
                 return;
             }
 
@@ -138,6 +162,7 @@ namespace Oxide.Plugins
             {
                 _autorunNpcNetIds.Remove(npcNetId);
                 _npcToTrackedMountNetId.Remove(npcNetId);
+                TryRestoreWheelRoamTask(npcNetId);
                 return;
             }
 
@@ -147,6 +172,7 @@ namespace Oxide.Plugins
                 {
                     _autorunNpcNetIds.Remove(npcNetId);
                     _npcToTrackedMountNetId.Remove(npcNetId);
+                    TryRestoreWheelRoamTask(npcNetId);
                     return;
                 }
             }
@@ -201,7 +227,8 @@ namespace Oxide.Plugins
         private bool TryEnsureInputCurrent(InputState inp)
         {
             if (inp?.current != null) return true;
-            if (_cachedInputMessageType == null || _cachedInputStateCurrentProp == null) return false;
+            if (_cachedInputMessageType == null) return false;
+            if (_cachedInputStateCurrentProp == null && _cachedInputStateCurrentField == null) return false;
             try
             {
                 var msg = Activator.CreateInstance(_cachedInputMessageType);
@@ -323,10 +350,95 @@ namespace Oxide.Plugins
             _npcToTrackedMountNetId.Remove(id);
         }
 
+        private static ulong ParseAnchorSteam(object anchorSteamObj, BasePlayer issuer)
+        {
+            if (anchorSteamObj != null)
+            {
+                if (anchorSteamObj is ulong u) return u;
+                if (anchorSteamObj is long l && l >= 0) return (ulong)l;
+                if (ulong.TryParse(anchorSteamObj.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                        out var p)) return p;
+            }
+
+            return issuer != null ? issuer.userID : 0UL;
+        }
+
+        private static string NormalizeTaskKeyword(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "gather";
+            var t = raw.Trim().ToLowerInvariant();
+            switch (t)
+            {
+                case "wood":
+                case "stone":
+                case "cloth":
+                case "hunt":
+                case "protect":
+                case "gather":
+                case "mixed":
+                case "idle":
+                case "all":
+                    return t == "all" ? "gather" : t;
+                default:
+                    return "gather";
+            }
+        }
+
+        /// <summary>Snapshot bridge task (before idle) and apply idle so Roaming AI does not fight wheel input.</summary>
+        private void SaveWheelSessionAndPauseRoam(BasePlayer npc, ulong anchorSteam)
+        {
+            if (npc?.net == null) return;
+            var id = npc.net.ID.Value;
+            _wheelRestorePending.Remove(id);
+
+            var taskKw = "gather";
+            if (RoamingNPCs != null && RoamingNPCs.IsLoaded)
+            {
+                try
+                {
+                    var raw = RoamingNPCs.Call("GetBridgeTaskLabel", id);
+                    taskKw = NormalizeTaskKeyword(raw?.ToString() ?? "");
+                }
+                catch
+                {
+                    taskKw = "gather";
+                }
+            }
+
+            _wheelRestorePending[id] = new WheelRestoreState { TaskKeyword = taskKw, AnchorSteam = anchorSteam };
+
+            if (!_cfg.PauseRoamingAiWhileOnWheel || RoamingNPCs == null || !RoamingNPCs.IsLoaded) return;
+            try
+            {
+                RoamingNPCs.Call("ApplyBridgeTask", id, anchorSteam, "idle");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[BaseBotch] ApplyBridgeTask idle before wheel: {ex.Message}");
+            }
+        }
+
+        private void TryRestoreWheelRoamTask(ulong npcNetId)
+        {
+            if (!_wheelRestorePending.TryGetValue(npcNetId, out var st)) return;
+            _wheelRestorePending.Remove(npcNetId);
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return;
+            if (string.IsNullOrEmpty(st.TaskKeyword)) return;
+            try
+            {
+                RoamingNPCs.Call("ApplyBridgeTask", npcNetId, st.AnchorSteam, st.TaskKeyword);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[BaseBotch] Restore bridge task after wheel: {ex.Message}");
+            }
+        }
+
         [HookMethod("MountWaterWheelFromLook")]
-        public object MountWaterWheelFromLook(ulong npcEntityNetId, BasePlayer issuer)
+        public object MountWaterWheelFromLook(ulong npcEntityNetId, BasePlayer issuer, object anchorSteamObj = null)
         {
             if (issuer == null || !issuer.IsConnected) return false;
+            var anchorSteam = ParseAnchorSteam(anchorSteamObj, issuer);
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
             if (npc == null || npc.IsDestroyed)
             {
@@ -369,6 +481,8 @@ namespace Oxide.Plugins
                 return false;
             }
 
+            SaveWheelSessionAndPauseRoam(npc, anchorSteam);
+
             ForgetNpc(npc);
 
             if (npc.isMounted)
@@ -378,6 +492,7 @@ namespace Oxide.Plugins
             var ok = npc.GetMounted() != null;
             if (!ok)
             {
+                TryRestoreWheelRoamTask(npc.net.ID.Value);
                 issuer.ChatMessage("[BaseBotch] Mount failed (seat busy or blocked).");
                 return false;
             }
@@ -435,7 +550,7 @@ namespace Oxide.Plugins
         }
 
         [HookMethod("DismountWaterWheel")]
-        public object DismountWaterWheel(ulong npcEntityNetId, BasePlayer issuer)
+        public object DismountWaterWheel(ulong npcEntityNetId, BasePlayer issuer, object anchorSteamObj = null)
         {
             if (npcEntityNetId == 0UL) return false;
             _autorunNpcNetIds.Remove(npcEntityNetId);
@@ -445,10 +560,12 @@ namespace Oxide.Plugins
             if (npc == null || npc.IsDestroyed)
             {
                 issuer?.ChatMessage("[BaseBotch] NPC not found.");
+                TryRestoreWheelRoamTask(npcEntityNetId);
                 return false;
             }
 
             TryDismountNpc(npc);
+            TryRestoreWheelRoamTask(npcEntityNetId);
             return true;
         }
 
