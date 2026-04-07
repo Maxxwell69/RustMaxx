@@ -11,6 +11,7 @@ import {
   getDefaultGiftValue,
   extractViewerNameFromWebhookBody,
   getViewerNameFromQueryString,
+  parseTikfinityWebhookBody,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
 import {
@@ -274,11 +275,8 @@ export async function POST(request: NextRequest) {
   let body: unknown;
   try {
     const text = await request.text();
-    if (!text || !text.trim()) {
-      body = {};
-    } else {
-      body = JSON.parse(text);
-    }
+    const ct = request.headers.get("content-type");
+    body = parseTikfinityWebhookBody(text, ct);
   } catch {
     body = {};
   }

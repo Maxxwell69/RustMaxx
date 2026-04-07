@@ -412,9 +412,23 @@ const VIEWER_NAME_KEY_PRIORITY: readonly string[] = [
   "operator",
   "uniqueId",
   "unique_id",
-  "userId",
-  "user_id",
+  "nickName",
 ];
+
+/** Match TikTok / TikFinity keys case-insensitively (`Nickname`, `NICKNAME`, …). */
+function getViewerFieldFromObject(o: Record<string, unknown>): string | null {
+  const lowerToKey = new Map<string, string>();
+  for (const k of Object.keys(o)) {
+    lowerToKey.set(k.toLowerCase(), k);
+  }
+  for (const want of VIEWER_NAME_KEY_PRIORITY) {
+    const orig = lowerToKey.get(want.toLowerCase());
+    if (orig === undefined) continue;
+    const v = trimNonEmptyString(o[orig]);
+    if (v && !isUnexpandedViewerPlaceholder(v)) return v;
+  }
+  return null;
+}
 
 /**
  * Depth-first search for TikTok / TikFinity viewer fields (nested `data.user`, `gift.sender`, etc.).
@@ -440,11 +454,8 @@ function extractViewerNameFromTree(node: unknown, depth: number): string | null 
     if (v && !isUnexpandedViewerPlaceholder(v)) return v;
   }
 
-  for (const k of VIEWER_NAME_KEY_PRIORITY) {
-    if (!(k in o)) continue;
-    const v = trimNonEmptyString(o[k]);
-    if (v && !isUnexpandedViewerPlaceholder(v)) return v;
-  }
+  const fromPriority = getViewerFieldFromObject(o);
+  if (fromPriority) return fromPriority;
 
   const childKeys = [
     "user",
@@ -512,6 +523,34 @@ export function getViewerNameFromQueryString(
     }
   }
   return null;
+}
+
+/**
+ * TikFinity often POSTs `application/x-www-form-urlencoded` (`nickname=%nickname%&...`).
+ * Parsing only JSON turned the body into `{}`, so **nickname** never reached MaxxInvaders → NPC showed **Viewer**.
+ */
+export function parseTikfinityWebhookBody(
+  text: string,
+  contentType: string | null
+): unknown {
+  const t = text.trim();
+  if (!t) return {};
+  const ct = (contentType ?? "").toLowerCase();
+  if (ct.includes("application/x-www-form-urlencoded")) {
+    return Object.fromEntries(new URLSearchParams(t));
+  }
+  try {
+    return JSON.parse(t);
+  } catch {
+    if (t.startsWith("{")) return {};
+    try {
+      const sp = new URLSearchParams(t);
+      if ([...sp.keys()].length > 0) return Object.fromEntries(sp);
+    } catch {
+      /* ignore */
+    }
+    return {};
+  }
 }
 
 /** Viewer name from webhook body when action is resolved without a full gift payload (or to supplement it). */
