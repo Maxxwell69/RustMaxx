@@ -140,7 +140,8 @@ Register new named profiles in **`lib/maxxinvaders-outfit-profiles.ts`**.
 
 - **RustChaos** loaded on the server; **`oxide.reload RustChaos`** after updating the plugin.  
 - **`StreamerName`** in `oxide/config/RustChaos.json` matches the in-game name of the streamer (for **`bunny1`** costume and **`bunny1npc`** anchor).  
-- For **viewer bots** (`bunny1npc`, `maxxinvaders`): **MaxxInvaders** + **RoamingNPCs**; **`streamer_patrol`** (or your `?template=`) **enabled**; **`bunny1npc`** needs plugin versions with **wear pipe** support (see above).  
+- For **viewer bots** (`bunny1npc`, `maxxinvaders`, **`gingynpc`** / **`eggnpc`** / **`vampnpc`**): **MaxxInvaders** and **RoamingNPCs** must both be loaded. If the webhook JSON shows **`rconResponse`** like **`RoamingNPCs is not loaded`**, the site is working — fix the game host: install **`RoamingNPCs`**, run **`oxide.reload RoamingNPCs`**, confirm **`RoamingNPCs`** appears under **`oxide.plugins`**. Then ensure **`oxide/config/RoamingNPCs.json`** contains the bot keys you use (**`streamer_patrol`**, **`gingy`**, **`egg`**, **`vamp`**, etc.) and **`Enable bot?`** is true.  
+- **`streamer_patrol`** (or your `?template=`) **enabled**; **`bunny1npc`** / wear pipes need compatible **MaxxInvaders** + **RoamingNPCs** versions (see above).  
 - **RCON** in RustMaxx matches the live server (host/port/password; firewall).  
 - Webhook response **`ok: true`** but no effect → check server console for `[RustChaos]` lines and RCON errors.
 

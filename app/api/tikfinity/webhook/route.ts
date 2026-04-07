@@ -692,12 +692,19 @@ async function runWebhook(request: NextRequest, body: unknown) {
         serverId: server.id,
         command: spawnMi.command,
       }).catch(() => {});
-      const replyHint =
+      let replyHint =
         spawnMi.step === "rcon_reply"
           ? "Game replied via RCON — see rconResponse. Common: spawn_position (no players online → anchor 0,0; join server or use GUI spawn), anchor_offline (set ?anchorSteam= or TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID and be online/sleeping), RoamingNPCs template missing/disabled, duplicate_viewer/cooldown, or ScientistFallbackEnabled=false with bridge failure."
           : spawnMi.step === "rcon_connect"
             ? connectedErrorDebug(server.rcon_host)
             : "RCON connected but command could not be sent.";
+      if (
+        spawnMi.step === "rcon_reply" &&
+        /roamingnpcs is not loaded/i.test(spawnMi.error ?? "")
+      ) {
+        replyHint =
+          "The Rust server rejected the spawn because the RoamingNPCs Oxide plugin is not loaded (or failed to start). On the host: add RoamingNPCs, run `oxide.reload RoamingNPCs`, confirm it shows in `oxide.plugins`. Then merge `gingy` / `egg` / `vamp` bot keys into `oxide/config/RoamingNPCs.json` if missing. See rconResponse for the exact MaxxInvaders line.";
+      }
       return withCors(
         NextResponse.json(
           {
