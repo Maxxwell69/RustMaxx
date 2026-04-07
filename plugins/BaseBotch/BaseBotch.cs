@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.14")]
+    [Info("BaseBotch", "RustMaxx", "1.4.15")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -910,6 +910,8 @@ namespace Oxide.Plugins
                 var n = m.Name;
                 if (n != "UpdateOutputs" &&
                     n != "UpdateFromInput" &&
+                    n != "WaterUpdate" &&
+                    n != "PowerUpdate" &&
                     n != "TouchIOState" &&
                     n != "IOStateChanged" &&
                     n != "OnCircuitChanged" &&
@@ -921,7 +923,7 @@ namespace Oxide.Plugins
                     continue;
                 bool ok;
                 if (n == "UpdateFromInput")
-                    ok = TryInvokeUpdateFromInput(comp, m, maxOut, out updateFromInputError);
+                    ok = TryInvokeUpdateFromInputIfAvailable(comp, m, maxOut, out updateFromInputError);
                 else
                     ok = TryInvokeWithGeneratedArgs(comp, m, npc, maxOut);
                 if (ok)
@@ -953,6 +955,31 @@ namespace Oxide.Plugins
                     Puts($"[BaseBotch][debug] wheelPublishUpdateFromInputError mount={mountId} error={updateFromInputError}");
                 }
             }
+        }
+
+        private static bool TryInvokeUpdateFromInputIfAvailable(Component target, MethodInfo method, float maxOut, out string error)
+        {
+            error = null;
+            try
+            {
+                const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                var getConnectedInputCount = target.GetType().GetMethod("GetConnectedInputCount", bf, null, Type.EmptyTypes, null);
+                if (getConnectedInputCount != null)
+                {
+                    var cntObj = getConnectedInputCount.Invoke(target, null);
+                    if (cntObj is int cnt && cnt <= 0)
+                    {
+                        // No input slots connected; UpdateFromInput(slot, amount) will throw out-of-range.
+                        return false;
+                    }
+                }
+            }
+            catch
+            {
+                // ignored; fall back to guarded invoke below
+            }
+
+            return TryInvokeUpdateFromInput(target, method, maxOut, out error);
         }
 
         private static bool TryInvokeUpdateFromInput(Component target, MethodInfo method, float maxOut, out string error)
