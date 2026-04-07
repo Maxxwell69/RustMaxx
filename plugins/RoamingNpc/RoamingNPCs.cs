@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.31")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.32")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -42,7 +42,7 @@ namespace Oxide.Plugins
         /// <summary>MaxxInvaders bridge <c>deposit</c>: bot must be this close (m) before items move into storage.</summary>
         private const float BridgeDepositApproachCompleteDistance = 2f;
         /// <summary>ApplyBridgeTask: minimum brain <see cref="ControllerSetup.RadiusFindEntity"/> for bridge bots (collectibles + Vis scan).</summary>
-        private const float BridgeTaskMinFindRadius = 48f;
+        private const float BridgeTaskMinFindRadius = 72f;
         public Configuration config;
         public DataBots Data;
         public List<string> NicknamesData;
@@ -1504,6 +1504,13 @@ namespace Oxide.Plugins
 
             public float GetTimerTickBrain() => Mathf.Clamp(timerTickBrain, 0.01f, 1f);
             public float GetTimerTickController() => Mathf.Clamp(timerTickController, 0.01f, 1f);
+
+            /// <summary>Bridge bots: tighten scan intervals when template JSON used slower ticks (does not go below 0.01 brain minimum).</summary>
+            public void BridgeBoostScanTimers()
+            {
+                timerTickBrain = Mathf.Min(timerTickBrain, 0.05f);
+                timerTickController = Mathf.Min(timerTickController, 0.08f);
+            }
             // public bool AllowedDistanceToWarp(float distance) => allowedDistanceToWarp < 0 || distance <= allowedDistanceToWarp;
             public bool AllowedDistanceToWarp(float distance) => false;
         }
@@ -9486,6 +9493,7 @@ namespace Oxide.Plugins
                     setup.Controller ??= new ControllerSetup();
                     if (setup.Controller.RadiusFindEntity < BridgeTaskMinFindRadius)
                         setup.Controller.RadiusFindEntity = BridgeTaskMinFindRadius;
+                    setup.Controller.BridgeBoostScanTimers();
                 }
 
                 /// <summary>Clear gather/protect patrol so switching wood/stone/etc. does not leave conflicting FSM goals.</summary>
@@ -9591,6 +9599,16 @@ namespace Oxide.Plugins
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
                         break;
+                    // Wood + stone + cloth + hunt + loot + defense — no anchor patrol / forced deposit (unlike gather).
+                    case "mixed":
+                        StripCompanionPatrolAndProtect();
+                        BridgeBoostFindRadius();
+                        BridgeBattleDefenseBaseline(false);
+                        MinerGatherAll();
+                        setup.HunterState.CanHunt = true;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        break;
                     default:
                         return false;
                 }
@@ -9637,6 +9655,7 @@ namespace Oxide.Plugins
 
             if (hunt && MinerCoreOffDroppedOk()) return "hunt";
             if (MinerGatherAll() && prot && patrol && stor) return "gather";
+            if (MinerGatherAll() && hunt && !prot && !patrol) return "mixed";
             if (MinerCoreOffDroppedOk() && !hunt && prot && patrol) return "protect";
             if (m.CanMiningWood && m.CanFuelUseFromChainsaw && !m.CanMiningOre && !m.CanMiningBarrel &&
                 !m.CanMiningRoadSign && !m.CanPickupCollectibleItems &&

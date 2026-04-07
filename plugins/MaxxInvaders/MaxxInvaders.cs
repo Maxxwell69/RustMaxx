@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.14")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.15")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1764,7 +1764,7 @@ namespace Oxide.Plugins
                 issuer.ChatMessage($"[MaxxInvaders] Task '{task}' set on {r.NpcId}.");
             else
                 issuer.ChatMessage(
-                    "[MaxxInvaders] Task failed. Valid: wood, stone, cloth, hunt, protect, gather, idle (all = gather).");
+                    "[MaxxInvaders] Task failed. Valid: wood, stone, cloth, hunt, protect, gather, mixed, idle (all = gather).");
         }
 
         private void TrySetBridgeDepositBoxForInvader(BasePlayer player, InvaderRuntime r, ulong boxNetId)
@@ -2212,7 +2212,7 @@ namespace Oxide.Plugins
             if (parts.Count < 2)
             {
                 arg.ReplyWith(
-                    "Usage: maxxinvaders.task <viewerId|npcId> <wood|stone|cloth|hunt|protect|gather|idle> [anchorSteam64]");
+                    "Usage: maxxinvaders.task <viewerId|npcId> <wood|stone|cloth|hunt|protect|gather|mixed|idle> [anchorSteam64]");
                 return;
             }
 
@@ -2519,7 +2519,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | … | box … | boxall look | …  (middle mouse = assign deposit box for all Roaming bots; task: wood stone cloth hunt protect gather idle)");
+                    "Usage: /maxxinvaders ui | … | box … | boxall look | …  (middle mouse = assign deposit box for all Roaming bots; task: wood stone cloth hunt protect gather mixed idle)");
                 return;
             }
 
@@ -2692,7 +2692,7 @@ namespace Oxide.Plugins
                     if (args.Length < 2)
                     {
                         player.ChatMessage(
-                            "Usage: /maxxinvaders task all <wood|stone|cloth|hunt|protect|gather|idle>  OR  task <npcId> <task>");
+                            "Usage: /maxxinvaders task all <wood|stone|cloth|hunt|protect|gather|mixed|idle>  OR  task <npcId> <task>");
                         return;
                     }
 
@@ -3346,6 +3346,7 @@ namespace Oxide.Plugins
             const string cGather = "0.18 0.48 0.28 0.95";
             const string cIdle = "0.22 0.22 0.26 0.95";
             const string cDep = "0.22 0.45 0.55 0.95";
+            const string cMixed = "0.42 0.28 0.52 0.95";
 
             AddCuiText(
                 container,
@@ -3393,7 +3394,8 @@ namespace Oxide.Plugins
             RowBtn("cloth", "Cl", cCloth, 0.58f, 0.66f, 0.62f, 0.96f);
             RowBtn("hunt", "Hu", cHunt, 0.48f, 0.56f, 0.04f, 0.31f);
             RowBtn("protect", "Pr", cProt, 0.48f, 0.56f, 0.33f, 0.60f);
-            RowBtn("gather", "Ga", cGather, 0.48f, 0.56f, 0.62f, 0.96f);
+            RowBtn("gather", "Ga", cGather, 0.48f, 0.56f, 0.62f, 0.78f);
+            RowBtn("mixed", "Mx", cMixed, 0.48f, 0.56f, 0.80f, 0.96f);
             RowBtn("idle", "Id", cIdle, 0.38f, 0.46f, 0.04f, 0.48f);
             AddCuiButtonWithText(
                 container,
@@ -4836,6 +4838,7 @@ namespace Oxide.Plugins
             const string cGather = "0.18 0.48 0.28 0.95";
             const string cIdle = "0.22 0.22 0.26 0.95";
             const string cDep = "0.22 0.45 0.55 0.95";
+            const string cMixed = "0.42 0.28 0.52 0.95";
 
             var n = bots.Count;
             var contentH = Mathf.Max(rowH * Mathf.Max(n, 1) + 8, rowH + 8);
@@ -4974,21 +4977,22 @@ namespace Oxide.Plugins
                         8);
                 }
 
-                TaskBtn("wood", "Wd", cWood, 0.02f, 0.115f);
-                TaskBtn("stone", "St", cStone, 0.12f, 0.215f);
-                TaskBtn("cloth", "Cl", cCloth, 0.22f, 0.315f);
-                TaskBtn("hunt", "Hu", cHunt, 0.32f, 0.415f);
-                TaskBtn("protect", "Pr", cProt, 0.42f, 0.515f);
-                TaskBtn("gather", "Ga", cGather, 0.52f, 0.615f);
-                TaskBtn("idle", "Id", cIdle, 0.62f, 0.715f);
+                TaskBtn("wood", "Wd", cWood, 0.02f, 0.098f);
+                TaskBtn("stone", "St", cStone, 0.10f, 0.178f);
+                TaskBtn("cloth", "Cl", cCloth, 0.18f, 0.258f);
+                TaskBtn("hunt", "Hu", cHunt, 0.26f, 0.338f);
+                TaskBtn("protect", "Pr", cProt, 0.34f, 0.418f);
+                TaskBtn("gather", "Ga", cGather, 0.42f, 0.498f);
+                TaskBtn("mixed", "Mx", cMixed, 0.50f, 0.578f);
+                TaskBtn("idle", "Id", cIdle, 0.58f, 0.658f);
                 AddCuiButtonWithText(
                     container,
                     rowName,
                     $"maxxinvaders.gui deposit {nidSafe}",
                     cDep,
                     "Dep",
-                    "0.72 0.06",
-                    "0.84 0.42",
+                    "0.67 0.06",
+                    "0.88 0.42",
                     8);
             }
         }
@@ -5018,7 +5022,7 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                $"On map: {bots.Count} invader(s) · Roaming (bridge): {roam}. Scroll: Wd/St/Cl/Hu/Pr/Ga/Id/Dep. Deposit box for all: middle mouse (wheel click) or /maxxinvaders boxall look.",
+                $"On map: {bots.Count} invader(s) · Roaming (bridge): {roam}. Scroll: Wd/St/Cl/Hu/Pr/Ga/Mx/Id/Dep. Deposit box for all: middle mouse (wheel click) or /maxxinvaders boxall look.",
                 "0.03 0.875",
                 "0.97 0.925",
                 10,
@@ -5044,6 +5048,7 @@ namespace Oxide.Plugins
             const string cGather = "0.18 0.48 0.28 0.95";
             const string cIdle = "0.22 0.22 0.26 0.95";
             const string cDep = "0.22 0.45 0.55 0.95";
+            const string cMixed = "0.42 0.28 0.52 0.95";
 
             AddCuiText(
                 container,
@@ -5115,7 +5120,16 @@ namespace Oxide.Plugins
                 cGather,
                 "ALL GATHER",
                 "0.03 0.02",
-                "0.32 0.09",
+                "0.24 0.09",
+                11);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui taskall mixed",
+                cMixed,
+                "ALL MIXED",
+                "0.25 0.02",
+                "0.49 0.09",
                 11);
             AddCuiButtonWithText(
                 container,
@@ -5123,8 +5137,8 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui taskall idle",
                 cIdle,
                 "ALL IDLE",
-                "0.33 0.02",
-                "0.52 0.09",
+                "0.50 0.02",
+                "0.69 0.09",
                 11);
             AddCuiButtonWithText(
                 container,
@@ -5132,7 +5146,7 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui deposit all",
                 cDep,
                 "ALL DEPOSIT",
-                "0.53 0.02",
+                "0.70 0.02",
                 "0.97 0.09",
                 11,
                 TextAnchor.MiddleCenter,
