@@ -1070,7 +1070,9 @@ namespace Oxide.Plugins
             var npcId = NextNpcId();
             var netId = npcPlayer.net.ID.Value;
 
-            var anchorSteamResolved = anchorPlayer != null && anchorPlayer.IsValid() ? anchorPlayer.userID : 0UL;
+            ulong anchorSteamResolved = 0UL;
+            if (anchorPlayer != null && anchorPlayer.IsValid())
+                anchorSteamResolved = anchorPlayer.userID;
             // Leash + follow use streamer position when anchored — not the random ring point (avoids stale center).
             var anchorPosForRuntime = anchorPlayer != null && anchorPlayer.IsValid()
                 ? anchorPlayer.transform.position
@@ -1760,7 +1762,8 @@ namespace Oxide.Plugins
         private static ulong ResolveBridgeAnchorSteam(InvaderRuntime r, BasePlayer issuer)
         {
             if (r != null && r.AnchorSteamId != 0UL) return r.AnchorSteamId;
-            return issuer != null ? issuer.userID : 0UL;
+            if (issuer != null) return issuer.userID;
+            return 0UL;
         }
 
         private bool TryRoamingApplyBridgeTask(ulong entityId, ulong anchorSteam, string task)
