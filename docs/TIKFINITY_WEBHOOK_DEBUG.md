@@ -112,6 +112,10 @@ Webhook spawns have **no in-game streamer anchor**; patrol/bodyguard tied to the
 
 ## TikFinity URL placeholders (viewer display name)
 
+**Wrong syntax:** `?nickname={{nickname}}` — TikFinity **does not** use double braces. That string is sent literally (or ignored), so the NPC will not get the real name.
+
+**Correct syntax:** `?nickname=%nickname%` — TikFinity replaces **`%nickname%`** with the trigger user’s **TikTok display name** before the HTTP request is sent.
+
 TikFinity documents these **placeholder parameters** for the user who triggered the event (see [Streamer.bot integration](https://tikfinity.zerody.one/streamerbot-integration) on `tikfinity.zerody.one` — same placeholders apply to **Trigger WebHook** URL / body text in Actions):
 
 | Placeholder | Meaning |
@@ -124,6 +128,12 @@ TikFinity documents these **placeholder parameters** for the user who triggered 
 
 ```text
 https://www.rustmaxx.com/api/tikfinity/webhook?action=maxxinvaders&viewerName=%nickname%
+```
+
+**Gingy / Egg / Vamp bots** — same pattern:
+
+```text
+https://www.rustmaxx.com/api/tikfinity/webhook?action=gingynpc&nickname=%nickname%
 ```
 
 Use **`%nickname%`** for the viewer’s **visible name** on the bot. Use **`%username%`** only if you want the **@handle** as the name instead.

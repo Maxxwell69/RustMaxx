@@ -152,7 +152,7 @@ Register new named profiles in **`lib/maxxinvaders-outfit-profiles.ts`**.
 | Query | `.../webhook?action=wolf` |
 | Roaming NPC | `.../webhook?action=npcmaxx&template=bob_resources_farmer` |
 | Bunny viewer bot | `.../webhook?action=bunny1npc` |
-| Gingy / Egg / Vamp viewer bots | `.../webhook?action=gingynpc` · `.../webhook?action=eggnpc` · `.../webhook?action=vampnpc` |
+| Gingy / Egg / Vamp viewer bots | `.../webhook?action=gingynpc&nickname=%nickname%` (TikFinity: **`%nickname%`**, not `{{nickname}}`) |
 | MaxxInvaders + bunny outfit (same as bunny1npc) | `.../webhook?action=maxxinvaders&outfit=bunny1` |
 | Crew registry | `.../webhook?event=join` (see `TIKFINITY_CREW_RNPC_SETUP.md`) |
 

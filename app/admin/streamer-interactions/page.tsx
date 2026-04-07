@@ -441,12 +441,14 @@ export default function AdminStreamerInteractionsPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
-                  {`${webhookUrl}?action=gingynpc`}
+                  {`${webhookUrl}?action=gingynpc&nickname=%nickname%`}
                 </code>
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(`${webhookUrl}?action=gingynpc`);
+                    navigator.clipboard.writeText(
+                      `${webhookUrl}?action=gingynpc&nickname=%nickname%`
+                    );
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
                   }}
@@ -457,12 +459,14 @@ export default function AdminStreamerInteractionsPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
-                  {`${webhookUrl}?action=eggnpc`}
+                  {`${webhookUrl}?action=eggnpc&nickname=%nickname%`}
                 </code>
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(`${webhookUrl}?action=eggnpc`);
+                    navigator.clipboard.writeText(
+                      `${webhookUrl}?action=eggnpc&nickname=%nickname%`
+                    );
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
                   }}
@@ -473,12 +477,14 @@ export default function AdminStreamerInteractionsPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="flex-1 break-all rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
-                  {`${webhookUrl}?action=vampnpc`}
+                  {`${webhookUrl}?action=vampnpc&nickname=%nickname%`}
                 </code>
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(`${webhookUrl}?action=vampnpc`);
+                    navigator.clipboard.writeText(
+                      `${webhookUrl}?action=vampnpc&nickname=%nickname%`
+                    );
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
                   }}

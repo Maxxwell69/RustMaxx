@@ -369,6 +369,27 @@ function trimNonEmptyString(v: unknown): string | null {
 }
 
 /**
+ * True if the string is a **non-substituted** template token (not a real viewer name).
+ * TikFinity uses **`%nickname%`** / **`%username%`** — not `{{nickname}}` (that style is not expanded by TikFinity).
+ */
+export function isUnexpandedViewerPlaceholder(s: string): boolean {
+  const t = s.trim();
+  if (!t) return true;
+  // Mustache/Handlebars-style — often pasted by mistake; TikFinity will not replace these.
+  if (/^\{\{[^}]+\}\}$/.test(t)) return true;
+  const lower = t.toLowerCase();
+  if (
+    lower === "%nickname%" ||
+    lower === "%username%" ||
+    lower === "%displayname%" ||
+    lower === "%name%"
+  )
+    return true;
+  if (lower === "{nickname}" || lower === "{username}") return true;
+  return false;
+}
+
+/**
  * Best-effort TikTok / TikFinity **display** name for the NPC nameplate (what appears above the head).
  * Prefer nickname / display name over @handle (`uniqueId`) so the bot shows the person’s visible name.
  */
@@ -376,7 +397,7 @@ function viewerNameFromRecord(o: Record<string, unknown>): string | null {
   const viewerStr = o.viewer;
   if (typeof viewerStr === "string" && viewerStr.trim()) {
     const v = trimNonEmptyString(viewerStr);
-    if (v) return v;
+    if (v && !isUnexpandedViewerPlaceholder(v)) return v;
   }
   const directKeys = [
     "nickname",
@@ -399,7 +420,7 @@ function viewerNameFromRecord(o: Record<string, unknown>): string | null {
   ];
   for (const k of directKeys) {
     const v = trimNonEmptyString(o[k]);
-    if (v) return v;
+    if (v && !isUnexpandedViewerPlaceholder(v)) return v;
   }
   const nestedKeys = ["user", "viewer", "sender", "from", "author", "data"];
   for (const nk of nestedKeys) {
@@ -413,8 +434,9 @@ function viewerNameFromRecord(o: Record<string, unknown>): string | null {
 }
 
 /**
- * TikFinity often maps the viewer’s name into the **query string** (e.g. `?nickname={{name}}`).
- * First non-empty wins; use alongside JSON `viewerName` / `nickname` / `name` fields.
+ * TikFinity maps the viewer’s name into the **query string** using **`%nickname%`** (percent signs).
+ * Do **not** use `{{nickname}}` — TikFinity does not substitute that; it will be sent literally or ignored.
+ * First non-empty, valid value wins; use alongside JSON `viewerName` / `nickname` / `name` fields.
  */
 export function getViewerNameFromQueryString(
   searchParams: URLSearchParams
@@ -430,7 +452,10 @@ export function getViewerNameFromQueryString(
   ];
   for (const k of keys) {
     const v = searchParams.get(k)?.trim();
-    if (v) return v.replace(/^@+/, "");
+    if (v) {
+      const cleaned = v.replace(/^@+/, "");
+      if (!isUnexpandedViewerPlaceholder(cleaned)) return cleaned;
+    }
   }
   return null;
 }
