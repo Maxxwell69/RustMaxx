@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.13")]
+    [Info("BaseBotch", "RustMaxx", "1.4.14")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -49,6 +49,7 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, float> _nextAutorunDebugAt = new();
         private readonly Dictionary<ulong, float> _nextWheelSignalDebugAt = new();
         private readonly Dictionary<ulong, float> _nextWheelPublishDebugAt = new();
+        private readonly Dictionary<ulong, float> _nextWheelPublishErrorDebugAt = new();
 
         private sealed class ConfigData
         {
@@ -171,6 +172,7 @@ namespace Oxide.Plugins
             _nextAutorunDebugAt?.Clear();
             _nextWheelSignalDebugAt?.Clear();
             _nextWheelPublishDebugAt?.Clear();
+            _nextWheelPublishErrorDebugAt?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
             _autorunTimer = null;
@@ -188,6 +190,7 @@ namespace Oxide.Plugins
                     _wheelMemberDumped.Remove(mountId);
                     _wheelMountedSyncEnabled.Remove(mountId);
                     _nextWheelPublishDebugAt.Remove(mountId);
+                    _nextWheelPublishErrorDebugAt.Remove(mountId);
                 }
                 _autorunNpcNetIds.Remove(id);
                 _npcToTrackedMountNetId.Remove(id);
@@ -901,6 +904,7 @@ namespace Oxide.Plugins
             var maxOut = ResolveWheelMaxOutput(comp);
             var invokedNames = new List<string>();
             var failedNames = new List<string>();
+            string updateFromInputError = null;
             foreach (var m in comp.GetType().GetMethods(bf))
             {
                 var n = m.Name;
@@ -917,7 +921,7 @@ namespace Oxide.Plugins
                     continue;
                 bool ok;
                 if (n == "UpdateFromInput")
-                    ok = TryInvokeUpdateFromInput(comp, m, maxOut);
+                    ok = TryInvokeUpdateFromInput(comp, m, maxOut, out updateFromInputError);
                 else
                     ok = TryInvokeWithGeneratedArgs(comp, m, npc, maxOut);
                 if (ok)
@@ -941,10 +945,19 @@ namespace Oxide.Plugins
             Puts($"[BaseBotch][debug] wheelPublish mount={mountId} invoked={invoked} maxOut={maxOut:F1} methods=[{string.Join(", ", invokedNames.ToArray())}]");
             if (failedNames.Count > 0)
                 Puts($"[BaseBotch][debug] wheelPublishFailed mount={mountId} methods=[{string.Join(", ", failedNames.ToArray())}]");
+            if (!string.IsNullOrEmpty(updateFromInputError))
+            {
+                if (!_nextWheelPublishErrorDebugAt.TryGetValue(mountId, out var errNextAt) || now >= errNextAt)
+                {
+                    _nextWheelPublishErrorDebugAt[mountId] = now + 8f;
+                    Puts($"[BaseBotch][debug] wheelPublishUpdateFromInputError mount={mountId} error={updateFromInputError}");
+                }
+            }
         }
 
-        private static bool TryInvokeUpdateFromInput(Component target, MethodInfo method, float maxOut)
+        private static bool TryInvokeUpdateFromInput(Component target, MethodInfo method, float maxOut, out string error)
         {
+            error = null;
             try
             {
                 var ps = method.GetParameters();
@@ -952,28 +965,73 @@ namespace Oxide.Plugins
                 // ElectricWaterWheel.UpdateFromInput(int slot, int amount)
                 if (ps[0].ParameterType == typeof(int) && ps[1].ParameterType == typeof(int))
                 {
-                    method.Invoke(target, new object[] { 0, Mathf.RoundToInt(maxOut) });
-                    return true;
+                    foreach (var slot in new[] { 0, 1, 2 })
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { slot, Mathf.RoundToInt(maxOut) });
+                            return true;
+                        }
+                        catch (Exception ex)
+                        {
+                            error = ex.InnerException?.Message ?? ex.Message;
+                        }
+                    }
+                    return false;
                 }
                 if (ps[0].ParameterType == typeof(int) && ps[1].ParameterType == typeof(float))
                 {
-                    method.Invoke(target, new object[] { 0, maxOut });
-                    return true;
+                    foreach (var slot in new[] { 0, 1, 2 })
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { slot, maxOut });
+                            return true;
+                        }
+                        catch (Exception ex)
+                        {
+                            error = ex.InnerException?.Message ?? ex.Message;
+                        }
+                    }
+                    return false;
                 }
                 if (ps[0].ParameterType == typeof(float) && ps[1].ParameterType == typeof(float))
                 {
-                    method.Invoke(target, new object[] { 0f, maxOut });
-                    return true;
+                    foreach (var slot in new[] { 0f, 1f, 2f })
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { slot, maxOut });
+                            return true;
+                        }
+                        catch (Exception ex)
+                        {
+                            error = ex.InnerException?.Message ?? ex.Message;
+                        }
+                    }
+                    return false;
                 }
                 if (ps[0].ParameterType == typeof(float) && ps[1].ParameterType == typeof(int))
                 {
-                    method.Invoke(target, new object[] { 0f, Mathf.RoundToInt(maxOut) });
-                    return true;
+                    foreach (var slot in new[] { 0f, 1f, 2f })
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { slot, Mathf.RoundToInt(maxOut) });
+                            return true;
+                        }
+                        catch (Exception ex)
+                        {
+                            error = ex.InnerException?.Message ?? ex.Message;
+                        }
+                    }
+                    return false;
                 }
                 return false;
             }
-            catch
+            catch (Exception ex)
             {
+                error = ex.InnerException?.Message ?? ex.Message;
                 return false;
             }
         }
@@ -1580,6 +1638,7 @@ namespace Oxide.Plugins
                 _wheelMemberDumped.Remove(mountId);
                 _wheelMountedSyncEnabled.Remove(mountId);
                 _nextWheelPublishDebugAt.Remove(mountId);
+                _nextWheelPublishErrorDebugAt.Remove(mountId);
             }
             _autorunNpcNetIds.Remove(id);
             _npcToTrackedMountNetId.Remove(id);
@@ -1959,6 +2018,7 @@ namespace Oxide.Plugins
                 _wheelMemberDumped.Remove(mountCacheId);
                 _wheelMountedSyncEnabled.Remove(mountCacheId);
                 _nextWheelPublishDebugAt.Remove(mountCacheId);
+                _nextWheelPublishErrorDebugAt.Remove(mountCacheId);
             }
             _autorunNpcNetIds.Remove(npcEntityNetId);
             _npcToTrackedMountNetId.Remove(npcEntityNetId);
