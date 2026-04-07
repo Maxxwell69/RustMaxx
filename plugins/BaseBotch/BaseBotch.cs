@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.15")]
+    [Info("BaseBotch", "RustMaxx", "1.4.16")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -551,6 +551,9 @@ namespace Oxide.Plugins
                     object isPowered = null;
                     object currentEnergy = null;
                     object shouldUpdateOutputs = null;
+                    object inCount = null;
+                    object outCount = null;
+                    object hasConn = null;
                     var m = comp.GetType().GetMethod("MaximalPowerOutput", bf, null, Type.EmptyTypes, null);
                     if (m != null) maxOut = m.Invoke(comp, null);
                     var mPowered = comp.GetType().GetMethod("IsPowered", bf, null, Type.EmptyTypes, null);
@@ -559,7 +562,14 @@ namespace Oxide.Plugins
                     if (mEnergy != null) currentEnergy = mEnergy.Invoke(comp, null);
                     var mShould = comp.GetType().GetMethod("ShouldUpdateOutputs", bf, null, Type.EmptyTypes, null);
                     if (mShould != null) shouldUpdateOutputs = mShould.Invoke(comp, null);
+                    var mIn = comp.GetType().GetMethod("GetConnectedInputCount", bf, null, Type.EmptyTypes, null);
+                    if (mIn != null) inCount = mIn.Invoke(comp, null);
+                    var mOut = comp.GetType().GetMethod("GetConnectedOutputCount", bf, null, Type.EmptyTypes, null);
+                    if (mOut != null) outCount = mOut.Invoke(comp, null);
+                    var mHas = comp.GetType().GetMethod("HasConnections", bf, null, Type.EmptyTypes, null);
+                    if (mHas != null) hasConn = mHas.Invoke(comp, null);
                     Puts($"[BaseBotch][debug] wheelSignal mount={mountId} type={tn} MaximalPowerOutput={maxOut ?? "n/a"} IsPowered={isPowered ?? "n/a"} CurrentEnergy={currentEnergy ?? "n/a"} ShouldUpdateOutputs={shouldUpdateOutputs ?? "n/a"}");
+                    Puts($"[BaseBotch][debug] wheelIo mount={mountId} inputs={inCount ?? "n/a"} outputs={outCount ?? "n/a"} hasConnections={hasConn ?? "n/a"}");
                 }
             }
             catch
@@ -923,7 +933,11 @@ namespace Oxide.Plugins
                     continue;
                 bool ok;
                 if (n == "UpdateFromInput")
-                    ok = TryInvokeUpdateFromInputIfAvailable(comp, m, maxOut, out updateFromInputError);
+                {
+                    ok = TryInvokeUpdateFromInputIfAvailable(comp, m, maxOut, out updateFromInputError, out var skippedNoInputs);
+                    if (skippedNoInputs)
+                        continue;
+                }
                 else
                     ok = TryInvokeWithGeneratedArgs(comp, m, npc, maxOut);
                 if (ok)
@@ -957,9 +971,10 @@ namespace Oxide.Plugins
             }
         }
 
-        private static bool TryInvokeUpdateFromInputIfAvailable(Component target, MethodInfo method, float maxOut, out string error)
+        private static bool TryInvokeUpdateFromInputIfAvailable(Component target, MethodInfo method, float maxOut, out string error, out bool skippedNoInputs)
         {
             error = null;
+            skippedNoInputs = false;
             try
             {
                 const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -969,7 +984,8 @@ namespace Oxide.Plugins
                     var cntObj = getConnectedInputCount.Invoke(target, null);
                     if (cntObj is int cnt && cnt <= 0)
                     {
-                        // No input slots connected; UpdateFromInput(slot, amount) will throw out-of-range.
+                        // No wires into input slots — UpdateFromInput indexes IO slots and throws; not used for hamster/manual power.
+                        skippedNoInputs = true;
                         return false;
                     }
                 }
