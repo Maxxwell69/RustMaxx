@@ -707,6 +707,13 @@ async function runWebhook(request: NextRequest, body: unknown) {
         replyHint =
           "The Rust server rejected the spawn because the RoamingNPCs Oxide plugin is not loaded (or failed to start). On the host: add RoamingNPCs, run `oxide.reload RoamingNPCs`, confirm it shows in `oxide.plugins`. Then merge `gingy` / `egg` / `vamp` bot keys into `oxide/config/RoamingNPCs.json` if missing. See rconResponse for the exact MaxxInvaders line.";
       }
+      if (
+        spawnMi.step === "rcon_reply" &&
+        /no bot key.*under bots settings/i.test(spawnMi.error ?? "")
+      ) {
+        replyHint =
+          "The game server’s RoamingNPCs config does not include that bot template key. For `gingynpc` / `eggnpc` / `vampnpc`, copy the `gingy`, `egg`, and `vamp` entries from the RustMaxx repo (`plugins/RoamingNpc/config/gingy-egg-vamp.merge-fragment.json`) into `oxide/config/RoamingNPCs.json` under `Bots settings`, then run `oxide.reload RoamingNPCs`. Each block needs `\"Enable bot?\": true`.";
+      }
       return withCors(
         NextResponse.json(
           {
