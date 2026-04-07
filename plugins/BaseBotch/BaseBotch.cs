@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.10")]
+    [Info("BaseBotch", "RustMaxx", "1.4.11")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -545,9 +545,18 @@ namespace Oxide.Plugins
                 else if (tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     object maxOut = null;
+                    object isPowered = null;
+                    object currentEnergy = null;
+                    object shouldUpdateOutputs = null;
                     var m = comp.GetType().GetMethod("MaximalPowerOutput", bf, null, Type.EmptyTypes, null);
                     if (m != null) maxOut = m.Invoke(comp, null);
-                    Puts($"[BaseBotch][debug] wheelSignal mount={mountId} type={tn} MaximalPowerOutput={maxOut ?? "n/a"}");
+                    var mPowered = comp.GetType().GetMethod("IsPowered", bf, null, Type.EmptyTypes, null);
+                    if (mPowered != null) isPowered = mPowered.Invoke(comp, null);
+                    var mEnergy = comp.GetType().GetMethod("GetCurrentEnergy", bf, null, Type.EmptyTypes, null);
+                    if (mEnergy != null) currentEnergy = mEnergy.Invoke(comp, null);
+                    var mShould = comp.GetType().GetMethod("ShouldUpdateOutputs", bf, null, Type.EmptyTypes, null);
+                    if (mShould != null) shouldUpdateOutputs = mShould.Invoke(comp, null);
+                    Puts($"[BaseBotch][debug] wheelSignal mount={mountId} type={tn} MaximalPowerOutput={maxOut ?? "n/a"} IsPowered={isPowered ?? "n/a"} CurrentEnergy={currentEnergy ?? "n/a"} ShouldUpdateOutputs={shouldUpdateOutputs ?? "n/a"}");
                 }
             }
             catch
@@ -889,6 +898,7 @@ namespace Oxide.Plugins
             const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             var invoked = 0;
             var maxOut = ResolveWheelMaxOutput(comp);
+            var invokedNames = new List<string>();
             foreach (var m in comp.GetType().GetMethods(bf))
             {
                 var n = m.Name;
@@ -904,7 +914,10 @@ namespace Oxide.Plugins
                     n != "MarkDirty")
                     continue;
                 if (TryInvokeWithGeneratedArgs(comp, m, npc, maxOut))
+                {
                     invoked++;
+                    invokedNames.Add($"{n}({m.GetParameters().Length})");
+                }
             }
 
             if (!_cfg.DebugWheelAutorun || npc.net == null) return;
@@ -914,7 +927,7 @@ namespace Oxide.Plugins
             var now = Time.realtimeSinceStartup;
             if (_nextWheelPublishDebugAt.TryGetValue(mountId, out var nextAt) && now < nextAt) return;
             _nextWheelPublishDebugAt[mountId] = now + 4f;
-            Puts($"[BaseBotch][debug] wheelPublish mount={mountId} invoked={invoked} maxOut={maxOut:F1}");
+            Puts($"[BaseBotch][debug] wheelPublish mount={mountId} invoked={invoked} maxOut={maxOut:F1} methods=[{string.Join(", ", invokedNames.ToArray())}]");
         }
 
         private static float ResolveWheelMaxOutput(Component comp)
