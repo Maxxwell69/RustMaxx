@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.12")]
+    [Info("BaseBotch", "RustMaxx", "1.4.13")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -915,7 +915,12 @@ namespace Oxide.Plugins
                     n != "MarkDirtyForceUpdateOutputs" &&
                     n != "MarkDirty")
                     continue;
-                if (TryInvokeWithGeneratedArgs(comp, m, npc, maxOut))
+                bool ok;
+                if (n == "UpdateFromInput")
+                    ok = TryInvokeUpdateFromInput(comp, m, maxOut);
+                else
+                    ok = TryInvokeWithGeneratedArgs(comp, m, npc, maxOut);
+                if (ok)
                 {
                     invoked++;
                     invokedNames.Add($"{n}({m.GetParameters().Length})");
@@ -936,6 +941,41 @@ namespace Oxide.Plugins
             Puts($"[BaseBotch][debug] wheelPublish mount={mountId} invoked={invoked} maxOut={maxOut:F1} methods=[{string.Join(", ", invokedNames.ToArray())}]");
             if (failedNames.Count > 0)
                 Puts($"[BaseBotch][debug] wheelPublishFailed mount={mountId} methods=[{string.Join(", ", failedNames.ToArray())}]");
+        }
+
+        private static bool TryInvokeUpdateFromInput(Component target, MethodInfo method, float maxOut)
+        {
+            try
+            {
+                var ps = method.GetParameters();
+                if (ps.Length != 2) return false;
+                // ElectricWaterWheel.UpdateFromInput(int slot, int amount)
+                if (ps[0].ParameterType == typeof(int) && ps[1].ParameterType == typeof(int))
+                {
+                    method.Invoke(target, new object[] { 0, Mathf.RoundToInt(maxOut) });
+                    return true;
+                }
+                if (ps[0].ParameterType == typeof(int) && ps[1].ParameterType == typeof(float))
+                {
+                    method.Invoke(target, new object[] { 0, maxOut });
+                    return true;
+                }
+                if (ps[0].ParameterType == typeof(float) && ps[1].ParameterType == typeof(float))
+                {
+                    method.Invoke(target, new object[] { 0f, maxOut });
+                    return true;
+                }
+                if (ps[0].ParameterType == typeof(float) && ps[1].ParameterType == typeof(int))
+                {
+                    method.Invoke(target, new object[] { 0f, Mathf.RoundToInt(maxOut) });
+                    return true;
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static string DescribeMethodParams(MethodInfo m)
