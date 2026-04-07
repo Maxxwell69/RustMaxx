@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.17")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.18")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -5367,9 +5367,12 @@ namespace Oxide.Plugins
             string scrollHostParent,
             IReadOnlyList<InvaderRuntime> bots)
         {
-            const int rowH = 68;
+            const int rowH = 72;
             const string uiCard = "0.12 0.12 0.15 0.94";
             const string cWheel = "0.18 0.45 0.55 0.95";
+            const string cRun = "0.22 0.42 0.28 0.95";
+            const string cStop = "0.45 0.38 0.12 0.95";
+            const string cOut = "0.55 0.18 0.14 0.95";
 
             var n = bots.Count;
             var contentH = Mathf.Max(rowH * Mathf.Max(n, 1) + 8, rowH + 8);
@@ -5501,9 +5504,36 @@ namespace Oxide.Plugins
                     $"maxxinvaders.gui basebot wheellook {nidSafe}",
                     cWheel,
                     "WHEEL",
-                    "0.67 0.06",
-                    "0.96 0.42",
-                    10);
+                    "0.02 0.06",
+                    "0.22 0.42",
+                    8);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui basebot autorunstart {nidSafe}",
+                    cRun,
+                    "RUN",
+                    "0.23 0.06",
+                    "0.43 0.42",
+                    8);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui basebot autorunstop {nidSafe}",
+                    cStop,
+                    "STOP",
+                    "0.44 0.06",
+                    "0.64 0.42",
+                    8);
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui basebot dismount {nidSafe}",
+                    cOut,
+                    "OUT",
+                    "0.65 0.06",
+                    "0.98 0.42",
+                    8);
             }
         }
 
@@ -5525,7 +5555,7 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                "Look at the electric water wheel, then WHEEL for one bot, or ALL WHEEL for every Roaming bot.",
+                "Look at the wheel: WHEEL mounts + starts autorun. STOP stops input (stay mounted). RUN resumes. OUT dismounts.",
                 "0.03 0.875",
                 "0.97 0.925",
                 10,
@@ -5536,7 +5566,7 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.07 0.08 0.10 0.96" },
-                    RectTransform = { AnchorMin = "0.02 0.14", AnchorMax = "0.98 0.87" },
+                    RectTransform = { AnchorMin = "0.02 0.22", AnchorMax = "0.98 0.87" },
                     CursorEnabled = true,
                 },
                 contentPanel);
@@ -5544,15 +5574,35 @@ namespace Oxide.Plugins
             AddScrollableBaseBotInvadersList(container, scrollHost, bots);
 
             const string cWheel = "0.18 0.45 0.55 0.95";
+            const string cStop = "0.45 0.38 0.12 0.95";
+            const string cOut = "0.55 0.18 0.14 0.95";
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui basebot wheellook all",
                 cWheel,
-                "ALL WHEEL (look at wheel)",
-                "0.03 0.02",
-                "0.97 0.11",
-                11);
+                "ALL WHEEL",
+                "0.02 0.02",
+                "0.32 0.18",
+                10);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui basebot autorunstop all",
+                cStop,
+                "ALL STOP",
+                "0.34 0.02",
+                "0.64 0.18",
+                10);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui basebot dismount all",
+                cOut,
+                "ALL OUT",
+                "0.66 0.02",
+                "0.98 0.18",
+                10);
         }
 
         private void TryBaseBotMountWaterWheelSingle(BasePlayer player, InvaderRuntime r)
@@ -5613,6 +5663,176 @@ namespace Oxide.Plugins
             player.ChatMessage(ok > 0
                 ? $"[MaxxInvaders] BaseBot: {ok} bot(s) mounted on the water wheel you are looking at."
                 : "[MaxxInvaders] BaseBot: no bots mounted — look at the wheel and ensure Roaming bots are active.");
+        }
+
+        private void TryBaseBotAutorunStartSingle(BasePlayer player, InvaderRuntime r)
+        {
+            if (player == null) return;
+            if (BaseBot == null || !BaseBot.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot plugin is not loaded.");
+                return;
+            }
+
+            if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot: need a live Roaming bot (not a scientist).");
+                return;
+            }
+
+            try
+            {
+                var o = BaseBot.Call("StartWaterWheelAutorun", r.EntityId, player);
+                if (!(o is bool b && b))
+                    player.ChatMessage(
+                        "[MaxxInvaders] BaseBot: RUN failed — bot must be on the electric water wheel.");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} BaseBot StartWaterWheelAutorun: {ex.Message}");
+                player.ChatMessage("[MaxxInvaders] BaseBot error — see server log.");
+            }
+        }
+
+        private void TryBaseBotAutorunStartAll(BasePlayer player)
+        {
+            if (player == null) return;
+            if (BaseBot == null || !BaseBot.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot plugin is not loaded.");
+                return;
+            }
+
+            var list = _registry.All().ToList();
+            var ok = 0;
+            foreach (var r in list)
+            {
+                if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+                    continue;
+                try
+                {
+                    var o = BaseBot.Call("StartWaterWheelAutorun", r.EntityId, player);
+                    if (o is bool b && b) ok++;
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning($"{LogPrefix} BaseBot StartWaterWheelAutorun: {ex.Message}");
+                }
+            }
+
+            player.ChatMessage(ok > 0
+                ? $"[MaxxInvaders] BaseBot: {ok} bot(s) autorun on (mounted on water wheel)."
+                : "[MaxxInvaders] BaseBot: no bots started — mount on wheel first.");
+        }
+
+        private void TryBaseBotAutorunStopSingle(BasePlayer player, InvaderRuntime r)
+        {
+            if (player == null) return;
+            if (BaseBot == null || !BaseBot.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot plugin is not loaded.");
+                return;
+            }
+
+            if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot: need a live Roaming bot (not a scientist).");
+                return;
+            }
+
+            try
+            {
+                BaseBot.Call("StopWaterWheelAutorun", r.EntityId, player);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} BaseBot StopWaterWheelAutorun: {ex.Message}");
+                player.ChatMessage("[MaxxInvaders] BaseBot error — see server log.");
+            }
+        }
+
+        private void TryBaseBotAutorunStopAll(BasePlayer player)
+        {
+            if (player == null) return;
+            if (BaseBot == null || !BaseBot.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot plugin is not loaded.");
+                return;
+            }
+
+            var list = _registry.All().ToList();
+            var n = 0;
+            foreach (var r in list)
+            {
+                if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+                    continue;
+                try
+                {
+                    BaseBot.Call("StopWaterWheelAutorun", r.EntityId, player);
+                    n++;
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning($"{LogPrefix} BaseBot StopWaterWheelAutorun: {ex.Message}");
+                }
+            }
+
+            player.ChatMessage($"[MaxxInvaders] BaseBot: STOP sent for {n} Roaming bot(s).");
+        }
+
+        private void TryBaseBotDismountSingle(BasePlayer player, InvaderRuntime r)
+        {
+            if (player == null) return;
+            if (BaseBot == null || !BaseBot.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot plugin is not loaded.");
+                return;
+            }
+
+            if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot: need a live Roaming bot (not a scientist).");
+                return;
+            }
+
+            try
+            {
+                BaseBot.Call("DismountWaterWheel", r.EntityId, player);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} BaseBot DismountWaterWheel: {ex.Message}");
+                player.ChatMessage("[MaxxInvaders] BaseBot error — see server log.");
+            }
+        }
+
+        private void TryBaseBotDismountAll(BasePlayer player)
+        {
+            if (player == null) return;
+            if (BaseBot == null || !BaseBot.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot plugin is not loaded.");
+                return;
+            }
+
+            var list = _registry.All().ToList();
+            var n = 0;
+            foreach (var r in list)
+            {
+                if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+                    continue;
+                try
+                {
+                    BaseBot.Call("DismountWaterWheel", r.EntityId, player);
+                    n++;
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning($"{LogPrefix} BaseBot DismountWaterWheel: {ex.Message}");
+                }
+            }
+
+            player.ChatMessage($"[MaxxInvaders] BaseBot: OUT (dismount) sent for {n} Roaming bot(s).");
         }
 
         private void OpenGui(BasePlayer player, int page)
@@ -6136,15 +6356,48 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (args[0] == "basebot" && args.Length >= 2 &&
-                args[1].Equals("wheellook", StringComparison.OrdinalIgnoreCase))
+            if (args[0] == "basebot" && args.Length >= 2)
             {
-                if (args.Length > 2 && args[2].Equals("all", StringComparison.OrdinalIgnoreCase))
-                    TryBaseBotMountWaterWheelAll(player);
-                else if (args.Length > 2 && TryFindInvader(args[2].Trim(), out var wheelR))
-                    TryBaseBotMountWaterWheelSingle(player, wheelR);
+                var sub = args[1].Trim();
+                if (sub.Equals("wheellook", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (args.Length > 2 && args[2].Equals("all", StringComparison.OrdinalIgnoreCase))
+                        TryBaseBotMountWaterWheelAll(player);
+                    else if (args.Length > 2 && TryFindInvader(args[2].Trim(), out var wheelR))
+                        TryBaseBotMountWaterWheelSingle(player, wheelR);
+                    else
+                        player.ChatMessage(
+                            "[MaxxInvaders] BaseBot: use WHEEL on a row, or ALL WHEEL (look at the wheel).");
+                }
+                else if (sub.Equals("autorunstart", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (args.Length > 2 && args[2].Equals("all", StringComparison.OrdinalIgnoreCase))
+                        TryBaseBotAutorunStartAll(player);
+                    else if (args.Length > 2 && TryFindInvader(args[2].Trim(), out var rStart))
+                        TryBaseBotAutorunStartSingle(player, rStart);
+                    else
+                        player.ChatMessage("[MaxxInvaders] BaseBot: use RUN on a row or a bot id.");
+                }
+                else if (sub.Equals("autorunstop", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (args.Length > 2 && args[2].Equals("all", StringComparison.OrdinalIgnoreCase))
+                        TryBaseBotAutorunStopAll(player);
+                    else if (args.Length > 2 && TryFindInvader(args[2].Trim(), out var rStop))
+                        TryBaseBotAutorunStopSingle(player, rStop);
+                    else
+                        player.ChatMessage("[MaxxInvaders] BaseBot: use STOP on a row or a bot id.");
+                }
+                else if (sub.Equals("dismount", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (args.Length > 2 && args[2].Equals("all", StringComparison.OrdinalIgnoreCase))
+                        TryBaseBotDismountAll(player);
+                    else if (args.Length > 2 && TryFindInvader(args[2].Trim(), out var rOut))
+                        TryBaseBotDismountSingle(player, rOut);
+                    else
+                        player.ChatMessage("[MaxxInvaders] BaseBot: use OUT on a row or a bot id.");
+                }
                 else
-                    player.ChatMessage("[MaxxInvaders] BaseBot: use WHEEL on a row, or ALL WHEEL (look at the wheel).");
+                    player.ChatMessage("[MaxxInvaders] BaseBot: unknown action.");
 
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
