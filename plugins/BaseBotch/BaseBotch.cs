@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.1")]
+    [Info("BaseBotch", "RustMaxx", "1.4.2")]
     [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
     public class BaseBotch : RustPlugin
     {
@@ -686,6 +686,7 @@ namespace Oxide.Plugins
                     }
 
                     TryInvokeElectricWheelUpdateMethods(comp);
+                    TryDriveElectricWheelDirectOutput(comp);
                 }
 
                 if (tn.IndexOf("WaterWheelMountable", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -734,6 +735,74 @@ namespace Oxide.Plugins
                         n.IndexOf("MarkDirty", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         n.IndexOf("OnCycle", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         n.IndexOf("Tick", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        m.Invoke(comp, null);
+                    }
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private static void TryDriveElectricWheelDirectOutput(Component comp)
+        {
+            if (comp == null) return;
+            var tn = comp.GetType().Name;
+            if (tn.IndexOf("ElectricWaterWheel", StringComparison.OrdinalIgnoreCase) < 0) return;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try
+            {
+                float maxOut = 100f;
+                var maxOutMethod = comp.GetType().GetMethod("MaximalPowerOutput", bf, null, Type.EmptyTypes, null);
+                if (maxOutMethod != null)
+                {
+                    var mv = maxOutMethod.Invoke(comp, null);
+                    if (mv is int mi) maxOut = Mathf.Max(1f, mi);
+                    else if (mv is float mf) maxOut = Mathf.Max(1f, mf);
+                    else if (mv is double md) maxOut = Mathf.Max(1f, (float)md);
+                }
+
+                // Push likely runtime power holders when present.
+                foreach (var f in comp.GetType().GetFields(bf))
+                {
+                    try
+                    {
+                        var n = f.Name;
+                        if (f.FieldType == typeof(float) &&
+                            (n.IndexOf("currentpower", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             n.IndexOf("targetpower", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             n.IndexOf("desiredpower", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             n.IndexOf("generatedpower", StringComparison.OrdinalIgnoreCase) >= 0))
+                        {
+                            f.SetValue(comp, maxOut);
+                        }
+                    }
+                    catch
+                    {
+                        // ignored
+                    }
+                }
+
+                foreach (var m in comp.GetType().GetMethods(bf))
+                {
+                    var n = m.Name;
+                    var ps = m.GetParameters();
+                    if (n.IndexOf("UpdateOutputs", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        if (ps.Length == 0 && m.ReturnType == typeof(void))
+                            m.Invoke(comp, null);
+                        else if (ps.Length == 1 && ps[0].ParameterType == typeof(int))
+                            m.Invoke(comp, new object[] { Mathf.RoundToInt(maxOut) });
+                        else if (ps.Length == 1 && ps[0].ParameterType == typeof(float))
+                            m.Invoke(comp, new object[] { maxOut });
+                    }
+                    else if (n.IndexOf("UpdateHasPower", StringComparison.OrdinalIgnoreCase) >= 0 && ps.Length == 0 && m.ReturnType == typeof(void))
+                    {
+                        m.Invoke(comp, null);
+                    }
+                    else if (n.IndexOf("MarkDirty", StringComparison.OrdinalIgnoreCase) >= 0 && ps.Length == 0 && m.ReturnType == typeof(void))
                     {
                         m.Invoke(comp, null);
                     }
