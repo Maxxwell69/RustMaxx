@@ -59,7 +59,7 @@ RustChaos is called as:
 
 `rustchaos <action> <viewerName> <giftName> [scrap] [message]`
 
-The webhook picks **viewer name** from typical TikTok fields: `uniqueId`, `viewerName`, `nickname`, `userName`, nested `user` / `sender` / `author`, etc. If missing, it uses `Viewer`.
+The webhook picks **viewer name** from TikTok / TikFinity fields, including **nested** JSON (`data.user.nickname`, `gift.sender`, etc.). It also checks the query string (`?nickname=%nickname%`). If nothing is found, the NPC shows **`Viewer`**. A successful spawn response may include **`nameHint`** when the resolved name was still `Viewer` — fix TikFinity’s body or URL variables.
 
 ## 5. Bunny: streamer outfit vs spawning a character
 

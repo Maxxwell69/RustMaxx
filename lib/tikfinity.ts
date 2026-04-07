@@ -389,48 +389,102 @@ export function isUnexpandedViewerPlaceholder(s: string): boolean {
   return false;
 }
 
+/** Priority order at each object node: display name before handle (`uniqueId`). */
+const VIEWER_NAME_KEY_PRIORITY: readonly string[] = [
+  "nickname",
+  "displayName",
+  "display_name",
+  "viewerName",
+  "viewer_name",
+  "senderName",
+  "commenterName",
+  "userName",
+  "user_name",
+  "username",
+  "sender",
+  "tiktokUsername",
+  "tiktok_username",
+  "profileName",
+  "commenter",
+  "fromUser",
+  "toUser",
+  "triggerUser",
+  "operator",
+  "uniqueId",
+  "unique_id",
+  "userId",
+  "user_id",
+];
+
 /**
- * Best-effort TikTok / TikFinity **display** name for the NPC nameplate (what appears above the head).
- * Prefer nickname / display name over @handle (`uniqueId`) so the bot shows the person’s visible name.
+ * Depth-first search for TikTok / TikFinity viewer fields (nested `data.user`, `gift.sender`, etc.).
+ * TikFinity often nests the trigger user several levels deep; shallow parsing left `viewerName` as **Viewer**.
  */
-function viewerNameFromRecord(o: Record<string, unknown>): string | null {
+function extractViewerNameFromTree(node: unknown, depth: number): string | null {
+  if (depth > 14 || node == null) return null;
+  if (typeof node !== "object") return null;
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = extractViewerNameFromTree(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const o = node as Record<string, unknown>;
+
   const viewerStr = o.viewer;
   if (typeof viewerStr === "string" && viewerStr.trim()) {
     const v = trimNonEmptyString(viewerStr);
     if (v && !isUnexpandedViewerPlaceholder(v)) return v;
   }
-  const directKeys = [
-    "nickname",
-    "displayName",
-    "display_name",
-    "viewerName",
-    "viewer_name",
-    "name",
-    "userName",
-    "user_name",
-    "username",
-    "sender",
-    "tiktokUsername",
-    "tiktok_username",
-    "profileName",
-    "commenterName",
-    "commenter",
-    "uniqueId",
-    "unique_id",
-  ];
-  for (const k of directKeys) {
+
+  for (const k of VIEWER_NAME_KEY_PRIORITY) {
+    if (!(k in o)) continue;
     const v = trimNonEmptyString(o[k]);
     if (v && !isUnexpandedViewerPlaceholder(v)) return v;
   }
-  const nestedKeys = ["user", "viewer", "sender", "from", "author", "data"];
-  for (const nk of nestedKeys) {
-    const inner = o[nk];
-    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
-      const v = viewerNameFromRecord(inner as Record<string, unknown>);
-      if (v) return v;
+
+  const childKeys = [
+    "user",
+    "viewer",
+    "sender",
+    "from",
+    "author",
+    "data",
+    "event",
+    "payload",
+    "eventData",
+    "gift",
+    "fromUser",
+    "toUser",
+    "senderInfo",
+    "userInfo",
+    "triggerUser",
+    "operator",
+    "anchor",
+  ];
+  for (const ck of childKeys) {
+    const inner = o[ck];
+    if (inner && typeof inner === "object") {
+      const found = extractViewerNameFromTree(inner, depth + 1);
+      if (found) return found;
+    }
+  }
+
+  for (const v of Object.values(o)) {
+    if (v && typeof v === "object") {
+      const found = extractViewerNameFromTree(v, depth + 1);
+      if (found) return found;
     }
   }
   return null;
+}
+
+/** @deprecated internal — use extractViewerNameFromTree via extractViewerNameFromWebhookBody */
+function viewerNameFromRecord(o: Record<string, unknown>): string | null {
+  return extractViewerNameFromTree(o, 0);
 }
 
 /**
@@ -463,12 +517,7 @@ export function getViewerNameFromQueryString(
 /** Viewer name from webhook body when action is resolved without a full gift payload (or to supplement it). */
 export function extractViewerNameFromWebhookBody(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
-  const o = body as Record<string, unknown>;
-  const fromRoot = viewerNameFromRecord(o);
-  if (fromRoot) return fromRoot;
-  const nested = (o.data ?? o.event ?? o.payload) as Record<string, unknown> | undefined;
-  if (nested && typeof nested === "object") return viewerNameFromRecord(nested);
-  return null;
+  return extractViewerNameFromTree(body, 0);
 }
 
 /** Try to get viewer and gift from a plain object (any nesting level). */

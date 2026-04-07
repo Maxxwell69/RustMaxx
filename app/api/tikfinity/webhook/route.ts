@@ -737,6 +737,9 @@ async function runWebhook(request: NextRequest, body: unknown) {
       command: spawnMi.command,
     }).catch(() => {});
 
+    const nameFallbackViewer =
+      String(payload.viewerName ?? "").trim().toLowerCase() === "viewer";
+
     return withCors(
       NextResponse.json({
         ok: true,
@@ -755,6 +758,12 @@ async function runWebhook(request: NextRequest, body: unknown) {
         command: spawnMi.command,
         rconResponse: spawnMi.rconResponse,
         anchorSteam64: anchorSteam64 ?? null,
+        ...(nameFallbackViewer
+          ? {
+              nameHint:
+                "RustMaxx did not find a viewer nickname in this webhook payload — the in-game bot will show Viewer. In TikFinity: add JSON fields substituted with %nickname% (or %username%), or put ?nickname=%nickname% on the URL. Use TikFinity → action → Raw JSON / custom body if query substitution fails.",
+            }
+          : {}),
         debug:
           action === "bunny1npc"
             ? `bunny1npc: profile bunny1 on Roaming template "${roamingBotKey}" (default streamer_patrol). Same spawn path as maxxinvaders; outfit forced to bunny. Add more looks via ?action=maxxinvaders&outfit=… in lib/maxxinvaders-outfit-profiles.ts.`
