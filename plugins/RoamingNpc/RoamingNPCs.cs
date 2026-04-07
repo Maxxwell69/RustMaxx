@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.34")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.35")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2365,6 +2365,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public ulong BridgeProtectAnchorUserId;
             /// <summary>Player to pursue after they damaged the protected anchor.</summary>
             [JsonIgnore] public ulong BridgeRetaliationTargetUserId;
+            /// <summary>Animal/NPC net id to pursue when it damaged the protected anchor (HunterState; <see cref="BridgeRetaliationExpireTime"/> shared with player retaliation).</summary>
+            [JsonIgnore] public ulong BridgeRetaliationAnimalNetId;
             [JsonIgnore] public float BridgeRetaliationExpireTime;
             [JsonIgnore] public float BridgePatrolNextMoveAt;
             /// <summary>MaxxInvaders: optional <see cref="StorageContainer"/> net ID for <c>deposit</c> (OwnerID must match anchor).</summary>
@@ -3197,17 +3199,47 @@ namespace Oxide.Plugins
             TryAssignBridgeProtectorRetaliation(target, info);
         }
 
-        /// <summary>When a MaxxInvaders anchor (streamer) takes damage from a real player, bodyguard bots retaliate.</summary>
+        /// <summary>When a MaxxInvaders anchor (streamer) takes damage from a player or animal, bodyguard bots retaliate.</summary>
         private void TryAssignBridgeProtectorRetaliation(BaseCombatEntity target, HitInfo info)
         {
             if (target is not BasePlayer victim || !victim.userID.IsSteamId() || victim.IsNpc)
                 return;
-            if (info?.InitiatorPlayer is not BasePlayer attacker || attacker == null || attacker == victim ||
-                !attacker.userID.IsSteamId() || attacker.IsNpc)
-                return;
             if (listNpcPlayers == null || listNpcPlayers.Count == 0)
                 return;
 
+            // Real player damaged the streamer
+            if (info?.InitiatorPlayer is BasePlayer attacker && attacker != null && attacker != victim &&
+                attacker.userID.IsSteamId() && !attacker.IsNpc)
+            {
+                foreach (var pet in listNpcPlayers.Values)
+                {
+                    if (pet == null || pet.IsDestroyed || pet.Data?.Setup == null)
+                        continue;
+                    var bp = pet.Data.Setup.BridgePatrol;
+                    if (!pet.Data.Setup.BattleState._protectBridgeAnchorPlayer && !(bp?.Enable ?? false))
+                        continue;
+                    if (pet.Data.BridgeProtectAnchorUserId == 0UL ||
+                        pet.Data.BridgeProtectAnchorUserId != victim.userID)
+                        continue;
+
+                    pet.Data.BridgeRetaliationTargetUserId = attacker.userID;
+                    pet.Data.BridgeRetaliationAnimalNetId = 0UL;
+                    pet.Data.BridgeRetaliationExpireTime = UnityEngine.Time.realtimeSinceStartup + 120f;
+                }
+
+                return;
+            }
+
+            // Animal (or animal NPC) damaged the streamer — Initiator is the entity, not InitiatorPlayer
+            BaseCombatEntity animalAttacker = null;
+            if (info?.Initiator is BaseCombatEntity ce && ce != null && !ce.IsDestroyed && ce != victim)
+            {
+                if (ce is BaseAnimalNPC or BaseNPC2)
+                    animalAttacker = ce;
+            }
+
+            if (animalAttacker == null || animalAttacker.net == null) return;
+            var animalNet = animalAttacker.net.ID.Value;
             foreach (var pet in listNpcPlayers.Values)
             {
                 if (pet == null || pet.IsDestroyed || pet.Data?.Setup == null)
@@ -3219,7 +3251,8 @@ namespace Oxide.Plugins
                     pet.Data.BridgeProtectAnchorUserId != victim.userID)
                     continue;
 
-                pet.Data.BridgeRetaliationTargetUserId = attacker.userID;
+                pet.Data.BridgeRetaliationAnimalNetId = animalNet;
+                pet.Data.BridgeRetaliationTargetUserId = 0UL;
                 pet.Data.BridgeRetaliationExpireTime = UnityEngine.Time.realtimeSinceStartup + 120f;
             }
         }
@@ -5503,6 +5536,15 @@ namespace Oxide.Plugins
             private bool BridgeAnchorStayLocalOnly =>
                 owner?.Data?.SpawnedFromMaxxInvadersBridge == true && owner.Data.BridgeProtectAnchorUserId != 0UL;
 
+            /// <summary>Allow <see cref="HunterState"/> on bridge bots when defending streamer from an animal that damaged them.</summary>
+            private bool BridgeAnimalRetaliationActive()
+            {
+                var d = owner?.Data;
+                if (d == null || !d.SpawnedFromMaxxInvadersBridge || d.BridgeRetaliationAnimalNetId == 0UL)
+                    return false;
+                return UnityEngine.Time.realtimeSinceStartup < d.BridgeRetaliationExpireTime;
+            }
+
             public void ChangeState(IBotState state)
             {
                 currentState?.LeaveState(state);
@@ -5763,7 +5805,8 @@ namespace Oxide.Plugins
                     }
                     else if (IsActive(attackerState)) ChangeState(null);
 
-                    if (canUseHunterState && !BridgeAnchorStayLocalOnly && hunterState.CanEnterState)
+                    if (canUseHunterState && (!BridgeAnchorStayLocalOnly || BridgeAnimalRetaliationActive()) &&
+                        hunterState.CanEnterState)
                     {
                         if (!IsActive(hunterState)) ChangeState(hunterState);
 
@@ -7344,7 +7387,9 @@ namespace Oxide.Plugins
                 }
 
             }
-            public override bool CanEnterState => Target is BaseCombatEntity target && target != null && (IsAggressiveToOwner(target) || owner.CanHunt());
+            public override bool CanEnterState => Target is BaseCombatEntity target && target != null &&
+                                                  (IsAggressiveToOwner(target) || owner.CanHunt() ||
+                                                   IsBridgeAnimalRetaliationTarget(target));
             public override IEnumerator routine => Job();
             public override float ObstacleDistance => Random.Range(20f, 50f);
 
@@ -7353,9 +7398,21 @@ namespace Oxide.Plugins
                 state = State.Hunter;
                 base.LeavePool();
             }
+
+            /// <summary>MaxxInvaders: streamer was damaged by this animal — hunt it even when <see cref="SetupHunting.CanHunt"/> is false.</summary>
+            private bool IsBridgeAnimalRetaliationTarget(BaseCombatEntity entity)
+            {
+                if (owner?.Data == null || entity == null || entity.net == null) return false;
+                if (UnityEngine.Time.realtimeSinceStartup >= owner.Data.BridgeRetaliationExpireTime) return false;
+                return owner.Data.BridgeRetaliationAnimalNetId != 0UL &&
+                       entity.net.ID.Value == owner.Data.BridgeRetaliationAnimalNetId;
+            }
+
             private bool CheckTarget(BaseCombatEntity target)
             {
-                return target != null && !target.InSafeZone() && target switch
+                if (target == null || target.InSafeZone()) return false;
+                if (IsBridgeAnimalRetaliationTarget(target)) return true;
+                return target switch
                 {
                     BaseAnimalNPC animalNPC => owner.CanHunterAnimal(animalNPC) || IsAggressiveToOwner(animalNPC),
                     BaseNPC2 animalNPC => owner.CanHunterAnimal(animalNPC) || IsAggressiveToOwner(animalNPC),
@@ -7367,8 +7424,27 @@ namespace Oxide.Plugins
                 BaseCombatEntity target = null;
                 if (IsValid() && !owner.InSafeZone())
                 {
-                    target = brain.GetNearestEntity<BaseCombatEntity>(CheckTarget);
-                    if (target != null && !IsAggressiveToOwner(target) && !owner.CanHunt()) target = null;
+                    if (owner.Data != null && owner.Data.BridgeRetaliationAnimalNetId != 0UL &&
+                        UnityEngine.Time.realtimeSinceStartup < owner.Data.BridgeRetaliationExpireTime)
+                    {
+                        var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(owner.Data.BridgeRetaliationAnimalNetId)) as
+                            BaseCombatEntity;
+                        if (ent != null && ent.IsAlive() && !ent.InSafeZone() && CheckTarget(ent) &&
+                            owner.Distance(ent) < 150f)
+                            target = ent;
+                    }
+
+                    if (target == null)
+                        target = brain.GetNearestEntity<BaseCombatEntity>(CheckTarget);
+                    if (target != null && !IsAggressiveToOwner(target) && !owner.CanHunt() &&
+                        !IsBridgeAnimalRetaliationTarget(target))
+                        target = null;
+                }
+
+                if (owner.Data != null && UnityEngine.Time.realtimeSinceStartup >= owner.Data.BridgeRetaliationExpireTime)
+                {
+                    owner.Data.BridgeRetaliationAnimalNetId = 0UL;
+                    owner.Data.BridgeRetaliationTargetUserId = 0UL;
                 }
 
                 SetTargetState<BaseCombatEntity>(target);
@@ -7486,7 +7562,10 @@ namespace Oxide.Plugins
                 }
 
                 if (owner.Data != null && !IsBridgeRetaliationActive())
+                {
                     owner.Data.BridgeRetaliationTargetUserId = 0UL;
+                    owner.Data.BridgeRetaliationAnimalNetId = 0UL;
+                }
 
                 if (target != null && owner.Distance(target) > 150f)
                 {
