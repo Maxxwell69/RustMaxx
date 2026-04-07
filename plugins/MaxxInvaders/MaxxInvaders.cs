@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.16")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.17")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -3837,6 +3837,7 @@ namespace Oxide.Plugins
         private const int GuiTabMaxxEdit = 1;
         private const int GuiTabRoamingEdit = 2;
         private const int GuiTabTask = 3;
+        private const int GuiTabBaseBot = 4;
 
         private sealed class SpawnDraft
         {
@@ -5358,6 +5359,260 @@ namespace Oxide.Plugins
                 "0.95 0.97 1 1");
         }
 
+        /// <summary>BaseBot tab: scroll list with per-bot water wheel mount.</summary>
+        private void AddScrollableBaseBotInvadersList(
+            CuiElementContainer container,
+            string scrollHostParent,
+            IReadOnlyList<InvaderRuntime> bots)
+        {
+            const int rowH = 68;
+            const string uiCard = "0.12 0.12 0.15 0.94";
+            const string cWheel = "0.18 0.45 0.55 0.95";
+
+            var n = bots.Count;
+            var contentH = Mathf.Max(rowH * Mathf.Max(n, 1) + 8, rowH + 8);
+            var panelSize = -contentH;
+
+            var scrollerName = Guid.NewGuid().ToString("N");
+            AddRawCuiElement(
+                container,
+                new CuiElement
+                {
+                    Name = scrollerName,
+                    Parent = scrollHostParent,
+                    Components =
+                    {
+                        new CuiNeedsCursorComponent(),
+                        new CuiImageComponent
+                        {
+                            Color = "0.08 0.08 0.11 0.95",
+                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                            ImageType = Image.Type.Tiled,
+                        },
+                        new CuiScrollViewComponent
+                        {
+                            ContentTransform = new CuiRectTransform
+                            {
+                                AnchorMin = "0 0.98",
+                                AnchorMax = "1 0.98",
+                                OffsetMin = $"0 {panelSize}",
+                                OffsetMax = "0 0",
+                            },
+                            Vertical = true,
+                            Horizontal = false,
+                            MovementType = ScrollRect.MovementType.Clamped,
+                            Elasticity = 0.25f,
+                            Inertia = true,
+                            DecelerationRate = 0.3f,
+                            ScrollSensitivity = 24f,
+                            VerticalScrollbar = new CuiScrollbar { AutoHide = true, Size = 18 },
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    },
+                });
+
+            if (n == 0)
+            {
+                AddCuiText(
+                    container,
+                    scrollerName,
+                    "No active invaders.\nSpawn from the Invaders tab or TikFinity.",
+                    "0.05 0.45",
+                    "0.95 0.92",
+                    14,
+                    TextAnchor.MiddleCenter,
+                    "0.8 0.85 0.92 1");
+                return;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var r = bots[i];
+                var offsetMin = -i * rowH - rowH;
+                var offsetMax = -i * rowH;
+                var rowName = Guid.NewGuid().ToString("N");
+                AddRawCuiElement(
+                    container,
+                    new CuiElement
+                    {
+                        Name = rowName,
+                        Parent = scrollerName,
+                        Components =
+                        {
+                            new CuiImageComponent
+                            {
+                                Color = uiCard,
+                                Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
+                                ImageType = Image.Type.Tiled,
+                            },
+                            new CuiRectTransformComponent
+                            {
+                                AnchorMin = "0 0.998",
+                                AnchorMax = "1 0.998",
+                                OffsetMin = $"0 {offsetMin}",
+                                OffsetMax = $"0 {offsetMax}",
+                            },
+                        },
+                    });
+
+                var hp = r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed ? r.NpcPlayer.health : 0f;
+                var nm = StripCuiMarkup(ResolveViewerNameForWorldTag(r));
+                var nid = StripCuiMarkup(r.NpcId ?? "?");
+                var tmpl = r.IsRoamingNpc
+                    ? StripCuiMarkup(r.RoamingTemplateKey ?? _cfg.DefaultRoamingTemplateKey ?? "")
+                    : "(scientist)";
+                var line1 = $"{nm}  {nid}";
+                var line2 =
+                    $"T{r.Tier}  HP {hp:F0}  {(r.IsRoamingNpc ? "Roam" : "Sci")}  {tmpl}";
+                AddCuiText(
+                    container,
+                    rowName,
+                    line1 + "\n" + line2,
+                    "0.02 0.48",
+                    "0.98 0.95",
+                    10,
+                    TextAnchor.UpperLeft,
+                    "0.95 0.97 1 1");
+
+                if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+                {
+                    AddCuiText(
+                        container,
+                        rowName,
+                        r.NpcPlayer == null || r.NpcPlayer.IsDestroyed
+                            ? "— gone —"
+                            : "Scientist — BaseBot N/A",
+                        "0.02 0.05",
+                        "0.98 0.44",
+                        10,
+                        TextAnchor.MiddleCenter,
+                        "0.45 0.5 0.55 1");
+                    continue;
+                }
+
+                var nidSafe = (r.NpcId ?? "").Trim();
+                if (string.IsNullOrEmpty(nidSafe)) nidSafe = "?";
+
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui basebot wheellook {nidSafe}",
+                    cWheel,
+                    "WHEEL",
+                    "0.67 0.06",
+                    "0.96 0.42",
+                    10);
+            }
+        }
+
+        /// <summary>BaseBot tab: water wheel mount from admin look ray (Roaming bots).</summary>
+        private void AddBaseBotTabContent(
+            CuiElementContainer container,
+            string contentPanel,
+            IReadOnlyList<InvaderRuntime> bots)
+        {
+            AddCuiText(
+                container,
+                contentPanel,
+                "BaseBot — water wheel",
+                "0.03 0.93",
+                "0.97 0.98",
+                15,
+                TextAnchor.MiddleLeft,
+                "0.95 0.97 1 1");
+            AddCuiText(
+                container,
+                contentPanel,
+                "Look at the electric water wheel, then WHEEL for one bot, or ALL WHEEL for every Roaming bot.",
+                "0.03 0.875",
+                "0.97 0.925",
+                10,
+                TextAnchor.UpperLeft,
+                "0.65 0.75 0.88 1");
+
+            var scrollHost = container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = "0.07 0.08 0.10 0.96" },
+                    RectTransform = { AnchorMin = "0.02 0.14", AnchorMax = "0.98 0.87" },
+                    CursorEnabled = true,
+                },
+                contentPanel);
+
+            AddScrollableBaseBotInvadersList(container, scrollHost, bots);
+
+            const string cWheel = "0.18 0.45 0.55 0.95";
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui basebot wheellook all",
+                cWheel,
+                "ALL WHEEL (look at wheel)",
+                "0.03 0.02",
+                "0.97 0.11",
+                11);
+        }
+
+        private void TryBaseBotMountWaterWheelSingle(BasePlayer player, InvaderRuntime r)
+        {
+            if (player == null) return;
+            if (BaseBot == null || !BaseBot.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot plugin is not loaded.");
+                return;
+            }
+
+            if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot: need a live Roaming bot (not a scientist).");
+                return;
+            }
+
+            try
+            {
+                var o = BaseBot.Call("MountWaterWheelFromLook", r.EntityId, player);
+                if (!(o is bool b && b))
+                    player.ChatMessage(
+                        "[MaxxInvaders] BaseBot: mount failed — look at the electric water wheel within range.");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} BaseBot MountWaterWheelFromLook: {ex.Message}");
+                player.ChatMessage("[MaxxInvaders] BaseBot error — see server log.");
+            }
+        }
+
+        private void TryBaseBotMountWaterWheelAll(BasePlayer player)
+        {
+            if (player == null) return;
+            if (BaseBot == null || !BaseBot.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBot plugin is not loaded.");
+                return;
+            }
+
+            var list = _registry.All().ToList();
+            var ok = 0;
+            foreach (var r in list)
+            {
+                if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+                    continue;
+                try
+                {
+                    var o = BaseBot.Call("MountWaterWheelFromLook", r.EntityId, player);
+                    if (o is bool b && b) ok++;
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning($"{LogPrefix} BaseBot MountWaterWheelFromLook: {ex.Message}");
+                }
+            }
+
+            player.ChatMessage(ok > 0
+                ? $"[MaxxInvaders] BaseBot: {ok} bot(s) mounted on the water wheel you are looking at."
+                : "[MaxxInvaders] BaseBot: no bots mounted — look at the wheel and ensure Roaming bots are active.");
+        }
+
         private void OpenGui(BasePlayer player, int page)
         {
             if (player == null) return;
@@ -5449,8 +5704,8 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui tab 0",
                 mainTab == GuiTabInvaders ? uiRustRed : uiMuted,
                 "INVADERS",
-                "0.06 0.82",
-                "0.94 0.94",
+                "0.06 0.80",
+                "0.94 0.935",
                 11);
             AddCuiButtonWithText(
                 container,
@@ -5458,8 +5713,8 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui tab 1",
                 mainTab == GuiTabMaxxEdit ? uiRustRed : uiMuted,
                 "MAXX SETTINGS",
-                "0.06 0.68",
-                "0.94 0.80",
+                "0.06 0.635",
+                "0.94 0.775",
                 10);
             AddCuiButtonWithText(
                 container,
@@ -5467,8 +5722,8 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui tab 2",
                 mainTab == GuiTabRoamingEdit ? uiRustRed : uiMuted,
                 "ROAMING",
-                "0.06 0.54",
-                "0.94 0.66",
+                "0.06 0.47",
+                "0.94 0.615",
                 11);
             AddCuiButtonWithText(
                 container,
@@ -5476,9 +5731,18 @@ namespace Oxide.Plugins
                 "maxxinvaders.gui tab 3",
                 mainTab == GuiTabTask ? uiRustRed : uiMuted,
                 "TASK",
-                "0.06 0.40",
-                "0.94 0.52",
+                "0.06 0.305",
+                "0.94 0.45",
                 11);
+            AddCuiButtonWithText(
+                container,
+                sidebar,
+                "maxxinvaders.gui tab 4",
+                mainTab == GuiTabBaseBot ? uiRustRed : uiMuted,
+                "BASEBOT",
+                "0.06 0.14",
+                "0.94 0.285",
+                10);
 
             var contentPanel = container.Add(
                 new CuiPanel
@@ -5506,6 +5770,13 @@ namespace Oxide.Plugins
             if (mainTab == GuiTabTask)
             {
                 AddTaskTabContent(container, contentPanel, list);
+                CuiHelper.AddUi(player, container);
+                return;
+            }
+
+            if (mainTab == GuiTabBaseBot)
+            {
+                AddBaseBotTabContent(container, contentPanel, list);
                 CuiHelper.AddUi(player, container);
                 return;
             }
@@ -5858,7 +6129,21 @@ namespace Oxide.Plugins
             if (args[0] == "tab" && args.Length > 1 && int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture,
                     out var tabIdx))
             {
-                _guiMainTab[player.userID] = Mathf.Clamp(tabIdx, 0, 3);
+                _guiMainTab[player.userID] = Mathf.Clamp(tabIdx, 0, 4);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "basebot" && args.Length >= 2 &&
+                args[1].Equals("wheellook", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length > 2 && args[2].Equals("all", StringComparison.OrdinalIgnoreCase))
+                    TryBaseBotMountWaterWheelAll(player);
+                else if (args.Length > 2 && TryFindInvader(args[2].Trim(), out var wheelR))
+                    TryBaseBotMountWaterWheelSingle(player, wheelR);
+                else
+                    player.ChatMessage("[MaxxInvaders] BaseBot: use WHEEL on a row, or ALL WHEEL (look at the wheel).");
+
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
