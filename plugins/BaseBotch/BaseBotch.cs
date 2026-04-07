@@ -43,6 +43,7 @@ namespace Oxide.Plugins
         private static PropertyInfo _cachedInputStatePreviousProp;
         private static FieldInfo _cachedInputStatePreviousField;
         private static int _autorunTickPhase;
+        private readonly Dictionary<ulong, float> _nextAutorunDebugAt = new();
 
         private sealed class ConfigData
         {
@@ -79,6 +80,9 @@ namespace Oxide.Plugins
 
             /// <summary>Value applied to NPCPlayerNavigator.CanNavigateMounted while on wheel (usually true so mounted locomotion can run).</summary>
             public bool WheelSessionCanNavigateMounted = true;
+
+            /// <summary>When true, logs throttled autorun diagnostics (write failures, mount/navigator state).</summary>
+            public bool DebugWheelAutorun = false;
         }
 
         protected override void LoadDefaultConfig()
@@ -94,6 +98,9 @@ namespace Oxide.Plugins
                 LoadDefaultConfig();
                 _cfg = Config.ReadObject<ConfigData>() ?? new ConfigData();
             }
+
+            // Persist newly added keys into existing config files so admins can see/tune them.
+            Config.WriteObject(_cfg, true);
         }
 
         private void OnServerInitialized()
@@ -149,6 +156,7 @@ namespace Oxide.Plugins
             _npcToTrackedMountNetId?.Clear();
             _wheelRestorePending?.Clear();
             _wheelBumpComponentCache?.Clear();
+            _nextAutorunDebugAt?.Clear();
             if (_autorunTimer != null && !_autorunTimer.Destroyed)
                 _autorunTimer.Destroy();
             _autorunTimer = null;
@@ -226,6 +234,9 @@ namespace Oxide.Plugins
                 TryBumpWheelPowerViaReflection(npc);
 
             TryInvokeInputFlush(npc, _cfg);
+
+            if (_cfg.DebugWheelAutorun)
+                TryLogAutorunDebug(npc, m, wrote);
 
             if (!wrote && !_cfg.AutorunDoubleApplyWhenButtonsFail)
                 return;
@@ -572,6 +583,20 @@ namespace Oxide.Plugins
             if (tn.IndexOf("Hamster", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (tn.IndexOf("IOEntity", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             return false;
+        }
+
+        private void TryLogAutorunDebug(BasePlayer npc, BaseMountable mount, bool wrote)
+        {
+            if (npc?.net == null) return;
+            var id = npc.net.ID.Value;
+            var now = Time.realtimeSinceStartup;
+            if (_nextAutorunDebugAt.TryGetValue(id, out var nextAt) && now < nextAt) return;
+            _nextAutorunDebugAt[id] = now + 4f;
+
+            var nav = TryGetNavigatorFromPlayer(npc);
+            var canNavMounted = TryGetCanNavigateMounted(nav);
+            var mountPrefab = (mount as BaseEntity)?.PrefabName ?? "(null)";
+            Puts($"[BaseBotch][debug] npc={npc.displayName}/{id} wrote={wrote} mounted={npc.isMounted} mount={mountPrefab} navType={nav?.GetType().Name ?? "none"} canNavigateMounted={(canNavMounted?.ToString() ?? "n/a")}");
         }
 
         private bool PrefabChainLooksLikeWaterWheel(BaseMountable mount)
