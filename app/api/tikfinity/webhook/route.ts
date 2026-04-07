@@ -13,6 +13,7 @@ import {
   getViewerNameFromQueryString,
   parseTikfinityWebhookBody,
   type TikTriggerAction,
+  isTikTokSocialOnlyAction,
 } from "@/lib/tikfinity";
 import {
   getConnectionByEventName,
@@ -409,6 +410,33 @@ async function runWebhook(request: NextRequest, body: unknown) {
         },
         { status: 503 }
       )
+    );
+  }
+
+  /** TikTok follow / share / sub / stream-like — Squawk only; no RCON. */
+  if (isTikTokSocialOnlyAction(action)) {
+    fireSquawkAfterTikfinityEvent({
+      kind: "social",
+      action,
+      viewerName: payload.viewerName,
+      giftName: action,
+    });
+    audit("tikfinity", "webhook.social", {
+      viewerName: payload.viewerName,
+      action,
+      serverId: server.id,
+    }).catch(() => {});
+    console.log("[tikfinity webhook] social announce", { action, viewer: payload.viewerName });
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        action: action as TikTriggerAction,
+        mode: "social_announce",
+        viewerName: payload.viewerName,
+        giftName: payload.giftName,
+        debug:
+          "No game command. Set SQUAWK_WEBHOOK_URL for TTS. This is separate from gift **likes** (action=likes → RustChaos airdrop).",
+      })
     );
   }
 

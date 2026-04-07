@@ -37,9 +37,27 @@ export const TIKTRIGGER_ACTIONS = [
   "vampnpc",
   "npcmaxx",
   "maxxinvaders",
+  /** TikTok social — Squawk + JSON ok only; no RCON (set up separate TikFinity actions from likes / gifts). */
+  "follow",
+  "share",
+  "subscribe",
+  /** Stream “like” / heart (not gift-mapped `likes` airdrop). */
+  "sociallike",
 ] as const;
 
 export type TikTriggerAction = (typeof TIKTRIGGER_ACTIONS)[number];
+
+/** Webhook-only TikTok social: Squawk + JSON ok; no Rust server command. */
+export const TIKTOK_SOCIAL_ONLY_ACTIONS = [
+  "follow",
+  "share",
+  "subscribe",
+  "sociallike",
+] as const satisfies readonly TikTriggerAction[];
+
+export function isTikTokSocialOnlyAction(action: string): boolean {
+  return (TIKTOK_SOCIAL_ONLY_ACTIONS as readonly string[]).includes(action);
+}
 
 /** Default gift name → action. Admins see this in the dashboard; TikFinity webhook uses it. */
 export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
@@ -105,6 +123,11 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   VampNpc: "vampnpc",
   vampnpc: "vampnpc",
   "!vampnpc": "vampnpc",
+  Follow: "follow",
+  Share: "share",
+  Subscribe: "subscribe",
+  "Stream like": "sociallike",
+  StreamLike: "sociallike",
 };
 
 /** Default gift name → TikTok coin value (used when payload has no value/coins field). 1 coin = 1 scrap in-game. */
@@ -338,6 +361,30 @@ export const ACTION_META: Record<
     description:
       "Spawns a RoamingNPCs bot named after the viewer (payload viewerName / TikFinity field). Defaults to template streamer_patrol. **Outfit profiles:** ?outfit=default|crew (template clothes) or bunny1 (onesie + ears), or body outfit / outfitProfile; add names in lib/maxxinvaders-outfit-profiles.ts. Raw pipe: ?outfit=item.one|item.two. Optional anchor: ?anchorSteam=, JSON anchorSteam, or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID. URL: ?action=maxxinvaders&viewerName={{viewer}}. Optional: ?template=, tier, mode, kit.",
     exampleGifts: ["InvaderSpawn", "ViewerRaid"],
+  },
+  follow: {
+    label: "TikTok follow (announce)",
+    description:
+      "No RCON. Fires Squawk (if SQUAWK_WEBHOOK_URL is set) with a welcome line using the viewer nickname. Use TikFinity Follow trigger → webhook ?action=follow&nickname=%nickname%",
+    exampleGifts: [],
+  },
+  share: {
+    label: "TikTok share (announce)",
+    description:
+      "No RCON. Squawk thanks the viewer for sharing. ?action=share&nickname=%nickname%",
+    exampleGifts: [],
+  },
+  subscribe: {
+    label: "TikTok subscribe (announce)",
+    description:
+      "No RCON. Squawk celebrates the sub. ?action=subscribe&nickname=%nickname%",
+    exampleGifts: [],
+  },
+  sociallike: {
+    label: "TikTok stream like / heart (announce)",
+    description:
+      "No RCON — distinct from gift action **likes** (RustChaos airdrop). Use for like milestones / double-tap events. ?action=sociallike&nickname=%nickname%",
+    exampleGifts: ["Stream like", "StreamLike"],
   },
 };
 
@@ -748,6 +795,16 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   maxxinvaders: "maxxinvaders",
   invaders: "maxxinvaders",
   invader: "maxxinvaders",
+  follow: "follow",
+  follower: "follow",
+  share: "share",
+  repost: "share",
+  subscribe: "subscribe",
+  subscription: "subscribe",
+  subscriber: "subscribe",
+  sociallike: "sociallike",
+  streamlike: "sociallike",
+  "stream-like": "sociallike",
 };
 
 /**

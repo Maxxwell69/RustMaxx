@@ -12,10 +12,97 @@ const SQUAWK_SECRET = process.env.SQUAWK_WEBHOOK_SECRET?.trim() ?? "";
 
 const MAX_TEXT = 500;
 
-export type SquawkEventKind = "rustchaos" | "npcmaxx" | "maxxinvaders" | "crew_join";
+/** RustChaos spawns a creature or humanoid NPC near the streamer */
+const ANIMAL_AND_SPAWN_ACTIONS: Record<string, string> = {
+  wolf: "a wolf",
+  bear: "a bear",
+  tiger: "a tiger",
+  panther: "a panther",
+  shark: "a shark",
+  pig: "a boar",
+  scientist: "a scientist",
+};
+
+export type SquawkEventKind =
+  | "rustchaos"
+  | "npcmaxx"
+  | "maxxinvaders"
+  | "crew_join"
+  | "social";
 
 export function isSquawkOutboundConfigured(): boolean {
   return SQUAWK_URL.length > 0;
+}
+
+function safeName(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim() || "Someone";
+}
+
+/** Viewer-bot profile lines — invite using nickname (TikFinity %nickname%). */
+function lineForViewerBotProfile(action: string, v: string): string {
+  const a = action.toLowerCase();
+  switch (a) {
+    case "bunny1npc":
+      return `${v}, your bunny bot is live. Jump in and raid with us!`;
+    case "gingynpc":
+      return `${v}, gingerbread bot deployed. Get in here and say hi!`;
+    case "eggnpc":
+      return `${v}, egg suit bot is rolling. Come play!`;
+    case "vampnpc":
+      return `${v}, vampire style on the field. Join the squad!`;
+    case "maxxinvaders":
+      return `${v}, you're spawning as a viewer bot. Squad up in game!`;
+    default:
+      return `${v}, your viewer bot is dropping in. Join the fight!`;
+  }
+}
+
+function lineForRustchaosAnimalOrEffect(action: string, v: string, giftName: string): string {
+  const a = action.toLowerCase();
+  const spawnLabel = ANIMAL_AND_SPAWN_ACTIONS[a];
+  if (spawnLabel) {
+    return `${v} sent ${spawnLabel} into the stream!`;
+  }
+  if (a === "bunny1") {
+    return `${v} suited the streamer up in bunny gear!`;
+  }
+  if (a === "likes" || a === "supply") {
+    return `${v} called in an airdrop!`;
+  }
+  if (a.startsWith("chaoswave")) {
+    return `${v} started a chaos wave! Hold on!`;
+  }
+  if (a === "chaos" || a === "chaosheli") {
+    return `${v} unleashed chaos on stream!`;
+  }
+  if (a === "scientistboat") {
+    return `${v} sent a scientist boat!`;
+  }
+  if (a === "healinghands" || a === "fullheal" || a === "revivechaos") {
+    return `${v} helped the streamer recover!`;
+  }
+  const g = giftName.replace(/\s+/g, " ").trim();
+  const act = a.replace(/_/g, " ");
+  if (g && g.toLowerCase() !== act.toLowerCase()) {
+    return `${v} triggered ${act} with ${g}!`;
+  }
+  return `${v} triggered ${act}!`;
+}
+
+function lineForSocial(action: string, v: string): string {
+  const a = action.toLowerCase();
+  switch (a) {
+    case "follow":
+      return `${v} just followed. Welcome to the stream!`;
+    case "share":
+      return `${v} shared the live. Thanks for spreading the word!`;
+    case "subscribe":
+      return `${v} subscribed. Let's go!`;
+    case "sociallike":
+      return `${v} liked the stream. Love to see it!`;
+    default:
+      return `${v} showed love on stream!`;
+  }
 }
 
 export function buildSquawkTtsLine(params: {
@@ -24,22 +111,21 @@ export function buildSquawkTtsLine(params: {
   viewerName: string;
   giftName: string;
 }): string {
-  const v = params.viewerName.replace(/\s+/g, " ").trim() || "Someone";
+  const v = safeName(params.viewerName);
   const g = params.giftName.replace(/\s+/g, " ").trim();
   switch (params.kind) {
+    case "social":
+      return lineForSocial(params.action, v);
     case "crew_join":
-      return `${v} joined the crew.`;
+      return `${v} joined the crew. Welcome aboard!`;
     case "npcmaxx":
-      return `${v} spawned a roaming viewer bot.`;
+      return `${v}, your roaming bot is live. Get in here and squad up!`;
     case "maxxinvaders":
-      return `${v} dropped in as a viewer bot.`;
-    default: {
-      const act = params.action.replace(/_/g, " ");
-      if (g && g.toLowerCase() !== act.toLowerCase()) {
-        return `${v} triggered ${act}, gift ${g}.`;
-      }
-      return `${v} triggered ${act}.`;
-    }
+      return lineForViewerBotProfile(params.action, v);
+    case "rustchaos":
+      return lineForRustchaosAnimalOrEffect(params.action, v, g);
+    default:
+      return lineForRustchaosAnimalOrEffect(params.action, v, g);
   }
 }
 
@@ -83,14 +169,14 @@ async function postSquawk(body: SquawkPayload): Promise<void> {
 }
 
 /**
- * Fire-and-forget after a successful TikFinity → RCON path. Safe to call always; no-ops if URL unset.
+ * Fire-and-forget after a successful TikFinity path. Safe to call always; no-ops if URL unset.
  */
 export function fireSquawkAfterTikfinityEvent(params: {
   kind: SquawkEventKind;
   action: string;
   viewerName: string;
   giftName: string;
-  /** Override spoken line (e.g. admin connection custom copy later) */
+  /** Override spoken line */
   textOverride?: string;
 }): void {
   if (!SQUAWK_URL) return;
