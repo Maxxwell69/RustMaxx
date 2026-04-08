@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.38")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.39")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3548,8 +3548,11 @@ namespace Oxide.Plugins
                     continue;
                 }
 
-                if (pet.MoveController != null)
-                    pet.MoveController.SetDestinationFast(stand, _ => { }, false);
+                // Re-issue only when path is missing or navigator stopped — SetDestinationFast calls Reset() each time;
+                // calling it every 0.25s was restarting pathing constantly (stutter / "small steps").
+                var mc = pet.MoveController;
+                if (mc != null && (!mc.HasPath || !mc.IsMoving))
+                    mc.SetDestinationFast(stand, _ => { }, false);
             }
         }
 
@@ -8824,6 +8827,8 @@ namespace Oxide.Plugins
             }
             protected void MovedFinishCallback(bool isFinish)
             {
+                if (owner?.Data?.BridgeDepositApproachActive == true)
+                    return;
                 if (isFinish)
                 {
                     moveMode = MoveMode.Finish;
@@ -8862,11 +8867,15 @@ namespace Oxide.Plugins
             }
             public void StopMove()
             {
+                if (owner?.Data?.BridgeDepositApproachActive == true)
+                    return;
                 owner?.MoveController?.Reset();
                 moveMode = MoveMode.Idle;
             }
             protected void StartMove(BaseEntity target, bool faceMoveTowardsTarget = false)
             {
+                if (owner?.Data?.BridgeDepositApproachActive == true)
+                    return;
                 if (IsValid() && owner?.MoveController?.IsValid() == true && target != null)
                 {
                     moveMode = MoveMode.Moving;
@@ -8879,6 +8888,8 @@ namespace Oxide.Plugins
             }
             protected void StartMove(Vector3 target, bool faceMoveTowardsTarget = false)
             {
+                if (owner?.Data?.BridgeDepositApproachActive == true)
+                    return;
                 if (IsValid() && target != Vector3.zero && owner?.MoveController?.IsValid() == true)
                 {
                     moveMode = MoveMode.Moving;
