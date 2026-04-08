@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.27")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.28")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -159,7 +159,10 @@ namespace Oxide.Plugins
             public bool PreventDuplicateViewerNPCs { get; set; } = true;
             public float MinimumSpawnRadiusFromAnchor { get; set; } = 1f;
             public float DefaultSpawnRadius { get; set; } = 10f;
-            /// <summary>Emergency leash: teleport bot back if farther than this from <see cref="InvaderRuntime.AnchorPosition"/> (streamer when anchored). Lower (e.g. 60–90) if bots still wander too far after companion patrol.</summary>
+            /// <summary>
+            /// Emergency leash (teleport): for Roaming bridge bots, only applies while bridge task is protect (near streamer).
+            /// Gather, hunt, mixed, etc. are not tethered. Vanilla scientists still use this when the value is above 5 m.
+            /// </summary>
             public float MaxDistanceFromAnchor { get; set; } = 140f;
             public float MinimumDistanceFromPlayers { get; set; } = 8f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
@@ -1985,6 +1988,15 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>Whether MaxxInvaders emergency distance tether should apply: Roaming bots only when task is <c>protect</c>.</summary>
+        private bool RoamingBridgeTaskIsProtectForTether(InvaderRuntime r)
+        {
+            if (r == null || !r.IsRoamingNpc) return false;
+            var label = TryRoamingGetBridgeTaskLabel(r.EntityId);
+            if (string.IsNullOrWhiteSpace(label)) return false;
+            return label.Trim().Equals("protect", StringComparison.OrdinalIgnoreCase);
+        }
+
         private ulong TryRoamingGetBridgeLootPetNetForPlayer(ulong looterUserId)
         {
             if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return 0UL;
@@ -2131,8 +2143,9 @@ namespace Oxide.Plugins
                     r.ReturnRunActive = false;
                 }
 
-                // Keep NPCs inside streamer-centered radius (anchor follows AnchorSteamId when set).
-                if (_cfg.MaxDistanceFromAnchor > 5f)
+                // Emergency teleport leash toward streamer: Roaming bridge bots only while task is protect (gather/hunt/mixed roam freely).
+                var applyEmergencyTether = !r.IsRoamingNpc || RoamingBridgeTaskIsProtectForTether(r);
+                if (_cfg.MaxDistanceFromAnchor > 5f && applyEmergencyTether)
                 {
                     var anchor = r.AnchorPosition;
                     if (anchor != Vector3.zero && Vector3.Distance(pos, anchor) > _cfg.MaxDistanceFromAnchor)
