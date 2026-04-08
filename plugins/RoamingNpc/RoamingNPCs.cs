@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.37")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.38")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -9492,7 +9492,7 @@ namespace Oxide.Plugins
                 if (!setup.BridgePatrol.Enable)
                 {
                     setup.BridgePatrol.Enable = true;
-                    if (setup.BridgePatrol.RadiusMeters < 8f) setup.BridgePatrol.RadiusMeters = 28f;
+                    if (setup.BridgePatrol.RadiusMeters < 8f) setup.BridgePatrol.RadiusMeters = 12f;
                 }
 
                 setup.BattleState ??= new SetupBattle();
@@ -9560,7 +9560,7 @@ namespace Oxide.Plugins
 
                 pet.Data.Setup.BridgePatrol ??= new SetupBridgePatrol();
                 pet.Data.Setup.BridgePatrol.Enable = true;
-                if (pet.Data.Setup.BridgePatrol.RadiusMeters < 8f) pet.Data.Setup.BridgePatrol.RadiusMeters = 28f;
+                if (pet.Data.Setup.BridgePatrol.RadiusMeters < 8f) pet.Data.Setup.BridgePatrol.RadiusMeters = 12f;
 
                 if (pet.Data.Setup.FullState != null)
                 {
@@ -9720,6 +9720,15 @@ namespace Oxide.Plugins
                     setup.Controller.BridgeBoostScanTimers();
                 }
 
+                /// <summary>Protect: stay near streamer — do not use 72m scan (that causes roam-then-MaxxInvaders snap).</summary>
+                void BridgeProtectTightAnchorLeash()
+                {
+                    setup.Controller ??= new ControllerSetup();
+                    const float protectScanMeters = 24f;
+                    setup.Controller.RadiusFindEntity = protectScanMeters;
+                    setup.Controller.BridgeBoostScanTimers();
+                }
+
                 /// <summary>When a home TC is set, re-enable far patrol + wide scan after task switches that strip companion patrol.</summary>
                 void EnsureHomeBridgePatrolAfterTask()
                 {
@@ -9800,7 +9809,7 @@ namespace Oxide.Plugins
                         setup.Personality = PersonalityBot.Defensive;
                         break;
                     case "protect":
-                        BridgeBoostFindRadius();
+                        BridgeProtectTightAnchorLeash();
                         BridgeBattleDefenseBaseline(false);
                         MinerOff();
                         setup.MinerState.CanPickupDroppedItems = true;
@@ -9809,7 +9818,8 @@ namespace Oxide.Plugins
                         setup.Personality = PersonalityBot.Defensive;
                         setup.BattleState._protectBridgeAnchorPlayer = true;
                         setup.BridgePatrol.Enable = true;
-                        if (setup.BridgePatrol.RadiusMeters < 8f) setup.BridgePatrol.RadiusMeters = 28f;
+                        // Tight patrol around anchor — not 28m+ (that made bots wander then get teleported back by MaxxInvaders).
+                        setup.BridgePatrol.RadiusMeters = 8f;
                         break;
                     case "gather":
                     case "all":
@@ -9854,7 +9864,9 @@ namespace Oxide.Plugins
                         return false;
                 }
 
-                EnsureHomeBridgePatrolAfterTask();
+                // Do not re-apply far home-roam (40m patrol + 110m scan) after protect — that undoes tight bodyguard leash.
+                if (!string.Equals(t, "protect", StringComparison.OrdinalIgnoreCase))
+                    EnsureHomeBridgePatrolAfterTask();
                 pet.Data.BridgeLastAppliedTask = t == "all" ? "gather" : t;
                 pet.CustomBrain?.ChangeState(null);
                 return true;

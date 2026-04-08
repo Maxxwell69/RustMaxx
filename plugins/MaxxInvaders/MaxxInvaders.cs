@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.31")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.32")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -179,6 +179,11 @@ namespace Oxide.Plugins
 
             /// <summary>Guard snap only if distance exceeds radius × this (reduces rapid port-back while AI jostles near the ring).</summary>
             public float ProtectSnapHysteresis { get; set; } = 1.45f;
+
+            /// <summary>
+            /// When true, MaxxInvaders teleports protect bots back if they exceed the guard ring. Default false — RoamingNPCs protect leash handles staying near streamer; snaps were fighting the brain.
+            /// </summary>
+            public bool ProtectEmergencyTeleportEnabled { get; set; } = false;
             public float MinimumDistanceFromPlayers { get; set; } = 8f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
             public bool BlockSpawnInMonuments { get; set; } = true;
@@ -2192,8 +2197,8 @@ namespace Oxide.Plugins
                     r.ReturnRunActive = false;
                 }
 
-                // Protect only: snap back if clearly outside guard (hysteresis + settle + cooldown — avoids port spam vs RoamingNPCs).
-                if (r.IsRoamingNpc && RoamingExplicitTaskIsProtectTether(r))
+                // Optional last-resort snap (off by default): RoamingNPCs protect now uses tight patrol + scan — brain enforces leash.
+                if (_cfg.ProtectEmergencyTeleportEnabled && r.IsRoamingNpc && RoamingExplicitTaskIsProtectTether(r))
                 {
                     if (!r.ProtectGuardSnapAllowedAfterUtc.HasValue)
                         r.ProtectGuardSnapAllowedAfterUtc =
@@ -4289,6 +4294,9 @@ namespace Oxide.Plugins
                 case nameof(InvaderConfig.SpawnWithProtectNearHome):
                     _cfg.SpawnWithProtectNearHome = !_cfg.SpawnWithProtectNearHome;
                     break;
+                case nameof(InvaderConfig.ProtectEmergencyTeleportEnabled):
+                    _cfg.ProtectEmergencyTeleportEnabled = !_cfg.ProtectEmergencyTeleportEnabled;
+                    break;
                 case "ShowInvaderHudList":
                     _cfg.Gui.ShowInvaderHudList = !_cfg.Gui.ShowInvaderHudList;
                     break;
@@ -4621,6 +4629,8 @@ namespace Oxide.Plugins
                 nameof(InvaderConfig.MergeSavedViewerOnSpawn));
             RowToggle("SpawnWithProtectNearHome (new Roaming bots start on protect until task)", _cfg.SpawnWithProtectNearHome,
                 nameof(InvaderConfig.SpawnWithProtectNearHome));
+            RowToggle("ProtectEmergencyTeleportEnabled (last-resort snap; usually leave off)", _cfg.ProtectEmergencyTeleportEnabled,
+                nameof(InvaderConfig.ProtectEmergencyTeleportEnabled));
 
             RowLabel("<b>Streamer HUD</b> (maxxinvaders.admin)", 0.028f);
             AddCuiText(
