@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.26")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.27")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -187,6 +187,11 @@ namespace Oxide.Plugins
             public string DefaultAnchorSteamId { get; set; } = "";
 
             public bool ShouldSerializeDefaultAnchorSteamId() => !string.IsNullOrWhiteSpace(DefaultAnchorSteamId);
+
+            /// <summary>
+            /// When true, new Roaming bridge bots start on bridge task <c>protect</c> (defensive near streamer/home) until you assign wood/gather/etc. Requires a resolvable anchor Steam ID (spawn arg or <see cref="DefaultAnchorSteamId"/>).
+            /// </summary>
+            public bool SpawnWithProtectNearHome { get; set; } = true;
 
             /// <summary>
             /// Roaming bridge: tool cupboard net ID saved from the Tasks tab (or chat). Applied to new spawns and on plugin load.
@@ -1116,12 +1121,16 @@ namespace Oxide.Plugins
 
             _registry.Register(runtime);
 
-            // Without this, RoamingNPCs uses raw template wander (often far from base). Companion pins patrol + protect to anchor.
-            if (isRoaming && anchorSteamResolved != 0UL)
-                TryRoamingApplySquadCompanion(runtime, anchorSteamResolved);
-
             if (isRoaming)
+            {
+                // Bind leash + bridge to DefaultAnchorSteamId when spawn omitted an anchor but config has the streamer.
+                SyncRuntimeAnchorFromDefaultConfigIfUnset(runtime);
+                if (runtime.AnchorSteamId != 0UL)
+                    TryRoamingApplySquadCompanion(runtime, runtime.AnchorSteamId);
                 ApplyPersistedBridgeDefaultsToRuntime(runtime);
+                if (_cfg.SpawnWithProtectNearHome && runtime.AnchorSteamId != 0UL)
+                    TryRoamingApplyBridgeTask(runtime.EntityId, runtime.AnchorSteamId, "protect");
+            }
 
             if (_cfg.PerViewerCooldownSeconds > 0)
                 _viewerCooldownUntil[viewerId] = DateTime.UtcNow.AddSeconds(_cfg.PerViewerCooldownSeconds);
@@ -1286,6 +1295,23 @@ namespace Oxide.Plugins
                     out var steam) || steam < 10000000000000000UL)
                 return null;
             return FindPlayerOrSleeperByUserId(steam);
+        }
+
+        /// <summary>
+        /// After register: if spawn left <see cref="InvaderRuntime.AnchorSteamId"/> at 0 but <see cref="InvaderConfig.DefaultAnchorSteamId"/>
+        /// is set, bind runtime to that streamer so companion / protect / tether match RoamingNPCs bridge.
+        /// </summary>
+        private void SyncRuntimeAnchorFromDefaultConfigIfUnset(InvaderRuntime r)
+        {
+            if (r == null || r.AnchorSteamId != 0UL) return;
+            if (string.IsNullOrWhiteSpace(_cfg.DefaultAnchorSteamId)) return;
+            if (!ulong.TryParse(_cfg.DefaultAnchorSteamId.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out var steam) || steam < 10000000000000000UL)
+                return;
+            r.AnchorSteamId = steam;
+            var ap = FindPlayerOrSleeperByUserId(steam);
+            if (ap != null && ap.IsValid())
+                r.AnchorPosition = ap.transform.position;
         }
 
         private bool TryFindSpawnPosition(BasePlayer anchorPlayer, out Vector3 pos)
@@ -4164,6 +4190,9 @@ namespace Oxide.Plugins
                 case nameof(InvaderConfig.MergeSavedViewerOnSpawn):
                     _cfg.MergeSavedViewerOnSpawn = !_cfg.MergeSavedViewerOnSpawn;
                     break;
+                case nameof(InvaderConfig.SpawnWithProtectNearHome):
+                    _cfg.SpawnWithProtectNearHome = !_cfg.SpawnWithProtectNearHome;
+                    break;
                 case "ShowInvaderHudList":
                     _cfg.Gui.ShowInvaderHudList = !_cfg.Gui.ShowInvaderHudList;
                     break;
@@ -4462,6 +4491,8 @@ namespace Oxide.Plugins
                 nameof(InvaderConfig.PersistViewerIdentity));
             RowToggle("MergeSavedViewerOnSpawn (relay placeholders → restore last)", _cfg.MergeSavedViewerOnSpawn,
                 nameof(InvaderConfig.MergeSavedViewerOnSpawn));
+            RowToggle("SpawnWithProtectNearHome (new Roaming bots start on protect until task)", _cfg.SpawnWithProtectNearHome,
+                nameof(InvaderConfig.SpawnWithProtectNearHome));
 
             RowLabel("<b>Streamer HUD</b> (maxxinvaders.admin)", 0.028f);
             AddCuiText(
