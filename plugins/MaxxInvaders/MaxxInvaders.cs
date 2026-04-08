@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.30")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.31")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -170,6 +170,15 @@ namespace Oxide.Plugins
             /// No further MaxxInvaders path orders after arrival — RoamingNPCs handles combat; we only soft-teleport if they drift outside this ring.
             /// </summary>
             public float ProtectStayRadiusMeters { get; set; } = 5f;
+
+            /// <summary>No protect guard teleports until this many seconds after protect starts — avoids snap fighting spawn + path to streamer.</summary>
+            public float ProtectGuardSettleSeconds { get; set; } = 8f;
+
+            /// <summary>Minimum seconds between protect guard teleports (combat jitter).</summary>
+            public float ProtectSnapCooldownSeconds { get; set; } = 3f;
+
+            /// <summary>Guard snap only if distance exceeds radius × this (reduces rapid port-back while AI jostles near the ring).</summary>
+            public float ProtectSnapHysteresis { get; set; } = 1.45f;
             public float MinimumDistanceFromPlayers { get; set; } = 8f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
             public bool BlockSpawnInMonuments { get; set; } = true;
@@ -716,6 +725,8 @@ namespace Oxide.Plugins
             public ulong AnchorSteamId;
             /// <summary>Last bridge task set from MaxxInvaders (spawn/GUI/RCON). Used for emergency tether — RoamingNPCs <c>GetBridgeTaskLabel</c> infers "protect" from template flags and must not be used for tether.</summary>
             public string BridgeTaskExplicitLast = "";
+            /// <summary>Protect guard teleports allowed only after this UTC (settle window + snap cooldown).</summary>
+            public DateTime? ProtectGuardSnapAllowedAfterUtc;
             public DateTime SpawnedAtUtc;
             public DateTime? ExpiresAtUtc;
         }
@@ -1021,22 +1032,25 @@ namespace Oxide.Plugins
                             /* ignored */
                         }
 
+                        // Second snap fights protect/return-to-streamer when a real anchor exists — optional navmesh fix only when unanchored.
                         var captured = npcPlayer;
                         var capPos = teleportPos;
-                        timer.Once(0.2f, () =>
-                        {
-                            try
+                        var resnapNavmesh = anchorPlayer == null || !anchorPlayer.IsValid();
+                        if (resnapNavmesh)
+                            timer.Once(0.2f, () =>
                             {
-                                if (captured == null || captured.IsDestroyed) return;
-                                captured.Teleport(capPos);
-                                if (ResolveNavMeshPosition(captured.transform.position, out var after2))
-                                    captured.Teleport(after2);
-                            }
-                            catch
-                            {
-                                /* ignored */
-                            }
-                        });
+                                try
+                                {
+                                    if (captured == null || captured.IsDestroyed) return;
+                                    captured.Teleport(capPos);
+                                    if (ResolveNavMeshPosition(captured.transform.position, out var after2))
+                                        captured.Teleport(after2);
+                                }
+                                catch
+                                {
+                                    /* ignored */
+                                }
+                            });
                     }
                     else
                     {
@@ -1875,9 +1889,16 @@ namespace Oxide.Plugins
                 {
                     trackRuntime.BridgeTaskExplicitLast = NormalizeBridgeTaskKey(task);
                     if (trackRuntime.BridgeTaskExplicitLast == "protect")
+                    {
                         trackRuntime.ReturnRunActive = true;
+                        trackRuntime.ProtectGuardSnapAllowedAfterUtc = DateTime.UtcNow.AddSeconds(
+                            Mathf.Max(1f, _cfg.ProtectGuardSettleSeconds));
+                    }
                     else
+                    {
                         trackRuntime.ReturnRunActive = false;
+                        trackRuntime.ProtectGuardSnapAllowedAfterUtc = null;
+                    }
                 }
 
                 return ok;
@@ -2171,28 +2192,39 @@ namespace Oxide.Plugins
                     r.ReturnRunActive = false;
                 }
 
-                // Protect only: keep bot inside guard ring around streamer (drift / chase). Other Roaming tasks: no tether.
+                // Protect only: snap back if clearly outside guard (hysteresis + settle + cooldown — avoids port spam vs RoamingNPCs).
                 if (r.IsRoamingNpc && RoamingExplicitTaskIsProtectTether(r))
                 {
-                    var guard = Mathf.Clamp(_cfg.ProtectStayRadiusMeters, 2f, 40f);
-                    var anchor = r.AnchorPosition;
-                    if (anchor != Vector3.zero && Vector3.Distance(pos, anchor) > guard)
-                    {
-                        var back = anchor + Random.insideUnitSphere.Flatten() * Mathf.Min(1.85f, guard * 0.38f);
-                        back.y = TerrainMeta.HeightMap.GetHeight(back);
-                        if (ResolveNavMeshPosition(back, out var onMesh))
-                            back = onMesh;
-                        try
-                        {
-                            r.NpcPlayer.Teleport(back);
-                        }
-                        catch
-                        {
-                            /* ignored */
-                        }
+                    if (!r.ProtectGuardSnapAllowedAfterUtc.HasValue)
+                        r.ProtectGuardSnapAllowedAfterUtc =
+                            DateTime.UtcNow.AddSeconds(Mathf.Max(1f, _cfg.ProtectGuardSettleSeconds));
 
-                        pos = r.NpcPlayer.transform.position;
-                        UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
+                    if (DateTime.UtcNow >= r.ProtectGuardSnapAllowedAfterUtc.Value)
+                    {
+                        var guard = Mathf.Clamp(_cfg.ProtectStayRadiusMeters, 2f, 40f);
+                        var snapAt = guard * Mathf.Clamp(_cfg.ProtectSnapHysteresis, 1.12f, 2.5f);
+                        var anchor = r.AnchorPosition;
+                        var distA = anchor != Vector3.zero ? Vector3.Distance(pos, anchor) : 0f;
+                        if (anchor != Vector3.zero && distA > snapAt)
+                        {
+                            var back = anchor + Random.insideUnitSphere.Flatten() * Mathf.Min(1.85f, guard * 0.38f);
+                            back.y = TerrainMeta.HeightMap.GetHeight(back);
+                            if (ResolveNavMeshPosition(back, out var onMesh))
+                                back = onMesh;
+                            try
+                            {
+                                r.NpcPlayer.Teleport(back);
+                            }
+                            catch
+                            {
+                                /* ignored */
+                            }
+
+                            r.ProtectGuardSnapAllowedAfterUtc = DateTime.UtcNow.AddSeconds(
+                                Mathf.Max(0.35f, _cfg.ProtectSnapCooldownSeconds));
+                            pos = r.NpcPlayer.transform.position;
+                            UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
+                        }
                     }
                 }
                 else if (!r.IsRoamingNpc && _cfg.MaxDistanceFromAnchor > 5f)
@@ -4358,6 +4390,30 @@ namespace Oxide.Plugins
                     }
 
                     break;
+                case nameof(InvaderConfig.ProtectGuardSettleSeconds):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var pgs))
+                    {
+                        _cfg.ProtectGuardSettleSeconds = Mathf.Clamp(pgs, 0f, 120f);
+                        SaveConfig();
+                    }
+
+                    break;
+                case nameof(InvaderConfig.ProtectSnapCooldownSeconds):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var psc))
+                    {
+                        _cfg.ProtectSnapCooldownSeconds = Mathf.Clamp(psc, 0f, 60f);
+                        SaveConfig();
+                    }
+
+                    break;
+                case nameof(InvaderConfig.ProtectSnapHysteresis):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var psh))
+                    {
+                        _cfg.ProtectSnapHysteresis = Mathf.Clamp(psh, 1.05f, 3f);
+                        SaveConfig();
+                    }
+
+                    break;
                 case nameof(InvaderConfig.MinimumSpawnRadiusFromAnchor):
                     if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var minr))
                     {
@@ -4698,6 +4754,14 @@ namespace Oxide.Plugins
                 _cfg.DefaultSpawnRadius.ToString(CultureInfo.InvariantCulture));
             RowNum("MaxDistanceFromAnchor", nameof(InvaderConfig.MaxDistanceFromAnchor),
                 _cfg.MaxDistanceFromAnchor.ToString(CultureInfo.InvariantCulture));
+            RowNum("ProtectStayRadiusMeters", nameof(InvaderConfig.ProtectStayRadiusMeters),
+                _cfg.ProtectStayRadiusMeters.ToString(CultureInfo.InvariantCulture));
+            RowNum("ProtectGuardSettleSeconds", nameof(InvaderConfig.ProtectGuardSettleSeconds),
+                _cfg.ProtectGuardSettleSeconds.ToString(CultureInfo.InvariantCulture));
+            RowNum("ProtectSnapCooldownSeconds", nameof(InvaderConfig.ProtectSnapCooldownSeconds),
+                _cfg.ProtectSnapCooldownSeconds.ToString(CultureInfo.InvariantCulture));
+            RowNum("ProtectSnapHysteresis", nameof(InvaderConfig.ProtectSnapHysteresis),
+                _cfg.ProtectSnapHysteresis.ToString(CultureInfo.InvariantCulture));
             RowNum("MinimumDistanceFromPlayers", nameof(InvaderConfig.MinimumDistanceFromPlayers),
                 _cfg.MinimumDistanceFromPlayers.ToString(CultureInfo.InvariantCulture));
             RowNum("SpawnAttempts", nameof(InvaderConfig.SpawnAttempts), _cfg.SpawnAttempts.ToString());
