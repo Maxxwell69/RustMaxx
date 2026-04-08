@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.24")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.25")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1340,6 +1340,18 @@ namespace Oxide.Plugins
             return null;
         }
 
+        /// <summary>Leash / return-run target position: streamer body when online or sleeping; else admin fallback.</summary>
+        private static Vector3 ResolveLeashPositionForAnchorSteam(ulong anchorSteamId, BasePlayer issuerFallback)
+        {
+            if (anchorSteamId != 0UL)
+            {
+                var ap = FindPlayerOrSleeperByUserId(anchorSteamId);
+                if (ap != null && ap.IsValid()) return ap.transform.position;
+            }
+
+            return issuerFallback != null ? issuerFallback.transform.position : Vector3.zero;
+        }
+
         /// <param name="excludeUserId">Anchor streamer — ignored so viewer bots can spawn a few meters from you.</param>
         private static bool TooCloseToPlayers(Vector3 pos, float minDist, ulong excludeUserId = 0UL)
         {
@@ -1471,26 +1483,32 @@ namespace Oxide.Plugins
         /// <summary>
         /// Re-runs RoamingNPCs bridge companion (Defensive personality + bodyguard flags) without starting a new follow pathing pulse.
         /// Use after <see cref="ApplyFollowAnchorToAllActive"/> if bots went passive (Friendly template).
+        /// Preserves each bot’s <see cref="InvaderRuntime.AnchorSteamId"/> (TikFinity streamer) so tether + RoamingNPCs use the same anchor — not the admin clicking the button.
         /// </summary>
         private void ApplyProtectionModeToAllActive(BasePlayer issuer)
         {
             if (issuer == null) return;
-            var uid = issuer.userID;
             var n = 0;
             var roaming = 0;
             foreach (var r in _registry.All().ToArray())
             {
                 if (r.NpcPlayer == null || r.NpcPlayer.IsDestroyed) continue;
-                r.AnchorSteamId = uid;
-                r.AnchorPosition = issuer.transform.position;
+                var steamForBridge = r.AnchorSteamId != 0UL ? r.AnchorSteamId : issuer.userID;
+                if (steamForBridge == 0UL) continue;
+                if (r.AnchorSteamId == 0UL) r.AnchorSteamId = steamForBridge;
+
+                r.AnchorPosition = ResolveLeashPositionForAnchorSteam(r.AnchorSteamId, issuer);
                 n++;
-                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, uid))
+                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, steamForBridge))
+                {
                     roaming++;
+                    TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect");
+                }
             }
 
             issuer.ChatMessage(
                 roaming > 0
-                    ? $"[MaxxInvaders] Protection mode restored on {roaming} RoamingNPCs bot(s) (Defensive + streamer bodyguard). Anchor = you."
+                    ? $"[MaxxInvaders] Protection mode on {roaming} Roaming bot(s): companion + protect task use each bot’s streamer anchor (tether follows streamer, not you)."
                     : n > 0
                         ? "[MaxxInvaders] No RoamingNPCs bots — protection applies to Roaming bridge bots only."
                         : "[MaxxInvaders] No active invaders.");
@@ -1505,10 +1523,21 @@ namespace Oxide.Plugins
                 return;
             }
 
-            r.AnchorSteamId = issuer.userID;
-            r.AnchorPosition = issuer.transform.position;
-            if (TryRoamingApplySquadCompanion(r, issuer.userID))
-                issuer.ChatMessage("[MaxxInvaders] Protection mode restored for this bot.");
+            var steamForBridge = r.AnchorSteamId != 0UL ? r.AnchorSteamId : issuer.userID;
+            if (steamForBridge == 0UL)
+            {
+                issuer.ChatMessage("[MaxxInvaders] No anchor Steam ID on this bot.");
+                return;
+            }
+
+            if (r.AnchorSteamId == 0UL) r.AnchorSteamId = steamForBridge;
+            r.AnchorPosition = ResolveLeashPositionForAnchorSteam(r.AnchorSteamId, issuer);
+            if (TryRoamingApplySquadCompanion(r, steamForBridge))
+            {
+                TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect");
+                issuer.ChatMessage(
+                    "[MaxxInvaders] Protection mode restored for this bot (streamer anchor + tether center).");
+            }
             else
                 issuer.ChatMessage("[MaxxInvaders] RoamingNPCs.ApplySquadCompanionMode failed (plugin unloaded or bot not tracked).");
         }
@@ -6626,10 +6655,14 @@ namespace Oxide.Plugins
                     player.ChatMessage("[MaxxInvaders] NPC not found.");
                 else
                 {
-                    rr.AnchorPosition = player.transform.position;
+                    var steam = rr.AnchorSteamId != 0UL ? rr.AnchorSteamId : player.userID;
+                    if (rr.AnchorSteamId == 0UL) rr.AnchorSteamId = steam;
+                    rr.AnchorPosition = ResolveLeashPositionForAnchorSteam(steam, player);
                     rr.ReturnRunActive = true;
                     player.ChatMessage(
-                        "[MaxxInvaders] Bot is pathing back to within 20m of you (not a teleport).");
+                        rr.AnchorSteamId != 0UL && rr.AnchorSteamId != player.userID
+                            ? "[MaxxInvaders] Bot is pathing back toward the streamer anchor (within 20 m)."
+                            : "[MaxxInvaders] Bot is pathing back to within 20 m of you (not a teleport).");
                 }
 
                 OpenGui(player, GetGuiPage(player.userID));
