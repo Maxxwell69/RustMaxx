@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.22")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.23")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -117,6 +117,7 @@ namespace Oxide.Plugins
             if (_cfg.PersistIntervalSeconds > 0)
                 _persistTimer = timer.Every(_cfg.PersistIntervalSeconds, () => SaveDataFile());
             _overlayTimer = timer.Every(0.35f, RefreshInvaderStreamerOverlays);
+            timer.Once(2.5f, ApplyPersistedBridgeDefaultsToAllRoaming);
         }
 
         private void Unload()
@@ -186,6 +187,23 @@ namespace Oxide.Plugins
             public string DefaultAnchorSteamId { get; set; } = "";
 
             public bool ShouldSerializeDefaultAnchorSteamId() => !string.IsNullOrWhiteSpace(DefaultAnchorSteamId);
+
+            /// <summary>
+            /// Roaming bridge: tool cupboard net ID saved from the Tasks tab (or chat). Applied to new spawns and on plugin load.
+            /// Empty = not set. OwnerID must still match each bot’s anchor when applied.
+            /// </summary>
+            public string PersistedHomeToolCupboardNetId { get; set; } = "";
+
+            public bool ShouldSerializePersistedHomeToolCupboardNetId() =>
+                !string.IsNullOrWhiteSpace(PersistedHomeToolCupboardNetId);
+
+            /// <summary>
+            /// Roaming bridge: deposit storage net ID saved from the Tasks tab. Applied with <see cref="PersistedHomeToolCupboardNetId"/>.
+            /// </summary>
+            public string PersistedDepositBoxNetId { get; set; } = "";
+
+            public bool ShouldSerializePersistedDepositBoxNetId() =>
+                !string.IsNullOrWhiteSpace(PersistedDepositBoxNetId);
 
             /// <summary>
             /// When true and RoamingNPCs is loaded, spawns use that plugin’s bot templates (full gather/hunt/roam AI).
@@ -1102,6 +1120,9 @@ namespace Oxide.Plugins
             if (isRoaming && anchorSteamResolved != 0UL)
                 TryRoamingApplySquadCompanion(runtime, anchorSteamResolved);
 
+            if (isRoaming)
+                ApplyPersistedBridgeDefaultsToRuntime(runtime);
+
             if (_cfg.PerViewerCooldownSeconds > 0)
                 _viewerCooldownUntil[viewerId] = DateTime.UtcNow.AddSeconds(_cfg.PerViewerCooldownSeconds);
 
@@ -1809,6 +1830,87 @@ namespace Oxide.Plugins
                 PrintWarning($"{LogPrefix} RoamingNPCs.SetBridgeHomeCupboard: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>Apply <see cref="InvaderConfig.PersistedHomeToolCupboardNetId"/> / deposit from config after spawn or reload.</summary>
+        private void ApplyPersistedBridgeDefaultsToRuntime(InvaderRuntime r)
+        {
+            if (r == null || !r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed) return;
+            var anchor = r.AnchorSteamId;
+            if (anchor == 0UL) return;
+
+            if (ulong.TryParse(_cfg.PersistedHomeToolCupboardNetId?.Trim(), NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out var homeNet) && homeNet != 0UL)
+                TryRoamingSetBridgeHomeCupboard(r.EntityId, anchor, homeNet);
+
+            if (ulong.TryParse(_cfg.PersistedDepositBoxNetId?.Trim(), NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out var depNet) && depNet != 0UL)
+                TryRoamingSetBridgeDepositBox(r.EntityId, anchor, depNet);
+        }
+
+        private void ApplyPersistedBridgeDefaultsToAllRoaming()
+        {
+            foreach (var r in _registry.All().ToArray())
+                ApplyPersistedBridgeDefaultsToRuntime(r);
+        }
+
+        /// <summary>Look at TC, save net ID to config, assign all Roaming bots (same as ALL HOME).</summary>
+        private void SavePersistedHomeFromLook(BasePlayer player)
+        {
+            if (player == null) return;
+            if (!TryGetBuildingPrivlidgeFromPlayerLook(player, DepositBoxLookRayMeters, out var priv) || priv == null ||
+                priv.IsDestroyed)
+            {
+                player.ChatMessage(
+                    $"[MaxxInvaders] Look at a tool cupboard within {DepositBoxLookRayMeters:F0}m to save home.");
+                return;
+            }
+
+            var net = priv.net.ID.Value;
+            _cfg.PersistedHomeToolCupboardNetId = net.ToString(CultureInfo.InvariantCulture);
+            SaveConfig();
+            AssignHomeCupboardFromLookForAllRoaming(player);
+            player.ChatMessage(
+                $"[MaxxInvaders] Saved home TC net {net} to config. New Roaming spawns and reloads apply it automatically.");
+        }
+
+        /// <summary>Look at storage, save net ID to config, assign all Roaming bots (same as ALL DEPOSIT / middle mouse).</summary>
+        private void SavePersistedDepositFromLook(BasePlayer player)
+        {
+            if (player == null) return;
+            if (!TryGetStorageFromPlayerLook(player, DepositBoxLookRayMeters, out var sc) || sc == null || sc.IsDestroyed)
+            {
+                player.ChatMessage(
+                    $"[MaxxInvaders] Look at a box within {DepositBoxLookRayMeters:F0}m to save deposit target.");
+                return;
+            }
+
+            var boxNet = sc.net.ID.Value;
+            _cfg.PersistedDepositBoxNetId = boxNet.ToString(CultureInfo.InvariantCulture);
+            SaveConfig();
+            AssignDepositBoxFromLookForAllRoaming(player);
+            player.ChatMessage(
+                $"[MaxxInvaders] Saved deposit box net {boxNet} to config. New Roaming spawns and reloads apply it automatically.");
+        }
+
+        /// <summary>Store issuing player as <see cref="InvaderConfig.DefaultAnchorSteamId"/> (TikFinity/RCON spawns without anchor).</summary>
+        private void SaveStreamerAnchorFromIssuer(BasePlayer player)
+        {
+            if (player == null) return;
+            _cfg.DefaultAnchorSteamId = player.userID.ToString(CultureInfo.InvariantCulture);
+            SaveConfig();
+            player.ChatMessage(
+                $"[MaxxInvaders] Default streamer anchor saved ({_cfg.DefaultAnchorSteamId}). Spawns that omit an anchor use this; protect/gather follow each bot’s anchor when set.");
+        }
+
+        private void ClearPersistedBaseFromConfig(BasePlayer player)
+        {
+            if (player == null) return;
+            _cfg.PersistedHomeToolCupboardNetId = "";
+            _cfg.PersistedDepositBoxNetId = "";
+            SaveConfig();
+            player.ChatMessage(
+                "[MaxxInvaders] Cleared persisted home TC and deposit box from config (live bots unchanged). Set SAVE HOME / SAVE DEPOSIT again to store new IDs.");
         }
 
         private string TryRoamingGetBridgeTaskLabel(ulong entityNetId)
@@ -2711,7 +2813,7 @@ namespace Oxide.Plugins
             if (args == null || args.Length == 0)
             {
                 player.ChatMessage(
-                    "Usage: /maxxinvaders ui | … | box … | boxall look | home … | homeall look | …  (middle mouse = deposit box; home = tool cupboard for far roam; tasks: wood … mixed …)");
+                    "Usage: /maxxinvaders ui | … | savehomelook | savedepositlook | savestreamer | clearpersistbase | box … | homeall look | …");
                 return;
             }
 
@@ -3017,6 +3119,43 @@ namespace Oxide.Plugins
                     }
 
                     AssignHomeCupboardFromLookForAllRoaming(player);
+                    break;
+                case "savehomelook":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    SavePersistedHomeFromLook(player);
+                    break;
+                case "savedepositlook":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    SavePersistedDepositFromLook(player);
+                    break;
+                case "savestreamer":
+                case "savestreameranchor":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    SaveStreamerAnchorFromIssuer(player);
+                    break;
+                case "clearpersistbase":
+                    if (!CanAdmin(player))
+                    {
+                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        return;
+                    }
+
+                    ClearPersistedBaseFromConfig(player);
                     break;
                 case "debug":
                     if (!permission.UserHasPermission(player.UserIDString, PermDebug) && !player.IsAdmin)
@@ -4034,6 +4173,16 @@ namespace Oxide.Plugins
                     _cfg.DefaultAnchorSteamId = t;
                     SaveConfig();
                 }
+            }
+            else if (field == nameof(InvaderConfig.PersistedHomeToolCupboardNetId))
+            {
+                _cfg.PersistedHomeToolCupboardNetId = string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+                SaveConfig();
+            }
+            else if (field == nameof(InvaderConfig.PersistedDepositBoxNetId))
+            {
+                _cfg.PersistedDepositBoxNetId = string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+                SaveConfig();
             }
         }
 
@@ -5275,21 +5424,77 @@ namespace Oxide.Plugins
                 15,
                 TextAnchor.MiddleLeft,
                 "0.95 0.97 1 1");
+            var homeBrief = string.IsNullOrWhiteSpace(_cfg.PersistedHomeToolCupboardNetId)
+                ? "—"
+                : _cfg.PersistedHomeToolCupboardNetId.Trim();
+            var depBrief = string.IsNullOrWhiteSpace(_cfg.PersistedDepositBoxNetId)
+                ? "—"
+                : _cfg.PersistedDepositBoxNetId.Trim();
+            var anchorBrief = string.IsNullOrWhiteSpace(_cfg.DefaultAnchorSteamId)
+                ? "—"
+                : _cfg.DefaultAnchorSteamId.Trim();
             AddCuiText(
                 container,
                 contentPanel,
-                $"On map: {bots.Count} invader(s) · Roaming (bridge): {roam}. Scroll: Wd/St/Cl/Hu/Pr/Ga/Mx/Id/Dep. Deposit: middle mouse or boxall look. Home TC (far roam): ALL HOME (look at cupboard) or homeall look.",
+                $"On map: {bots.Count} invader(s) · Roaming: {roam}. Far roam / deposit: ALL HOME / ALL DEPOSIT (look), or SAVE * below to persist in config.",
                 "0.03 0.875",
-                "0.97 0.925",
+                "0.97 0.905",
                 10,
                 TextAnchor.UpperLeft,
                 "0.65 0.75 0.88 1");
+            AddCuiText(
+                container,
+                contentPanel,
+                $"Saved in config — Home TC net: {homeBrief} · Deposit box net: {depBrief} · Default anchor: {anchorBrief}",
+                "0.03 0.805",
+                "0.97 0.838",
+                9,
+                TextAnchor.UpperLeft,
+                "0.72 0.78 0.92 1");
+            const string cSave = "0.28 0.42 0.38 0.95";
+            const string cClr = "0.35 0.22 0.22 0.95";
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui savehomelook",
+                cSave,
+                "SAVE HOME",
+                "0.03 0.745",
+                "0.31 0.798",
+                10);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui savedepositlook",
+                cSave,
+                "SAVE DEPOSIT",
+                "0.32 0.745",
+                "0.60 0.798",
+                10);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui savestreameranchor",
+                cSave,
+                "SAVE STREAMER",
+                "0.61 0.745",
+                "0.82 0.798",
+                10);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui clearpersistbase",
+                cClr,
+                "CLR",
+                "0.83 0.745",
+                "0.97 0.798",
+                9);
 
             var scrollHost = container.Add(
                 new CuiPanel
                 {
                     Image = { Color = "0.07 0.08 0.10 0.96" },
-                    RectTransform = { AnchorMin = "0.02 0.33", AnchorMax = "0.98 0.87" },
+                    RectTransform = { AnchorMin = "0.02 0.33", AnchorMax = "0.98 0.738" },
                     CursorEnabled = true,
                 },
                 contentPanel);
@@ -6241,6 +6446,34 @@ namespace Oxide.Plugins
             if (args[0] == "homeall" && args.Length > 1 && args[1].Equals("look", StringComparison.OrdinalIgnoreCase))
             {
                 AssignHomeCupboardFromLookForAllRoaming(player);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "savehomelook")
+            {
+                SavePersistedHomeFromLook(player);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "savedepositlook")
+            {
+                SavePersistedDepositFromLook(player);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "savestreameranchor")
+            {
+                SaveStreamerAnchorFromIssuer(player);
+                OpenGui(player, GetGuiPage(player.userID));
+                return;
+            }
+
+            if (args[0] == "clearpersistbase")
+            {
+                ClearPersistedBaseFromConfig(player);
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
