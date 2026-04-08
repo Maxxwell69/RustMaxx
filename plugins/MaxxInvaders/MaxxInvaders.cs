@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.34")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.35")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -4134,7 +4134,6 @@ namespace Oxide.Plugins
                         {
                             Color = bgColor,
                             Command = command,
-                            Material = "Assets/Content/UI/UI.Background.Tile.psd",
                         },
                         new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax },
                     },
@@ -4521,8 +4520,6 @@ namespace Oxide.Plugins
                         new CuiImageComponent
                         {
                             Color = "0.07 0.08 0.10 0.35",
-                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                            ImageType = Image.Type.Tiled,
                         },
                         new CuiScrollViewComponent
                         {
@@ -5175,8 +5172,6 @@ namespace Oxide.Plugins
                         new CuiImageComponent
                         {
                             Color = "0.06 0.07 0.09 0.92",
-                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                            ImageType = Image.Type.Tiled,
                         },
                         new CuiScrollViewComponent
                         {
@@ -5248,8 +5243,6 @@ namespace Oxide.Plugins
                             new CuiImageComponent
                             {
                                 Color = "0.1 0.12 0.15 0.94",
-                                Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                                ImageType = Image.Type.Tiled,
                             },
                             new CuiRectTransformComponent
                             {
@@ -5310,8 +5303,6 @@ namespace Oxide.Plugins
                         new CuiImageComponent
                         {
                             Color = "0.08 0.08 0.11 0.95",
-                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                            ImageType = Image.Type.Tiled,
                         },
                         new CuiScrollViewComponent
                         {
@@ -5366,8 +5357,6 @@ namespace Oxide.Plugins
                             new CuiImageComponent
                             {
                                 Color = uiCard,
-                                Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                                ImageType = Image.Type.Tiled,
                             },
                             new CuiRectTransformComponent
                             {
@@ -5489,8 +5478,6 @@ namespace Oxide.Plugins
                         new CuiImageComponent
                         {
                             Color = "0.08 0.08 0.11 0.95",
-                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                            ImageType = Image.Type.Tiled,
                         },
                         new CuiScrollViewComponent
                         {
@@ -5545,8 +5532,6 @@ namespace Oxide.Plugins
                             new CuiImageComponent
                             {
                                 Color = uiCard,
-                                Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                                ImageType = Image.Type.Tiled,
                             },
                             new CuiRectTransformComponent
                             {
@@ -5878,8 +5863,6 @@ namespace Oxide.Plugins
                         new CuiImageComponent
                         {
                             Color = "0.08 0.08 0.11 0.95",
-                            Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                            ImageType = Image.Type.Tiled,
                         },
                         new CuiScrollViewComponent
                         {
@@ -5934,8 +5917,6 @@ namespace Oxide.Plugins
                             new CuiImageComponent
                             {
                                 Color = uiCard,
-                                Sprite = "Assets/Content/UI/UI.Background.Tile.psd",
-                                ImageType = Image.Type.Tiled,
                             },
                             new CuiRectTransformComponent
                             {
