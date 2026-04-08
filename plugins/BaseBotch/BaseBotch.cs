@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.5.0")]
+    [Info("BaseBotch", "RustMaxx", "1.5.1")]
     [Description("Base automation: water wheel mount/autorun, and NPC mixing-table crafting (ingredients from bot bag).")]
     public class BaseBotch : RustPlugin
     {
@@ -123,6 +123,28 @@ namespace Oxide.Plugins
 
             /// <summary>Invoke wheel-specific methods via reflection (experimental; can be disabled if mounts drop).</summary>
             public bool AutorunInvokeWheelMethods = false;
+
+            // --- Mixing table (NPC workstation) ---
+            public float MixingLookRayDistanceMeters = 6f;
+            public float MixingPollSeconds = 2.25f;
+            public bool MixingPauseRoamingAi = true;
+            public bool MixingTeleportNpcToStand = true;
+            public float MixingStandOffsetMeters = 1.15f;
+            public bool MixingDebugReflection = false;
+
+            /// <summary>Recipe id → ordered ingredients (slot order matters on the table).</summary>
+            public Dictionary<string, MixingRecipeCfg> MixingRecipes = new()
+            {
+                ["lowgrade_fuel"] = new MixingRecipeCfg
+                {
+                    DisplayName = "Low grade fuel",
+                    Ingredients = new List<MixingIngredientCfg>
+                    {
+                        new() { ShortName = "fat.animal", Amount = 3 },
+                        new() { ShortName = "cloth", Amount = 1 },
+                    },
+                },
+            };
         }
 
         protected override void LoadDefaultConfig()
