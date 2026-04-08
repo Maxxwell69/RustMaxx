@@ -12,8 +12,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.4.17")]
-    [Description("Base automation: mount Roaming NPCs on deployables (e.g. electric water wheel), autorun input, dismount.")]
+    [Info("BaseBotch", "RustMaxx", "1.5.0")]
+    [Description("Base automation: water wheel mount/autorun, and NPC mixing-table crafting (ingredients from bot bag).")]
     public class BaseBotch : RustPlugin
     {
         [PluginReference] private Plugin RoamingNPCs;
@@ -28,6 +28,36 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, bool> _wheelMemberDumped = new();
         private readonly Dictionary<ulong, bool> _wheelMountedSyncEnabled = new();
         private Timer _autorunTimer;
+        private Timer _mixingPollTimer;
+
+        private readonly Dictionary<ulong, MixingStationSession> _mixingByNpcNetId = new();
+        private readonly Dictionary<ulong, MixingRestoreState> _mixingRestorePending = new();
+        private static bool _mixingStartMixLoggedFail;
+
+        private sealed class MixingStationSession
+        {
+            public ulong TableNetId;
+            public string RecipeId;
+            public ulong AnchorSteam;
+        }
+
+        private sealed class MixingRestoreState
+        {
+            public string TaskKeyword;
+            public ulong AnchorSteam;
+        }
+
+        private sealed class MixingIngredientCfg
+        {
+            public string ShortName = "";
+            public int Amount = 1;
+        }
+
+        private sealed class MixingRecipeCfg
+        {
+            public string DisplayName = "";
+            public List<MixingIngredientCfg> Ingredients = new();
+        }
 
         private sealed class WheelRestoreState
         {
@@ -120,6 +150,10 @@ namespace Oxide.Plugins
                 _autorunTimer.Destroy();
             var interval = Mathf.Clamp(_cfg.AutorunTickSeconds, 0.01f, 0.25f);
             _autorunTimer = timer.Every(interval, AutorunTick);
+            if (_mixingPollTimer != null && !_mixingPollTimer.Destroyed)
+                _mixingPollTimer.Destroy();
+            var mixIv = Mathf.Clamp(_cfg.MixingPollSeconds, 0.75f, 10f);
+            _mixingPollTimer = timer.Every(mixIv, MixingStationPollTick);
         }
 
         private void CacheReflectionTypes()
@@ -195,7 +229,11 @@ namespace Oxide.Plugins
                 _autorunNpcNetIds.Remove(id);
                 _npcToTrackedMountNetId.Remove(id);
                 TryRestoreWheelRoamTask(id);
+                StopMixingSessionInternal(id, restoreRoam: true, issuer: null);
             }
+
+            if (entity is MixingTable mt && mt.net != null)
+                RemoveMixingSessionsForTable(mt.net.ID.Value);
         }
 
         private void AutorunTick()
@@ -1711,6 +1749,9 @@ namespace Oxide.Plugins
                 case "cloth":
                 case "hunt":
                 case "protect":
+                case "follow":
+                case "guard":
+                case "deposit":
                 case "gather":
                 case "mixed":
                 case "idle":
@@ -2115,5 +2156,509 @@ namespace Oxide.Plugins
 
             return null;
         }
+
+        #region Mixing table workstation
+
+        private void RemoveMixingSessionsForTable(ulong tableNetId)
+        {
+            var toClear = new List<ulong>();
+            foreach (var kv in _mixingByNpcNetId)
+            {
+                if (kv.Value != null && kv.Value.TableNetId == tableNetId)
+                    toClear.Add(kv.Key);
+            }
+
+            foreach (var nid in toClear)
+                StopMixingSessionInternal(nid, restoreRoam: true, issuer: null);
+        }
+
+        private void StopMixingSessionInternal(ulong npcNetId, bool restoreRoam, BasePlayer issuer)
+        {
+            _mixingByNpcNetId.Remove(npcNetId);
+            if (restoreRoam)
+                TryRestoreMixingRoamTask(npcNetId);
+            if (issuer != null && !issuer.IsDestroyed)
+                issuer.ChatMessage("[BaseBotch] Mixing station duty stopped for that bot.");
+        }
+
+        private void SaveMixingSessionAndPauseRoam(BasePlayer npc, ulong anchorSteam)
+        {
+            if (npc?.net == null) return;
+            var id = npc.net.ID.Value;
+            _mixingRestorePending.Remove(id);
+            var taskKw = "gather";
+            if (RoamingNPCs != null && RoamingNPCs.IsLoaded)
+            {
+                try
+                {
+                    var raw = RoamingNPCs.Call("GetBridgeTaskLabel", id);
+                    taskKw = NormalizeTaskKeyword(raw?.ToString() ?? "");
+                }
+                catch
+                {
+                    taskKw = "gather";
+                }
+            }
+
+            _mixingRestorePending[id] = new MixingRestoreState { TaskKeyword = taskKw, AnchorSteam = anchorSteam };
+            if (!_cfg.MixingPauseRoamingAi || RoamingNPCs == null || !RoamingNPCs.IsLoaded) return;
+            try
+            {
+                RoamingNPCs.Call("ApplyBridgeTask", id, anchorSteam, "idle");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[BaseBotch] ApplyBridgeTask idle before mixing: {ex.Message}");
+            }
+        }
+
+        private void TryRestoreMixingRoamTask(ulong npcNetId)
+        {
+            if (!_mixingRestorePending.TryGetValue(npcNetId, out var st)) return;
+            _mixingRestorePending.Remove(npcNetId);
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return;
+            var kw = (st.TaskKeyword ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(kw) || kw == "idle")
+                kw = "mixed";
+            try
+            {
+                RoamingNPCs.Call("ApplyBridgeTask", npcNetId, st.AnchorSteam, kw);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[BaseBotch] Restore bridge task after mixing: {ex.Message}");
+            }
+        }
+
+        private void MixingStationPollTick()
+        {
+            if (_mixingByNpcNetId.Count == 0) return;
+            var copy = new List<KeyValuePair<ulong, MixingStationSession>>(_mixingByNpcNetId);
+            foreach (var kv in copy)
+                ProcessOneMixingSession(kv.Key, kv.Value);
+        }
+
+        private void ProcessOneMixingSession(ulong npcNetId, MixingStationSession session)
+        {
+            if (session == null) return;
+            var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcNetId)) as BasePlayer;
+            if (npc == null || npc.IsDestroyed || !npc.IsNpc)
+            {
+                _mixingByNpcNetId.Remove(npcNetId);
+                return;
+            }
+
+            var tableEnt = BaseNetworkable.serverEntities.Find(new NetworkableId(session.TableNetId));
+            var table = tableEnt as MixingTable;
+            if (table == null || table.IsDestroyed)
+            {
+                StopMixingSessionInternal(npcNetId, restoreRoam: true, issuer: null);
+                return;
+            }
+
+            if (_cfg.MixingTeleportNpcToStand &&
+                Vector3.Distance(npc.transform.position, table.transform.position) > 3.2f)
+                TryTeleportNpcNearMixingTable(npc, table);
+
+            if (!TryResolveMixingContainers(table, out var ingredientContainer, out var outputContainer))
+            {
+                if (_cfg.MixingDebugReflection)
+                    PrintWarning("[BaseBotch] Mixing: could not resolve ingredient/output ItemContainers (check game build).");
+                return;
+            }
+
+            if (MixingTableIsBusy(table))
+                return;
+
+            if (outputContainer != null)
+                MoveAllItemsToPlayer(npc, outputContainer);
+
+            if (!_cfg.MixingRecipes.TryGetValue(session.RecipeId ?? "", out var recipe) || recipe?.Ingredients == null ||
+                recipe.Ingredients.Count == 0)
+                return;
+
+            if (!TryClearContainer(ingredientContainer))
+                return;
+
+            if (!TryDepositRecipeFromPlayer(npc, ingredientContainer, recipe))
+                return;
+
+            if (!TryInvokeStartMix(table, npc) && !_mixingStartMixLoggedFail)
+            {
+                _mixingStartMixLoggedFail = true;
+                PrintWarning(
+                    "[BaseBotch] Mixing: could not invoke a StartMix-style method on MixingTable via reflection. " +
+                    "Ingredients are placed; you may need a game update or report your Rust build to RustMaxx.");
+            }
+        }
+
+        private static void MoveAllItemsToPlayer(BasePlayer npc, ItemContainer container)
+        {
+            if (npc?.inventory?.containerMain == null || container == null) return;
+            var dest = npc.inventory.containerMain;
+            for (var i = container.itemList.Count - 1; i >= 0; i--)
+            {
+                var it = container.itemList[i];
+                if (it == null) continue;
+                if (!it.MoveToContainer(dest)) it.Drop(npc.transform.position, npc.GetDropVelocity());
+            }
+        }
+
+        private static bool TryClearContainer(ItemContainer c)
+        {
+            if (c == null) return false;
+            try
+            {
+                for (var i = c.itemList.Count - 1; i >= 0; i--)
+                {
+                    var it = c.itemList[i];
+                    it?.RemoveFromContainer();
+                    it?.Remove();
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryDepositRecipeFromPlayer(BasePlayer npc, ItemContainer dest, MixingRecipeCfg recipe)
+        {
+            if (npc?.inventory?.containerMain == null || dest == null) return false;
+            var src = npc.inventory.containerMain;
+            var slot = 0;
+            foreach (var ing in recipe.Ingredients)
+            {
+                if (ing == null || string.IsNullOrWhiteSpace(ing.ShortName) || ing.Amount <= 0) continue;
+                var def = ItemManager.FindItemDefinition(ing.ShortName.Trim());
+                if (def == null) return false;
+                var need = ing.Amount;
+                var item = FindItemInContainer(src, def);
+                if (item == null || item.amount < need) return false;
+                var stack = need >= item.amount ? item : item.SplitItem(need);
+                if (stack == null || stack.amount < need) return false;
+                if (!stack.MoveToContainer(dest, slot, true))
+                {
+                    stack.Drop(npc.transform.position, npc.GetDropVelocity());
+                    return false;
+                }
+
+                slot++;
+            }
+
+            return true;
+        }
+
+        private static Item FindItemInContainer(ItemContainer c, ItemDefinition def)
+        {
+            if (c == null || def == null) return null;
+            foreach (var it in c.itemList)
+            {
+                if (it != null && it.info == def) return it;
+            }
+
+            return null;
+        }
+
+        private void TryTeleportNpcNearMixingTable(BasePlayer npc, MixingTable table)
+        {
+            if (npc == null || table == null) return;
+            try
+            {
+                var tpos = table.transform.position;
+                var flatFwd = table.transform.forward;
+                flatFwd.y = 0f;
+                if (flatFwd.sqrMagnitude < 0.01f) flatFwd = Vector3.forward;
+                flatFwd.Normalize();
+                var stand = tpos - flatFwd * Mathf.Clamp(_cfg.MixingStandOffsetMeters, 0.4f, 3f);
+                stand.y = TerrainMeta.HeightMap.GetHeight(stand);
+                npc.transform.position = stand;
+                npc.transform.LookAt(new Vector3(tpos.x, npc.transform.position.y, tpos.z));
+                npc.SendNetworkUpdate();
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private static bool TryResolveMixingContainers(MixingTable table, out ItemContainer ingredients, out ItemContainer output)
+        {
+            ingredients = null;
+            output = null;
+            if (table == null) return false;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            foreach (var f in typeof(MixingTable).GetFields(bf))
+            {
+                if (f.FieldType != typeof(ItemContainer)) continue;
+                var n = f.Name.ToLowerInvariant();
+                var ic = f.GetValue(table) as ItemContainer;
+                if (ic == null) continue;
+                if (n.Contains("output") || n.Contains("result") || n.Contains("product"))
+                    output = ic;
+                else
+                    ingredients = ic;
+            }
+
+            if (ingredients != null && output != null && !ReferenceEquals(ingredients, output))
+                return true;
+
+            var list = new List<ItemContainer>();
+            foreach (var f in typeof(MixingTable).GetFields(bf))
+            {
+                if (f.FieldType != typeof(ItemContainer)) continue;
+                if (f.GetValue(table) is ItemContainer ic && !list.Contains(ic)) list.Add(ic);
+            }
+
+            if (list.Count >= 2)
+            {
+                list.Sort((a, b) => b.capacity.CompareTo(a.capacity));
+                ingredients = list[0];
+                output = list[1];
+                return true;
+            }
+
+            if (table is StorageContainer sc && sc.inventory != null)
+            {
+                ingredients = sc.inventory;
+                output = sc.inventory;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool MixingTableIsBusy(MixingTable table)
+        {
+            if (table == null) return false;
+            foreach (var name in new[] { "IsMixing", "mixingInProgress", "isMixing", "Mixing" })
+            {
+                var v = TryGetMemberValue(table, name);
+                if (v is bool b) return b;
+            }
+
+            return false;
+        }
+
+        private static object TryGetMemberValue(object target, string name)
+        {
+            if (target == null) return null;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var t = target.GetType();
+            var p = t.GetProperty(name, bf);
+            if (p != null && p.CanRead)
+                return p.GetValue(target);
+            var f = t.GetField(name, bf);
+            return f?.GetValue(target);
+        }
+
+        private static bool TryInvokeStartMix(MixingTable table, BasePlayer player)
+        {
+            if (table == null || player == null) return false;
+            const BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var t = typeof(MixingTable);
+            foreach (var methodName in new[]
+                     {
+                         "StartMixing", "BeginMix", "TryStartMix", "StartMix", "ServerStartMix", "SVStartMix",
+                     })
+            {
+                foreach (var m in t.GetMethods(bf))
+                {
+                    if (!string.Equals(m.Name, methodName, StringComparison.Ordinal)) continue;
+                    try
+                    {
+                        var ps = m.GetParameters();
+                        if (ps.Length == 1 && ps[0].ParameterType == typeof(BasePlayer))
+                        {
+                            m.Invoke(table, new object[] { player });
+                            return true;
+                        }
+
+                        if (ps.Length == 0)
+                        {
+                            m.Invoke(table, null);
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        // try next
+                    }
+                }
+            }
+
+            foreach (var m in t.GetMethods(bf))
+            {
+                if (m.IsSpecialName) continue;
+                if (m.Name.IndexOf("mix", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var ps = m.GetParameters();
+                if (ps.Length != 1 || ps[0].ParameterType != typeof(BasePlayer)) continue;
+                try
+                {
+                    m.Invoke(table, new object[] { player });
+                    return true;
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// MaxxInvaders / RCON: assign an NPC bot to the mixing table you are looking at. Bot must carry recipe ingredients in main inventory.
+        /// Optional <paramref name="recipeIdObj"/> is recipe key from config (default lowgrade_fuel).
+        /// </summary>
+        [HookMethod("AssignNpcToMixingTableFromLook")]
+        public object AssignNpcToMixingTableFromLook(ulong npcEntityNetId, BasePlayer issuer, object anchorSteamObj = null,
+            object recipeIdObj = null)
+        {
+            if (issuer == null || !issuer.IsConnected) return false;
+            var anchorSteam = ParseAnchorSteam(anchorSteamObj, issuer);
+            var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
+            if (npc == null || npc.IsDestroyed)
+            {
+                issuer.ChatMessage("[BaseBotch] NPC not found.");
+                return false;
+            }
+
+            if (!npc.IsNpc)
+            {
+                issuer.ChatMessage("[BaseBotch] That entity is not an NPC bot.");
+                return false;
+            }
+
+            if (npc.isMounted)
+            {
+                issuer.ChatMessage("[BaseBotch] Dismount the bot from vehicles/wheel before assigning a workstation.");
+                return false;
+            }
+
+            if (issuer.eyes == null) return false;
+            if (!Physics.Raycast(
+                    issuer.eyes.HeadRay(),
+                    out RaycastHit hit,
+                    _cfg.MixingLookRayDistanceMeters,
+                    Physics.DefaultRaycastLayers,
+                    QueryTriggerInteraction.Ignore))
+            {
+                issuer.ChatMessage(
+                    $"[BaseBotch] Nothing hit within {_cfg.MixingLookRayDistanceMeters:F0}m — look at the mixing table.");
+                return false;
+            }
+
+            var hitEnt = hit.GetEntity();
+            var table = ResolveMixingTableFromEntity(hitEnt);
+            if (table == null || table.IsDestroyed || table.net == null)
+            {
+                issuer.ChatMessage("[BaseBotch] Not looking at a mixing table.");
+                return false;
+            }
+
+            var rid = string.IsNullOrWhiteSpace(recipeIdObj?.ToString())
+                ? "lowgrade_fuel"
+                : recipeIdObj.ToString().Trim().ToLowerInvariant();
+            if (!_cfg.MixingRecipes.ContainsKey(rid))
+            {
+                issuer.ChatMessage($"[BaseBotch] Unknown recipe id '{rid}'. Add it under MixingRecipes in BaseBotch.json.");
+                return false;
+            }
+
+            SaveMixingSessionAndPauseRoam(npc, anchorSteam);
+            _mixingByNpcNetId[npc.net.ID.Value] = new MixingStationSession
+            {
+                TableNetId = table.net.ID.Value,
+                RecipeId = rid,
+                AnchorSteam = anchorSteam,
+            };
+
+            issuer.ChatMessage(
+                $"[BaseBotch] Bot assigned to mixing table (recipe: {rid}). Keep ingredients in the bot's bag; outputs return to the bot.");
+            return true;
+        }
+
+        [HookMethod("StopNpcMixingStation")]
+        public object StopNpcMixingStation(ulong npcEntityNetId, BasePlayer issuer)
+        {
+            if (!_mixingByNpcNetId.ContainsKey(npcEntityNetId))
+            {
+                issuer?.ChatMessage("[BaseBotch] That bot is not on mixing duty.");
+                return false;
+            }
+
+            StopMixingSessionInternal(npcEntityNetId, restoreRoam: true, issuer);
+            return true;
+        }
+
+        private static MixingTable ResolveMixingTableFromEntity(BaseEntity ent)
+        {
+            for (var i = 0; i < 14 && ent != null; i++)
+            {
+                if (ent is MixingTable mt && !mt.IsDestroyed) return mt;
+                var c = ent.GetComponent<MixingTable>();
+                if (c != null && !c.IsDestroyed) return c;
+                ent = ent.GetParentEntity();
+            }
+
+            return null;
+        }
+
+        [ChatCommand("bmix.assign")]
+        private void ChatMixAssign(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            if (!player.IsAdmin)
+            {
+                player.ChatMessage("[BaseBotch] Admin only.");
+                return;
+            }
+
+            if (args == null || args.Length < 1)
+            {
+                player.ChatMessage("Usage: /bmix.assign <npcId> [recipeId]  —  look at mixing table. Default recipe: lowgrade_fuel");
+                return;
+            }
+
+            var npcId = args[0].Trim();
+            var recipe = args.Length >= 2 ? args[1].Trim() : null;
+            if (!ulong.TryParse(npcId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var eid))
+            {
+                player.ChatMessage("[BaseBotch] npcId must be the entity net ID (use MaxxInvaders npc list / F1 debug).");
+                return;
+            }
+
+            AssignNpcToMixingTableFromLook(eid, player, player.userID, recipe);
+        }
+
+        [ChatCommand("bmix.stop")]
+        private void ChatMixStop(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            if (!player.IsAdmin)
+            {
+                player.ChatMessage("[BaseBotch] Admin only.");
+                return;
+            }
+
+            if (args == null || args.Length < 1)
+            {
+                player.ChatMessage("Usage: /bmix.stop <npcEntityNetId>");
+                return;
+            }
+
+            if (!ulong.TryParse(args[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var eid))
+            {
+                player.ChatMessage("[BaseBotch] Invalid entity id.");
+                return;
+            }
+
+            StopNpcMixingStation(eid, player);
+        }
+
+        #endregion
     }
 }
