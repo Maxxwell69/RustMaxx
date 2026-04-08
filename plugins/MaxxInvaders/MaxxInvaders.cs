@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.35")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.36")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1494,8 +1494,7 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// All active invaders path toward the issuer and use them as the moving leash center (<see cref="InvaderRuntime.AnchorSteamId"/>).
-        /// RoamingNPCs: binds anchor + defensive personality only — does not force <c>gather</c> (that was overwriting the bot task after recall).
+        /// Path to issuer, set anchor, and for Roaming bots apply bridge task <c>follow</c> (tight streamer leash — same AI as protect, labeled follow).
         /// </summary>
         private void ApplyFollowAnchorToAllActive(BasePlayer issuer)
         {
@@ -1511,15 +1510,16 @@ namespace Oxide.Plugins
                 r.AnchorSteamId = uid;
                 r.ReturnRunActive = true;
                 n++;
-                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, uid, enableGatherProtectDeposit: false))
-                    roaming++;
+                if (!r.IsRoamingNpc) continue;
+                if (!TryRoamingApplySquadCompanion(r, uid, enableGatherProtectDeposit: false)) continue;
+                if (TryRoamingApplyBridgeTask(r.EntityId, uid, "follow", r)) roaming++;
             }
 
             issuer.ChatMessage(
                 n > 0
                     ? roaming > 0
-                        ? $"[MaxxInvaders] {n} bot(s) pathing to you (anchor set). Roaming task unchanged — use task protect/gather/etc. if you want a new behavior after they arrive."
-                        : $"[MaxxInvaders] {n} bot(s) following you (leash). Vanilla scientists have no Roaming gather/deposit AI — use RoamingNPCs bridge bots for that."
+                        ? $"[MaxxInvaders] {n} bot(s): anchor set, task follow (stay near streamer ~{_cfg.ProtectStayRadiusMeters:F0} m). Pathing to you first where needed."
+                        : $"[MaxxInvaders] {n} bot(s) following you (leash). Vanilla scientists have no Roaming bridge tasks — use RoamingNPCs bots for follow/stay-near."
                     : "[MaxxInvaders] No active invaders.");
         }
 
@@ -1900,7 +1900,8 @@ namespace Oxide.Plugins
                 {
                     trackRuntime.BridgeTaskExplicitLast = NormalizeBridgeTaskKey(task);
                     trackRuntime.BridgeReturnArrivalMeters = 0f;
-                    if (trackRuntime.BridgeTaskExplicitLast == "protect")
+                    if (trackRuntime.BridgeTaskExplicitLast == "protect" ||
+                        trackRuntime.BridgeTaskExplicitLast == "follow")
                     {
                         trackRuntime.ReturnRunActive = true;
                         trackRuntime.ProtectGuardSnapAllowedAfterUtc = DateTime.UtcNow.AddSeconds(
@@ -2055,11 +2056,13 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>Emergency tether only when MaxxInvaders last applied <c>protect</c> — not RoamingNPCs inferred labels.</summary>
+        /// <summary>Emergency tether when last applied task is <c>protect</c> or <c>follow</c> — not RoamingNPCs inferred labels.</summary>
         private static bool RoamingExplicitTaskIsProtectTether(InvaderRuntime r)
         {
             if (r == null || !r.IsRoamingNpc) return false;
-            return string.Equals(r.BridgeTaskExplicitLast?.Trim(), "protect", StringComparison.OrdinalIgnoreCase);
+            var t = r.BridgeTaskExplicitLast?.Trim() ?? "";
+            return string.Equals(t, "protect", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(t, "follow", StringComparison.OrdinalIgnoreCase);
         }
 
         private ulong TryRoamingGetBridgeLootPetNetForPlayer(ulong looterUserId)
@@ -2117,7 +2120,7 @@ namespace Oxide.Plugins
                 issuer.ChatMessage($"[MaxxInvaders] Task '{task}' set on {r.NpcId}.");
             else
                 issuer.ChatMessage(
-                    "[MaxxInvaders] Task failed. Valid: wood, stone, cloth, hunt, protect, guard, gather, mixed, idle (all = gather).");
+                    "[MaxxInvaders] Task failed. Valid: wood, stone, cloth, hunt, follow, protect, guard, gather, mixed, idle (all = gather).");
         }
 
         private void TrySetBridgeDepositBoxForInvader(BasePlayer player, InvaderRuntime r, ulong boxNetId)
@@ -2630,7 +2633,7 @@ namespace Oxide.Plugins
             if (parts.Count < 2)
             {
                 arg.ReplyWith(
-                    "Usage: maxxinvaders.task <viewerId|npcId> <wood|stone|cloth|hunt|protect|guard|gather|mixed|idle> [anchorSteam64]");
+                    "Usage: maxxinvaders.task <viewerId|npcId> <wood|stone|cloth|hunt|follow|protect|guard|gather|mixed|idle> [anchorSteam64]");
                 return;
             }
 
@@ -2671,7 +2674,7 @@ namespace Oxide.Plugins
             if (parts.Count < 1)
             {
                 arg.ReplyWith(
-                    "Usage: maxxinvaders.taskall <wood|stone|cloth|hunt|protect|guard|gather|mixed|idle>  —  applies to all Roaming bridge bots.");
+                    "Usage: maxxinvaders.taskall <wood|stone|cloth|hunt|follow|protect|guard|gather|mixed|idle>  —  applies to all Roaming bridge bots.");
                 return;
             }
 
@@ -2913,11 +2916,13 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>FOLLOW = pathing to anchor; PROTECT = leashed / guarding anchor (not in return run).</summary>
+        /// <summary>FOLLOW = return run or explicit <c>follow</c> task (stay near streamer); PROTECT = other anchored modes.</summary>
         private static string GetInvaderHudSquadModeLabel(InvaderRuntime r)
         {
             if (r == null) return "—";
             if (r.ReturnRunActive) return "FOLLOW";
+            if (string.Equals(r.BridgeTaskExplicitLast?.Trim(), "follow", StringComparison.OrdinalIgnoreCase))
+                return "FOLLOW";
             if (r.AnchorSteamId != 0UL) return "PROTECT";
             return "—";
         }
@@ -3162,7 +3167,7 @@ namespace Oxide.Plugins
                     if (args.Length < 2)
                     {
                         player.ChatMessage(
-                            "Usage: /maxxinvaders task all <wood|stone|cloth|hunt|protect|guard|gather|mixed|idle>  OR  task <npcId> <task>");
+                            "Usage: /maxxinvaders task all <wood|stone|cloth|hunt|follow|protect|guard|gather|mixed|idle>  OR  task <npcId> <task>");
                         return;
                     }
 
@@ -3953,10 +3958,11 @@ namespace Oxide.Plugins
             RowBtn("wood", "Wd", cWood, 0.58f, 0.66f, 0.04f, 0.31f);
             RowBtn("stone", "St", cStone, 0.58f, 0.66f, 0.33f, 0.60f);
             RowBtn("cloth", "Cl", cCloth, 0.58f, 0.66f, 0.62f, 0.96f);
-            RowBtn("hunt", "Hu", cHunt, 0.48f, 0.56f, 0.04f, 0.31f);
-            RowBtn("protect", "Pr", cProt, 0.48f, 0.56f, 0.33f, 0.60f);
-            RowBtn("gather", "Ga", cGather, 0.48f, 0.56f, 0.62f, 0.78f);
-            RowBtn("mixed", "Mx", cMixed, 0.48f, 0.56f, 0.80f, 0.96f);
+            RowBtn("hunt", "Hu", cHunt, 0.48f, 0.56f, 0.04f, 0.22f);
+            RowBtn("follow", "Fl", cProt, 0.48f, 0.56f, 0.24f, 0.38f);
+            RowBtn("protect", "Pr", cProt, 0.48f, 0.56f, 0.40f, 0.54f);
+            RowBtn("gather", "Ga", cGather, 0.48f, 0.56f, 0.56f, 0.72f);
+            RowBtn("mixed", "Mx", cMixed, 0.48f, 0.56f, 0.74f, 0.96f);
             RowBtn("idle", "Id", cIdle, 0.38f, 0.46f, 0.04f, 0.26f);
             RowBtn("guard", "Gd", cProt, 0.38f, 0.46f, 0.28f, 0.46f);
             AddCuiButtonWithText(
@@ -5594,14 +5600,15 @@ namespace Oxide.Plugins
                         8);
                 }
 
-                TaskBtn("wood", "Wd", cWood, 0.02f, 0.098f);
-                TaskBtn("stone", "St", cStone, 0.10f, 0.178f);
-                TaskBtn("cloth", "Cl", cCloth, 0.18f, 0.258f);
-                TaskBtn("hunt", "Hu", cHunt, 0.26f, 0.338f);
-                TaskBtn("protect", "Pr", cProt, 0.34f, 0.418f);
-                TaskBtn("gather", "Ga", cGather, 0.42f, 0.498f);
-                TaskBtn("mixed", "Mx", cMixed, 0.50f, 0.578f);
-                TaskBtn("idle", "Id", cIdle, 0.58f, 0.658f);
+                TaskBtn("wood", "Wd", cWood, 0.02f, 0.088f);
+                TaskBtn("stone", "St", cStone, 0.09f, 0.158f);
+                TaskBtn("cloth", "Cl", cCloth, 0.16f, 0.228f);
+                TaskBtn("hunt", "Hu", cHunt, 0.23f, 0.298f);
+                TaskBtn("follow", "Fl", cProt, 0.30f, 0.368f);
+                TaskBtn("protect", "Pr", cProt, 0.37f, 0.438f);
+                TaskBtn("gather", "Ga", cGather, 0.44f, 0.508f);
+                TaskBtn("mixed", "Mx", cMixed, 0.51f, 0.578f);
+                TaskBtn("idle", "Id", cIdle, 0.58f, 0.648f);
                 AddCuiButtonWithText(
                     container,
                     rowName,
@@ -5749,44 +5756,62 @@ namespace Oxide.Plugins
                 cWood,
                 "ALL WOOD",
                 "0.03 0.11",
-                "0.24 0.19",
-                11);
+                "0.17 0.19",
+                10);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall stone",
                 cStone,
                 "ALL STONE",
-                "0.25 0.11",
-                "0.46 0.19",
-                11);
+                "0.18 0.11",
+                "0.31 0.19",
+                10);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall cloth",
                 cCloth,
                 "ALL CLOTH",
-                "0.47 0.11",
-                "0.68 0.19",
-                11);
+                "0.32 0.11",
+                "0.45 0.19",
+                10);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall hunt",
                 cHunt,
                 "ALL HUNT",
-                "0.69 0.11",
-                "0.80 0.19",
-                10);
+                "0.46 0.11",
+                "0.58 0.19",
+                9);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui taskall follow",
+                cProt,
+                "ALL FLW",
+                "0.59 0.11",
+                "0.71 0.19",
+                9);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
                 "maxxinvaders.gui taskall protect",
                 cProt,
                 "ALL PRT",
-                "0.81 0.11",
-                "0.92 0.19",
-                10);
+                "0.72 0.11",
+                "0.84 0.19",
+                9);
+            AddCuiButtonWithText(
+                container,
+                contentPanel,
+                "maxxinvaders.gui taskall guard",
+                cProt,
+                "ALL GRD",
+                "0.85 0.11",
+                "0.97 0.19",
+                9);
             AddCuiButtonWithText(
                 container,
                 contentPanel,
@@ -6840,10 +6865,12 @@ namespace Oxide.Plugins
                     if (rr.AnchorSteamId == 0UL) rr.AnchorSteamId = steam;
                     rr.AnchorPosition = ResolveLeashPositionForAnchorSteam(steam, player);
                     rr.ReturnRunActive = true;
+                    if (rr.IsRoamingNpc && TryRoamingApplySquadCompanion(rr, steam, enableGatherProtectDeposit: false))
+                        TryRoamingApplyBridgeTask(rr.EntityId, steam, "follow", rr);
                     player.ChatMessage(
                         botHadStreamerAnchor
-                            ? "[MaxxInvaders] Bot is pathing back toward the streamer anchor (within 20 m)."
-                            : "[MaxxInvaders] Bot is pathing back to within 20 m of you (not a teleport).");
+                            ? "[MaxxInvaders] Bot is pathing to streamer; task follow (stay near) applied for Roaming bots."
+                            : "[MaxxInvaders] Bot is pathing to you; task follow (stay near) applied for Roaming bots.");
                 }
 
                 OpenGui(player, GetGuiPage(player.userID));

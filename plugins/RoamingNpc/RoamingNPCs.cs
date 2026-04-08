@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.40")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.41")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -9669,7 +9669,7 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// MaxxInvaders: runtime task profile for bridge bots — wood, stone, cloth (collectibles), hunt, protect, gather, idle.
+        /// MaxxInvaders: runtime task profile for bridge bots — wood, stone, cloth, hunt, follow, protect, guard, gather, mixed, idle.
         /// </summary>
         [HookMethod("ApplyBridgeTask")]
         public object ApplyBridgeTask(ulong entityNetId, ulong anchorSteamId, string taskName)
@@ -9819,6 +9819,7 @@ namespace Oxide.Plugins
                         setup.EnableRandomPersonality = false;
                         setup.Personality = PersonalityBot.Defensive;
                         break;
+                    case "follow":
                     case "protect":
                         BridgeProtectTightAnchorLeash();
                         BridgeBattleDefenseBaseline(false);
@@ -9889,8 +9890,9 @@ namespace Oxide.Plugins
                         return false;
                 }
 
-                // Do not re-apply far home-roam (40m patrol + 110m scan) after protect/guard — that undoes anchor leash.
-                if (!string.Equals(t, "protect", StringComparison.OrdinalIgnoreCase) &&
+                // Do not re-apply far home-roam (40m patrol + 110m scan) after follow/protect/guard — that undoes anchor leash.
+                if (!string.Equals(t, "follow", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(t, "protect", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(t, "guard", StringComparison.OrdinalIgnoreCase))
                     EnsureHomeBridgePatrolAfterTask();
                 pet.Data.BridgeLastAppliedTask = t == "all" ? "gather" : t;
