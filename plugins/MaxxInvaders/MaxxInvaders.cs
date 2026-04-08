@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.33")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.34")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1495,7 +1495,7 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// All active invaders path toward the issuer and use them as the moving leash center (<see cref="InvaderRuntime.AnchorSteamId"/>).
-        /// RoamingNPCs bots also get runtime companion flags (protect, gather/loot, deposit to your storage) via <c>ApplySquadCompanionMode</c>; JSON on disk is unchanged.
+        /// RoamingNPCs: binds anchor + defensive personality only — does not force <c>gather</c> (that was overwriting the bot task after recall).
         /// </summary>
         private void ApplyFollowAnchorToAllActive(BasePlayer issuer)
         {
@@ -1511,25 +1511,29 @@ namespace Oxide.Plugins
                 r.AnchorSteamId = uid;
                 r.ReturnRunActive = true;
                 n++;
-                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, uid))
+                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, uid, enableGatherProtectDeposit: false))
                     roaming++;
             }
 
             issuer.ChatMessage(
                 n > 0
                     ? roaming > 0
-                        ? $"[MaxxInvaders] {n} bot(s) following you. RoamingNPCs ({roaming}): protect, gather/loot, deposit to your nearby boxes/cupboards (your OwnerID). Pathing, not teleport. Config files unchanged."
+                        ? $"[MaxxInvaders] {n} bot(s) pathing to you (anchor set). Roaming task unchanged — use task protect/gather/etc. if you want a new behavior after they arrive."
                         : $"[MaxxInvaders] {n} bot(s) following you (leash). Vanilla scientists have no Roaming gather/deposit AI — use RoamingNPCs bridge bots for that."
                     : "[MaxxInvaders] No active invaders.");
         }
 
-        /// <summary>Enables RoamingNPCs bridge companion behavior for this entity (protect anchor, mining/loot, deposit to anchor-owned storage).</summary>
-        private bool TryRoamingApplySquadCompanion(InvaderRuntime r, ulong anchorSteamId)
+        /// <summary>
+        /// Enables RoamingNPCs bridge binding for this entity. When <paramref name="enableGatherProtectDeposit"/> is true, also turns on full gather/loot/deposit companion profile (spawn default).
+        /// When false, only anchor Steam + defensive personality — use before <c>ApplyBridgeTask</c> so follow/recall does not force <c>gather</c>.
+        /// </summary>
+        private bool TryRoamingApplySquadCompanion(InvaderRuntime r, ulong anchorSteamId,
+            bool enableGatherProtectDeposit = true)
         {
             if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return false;
             try
             {
-                var raw = RoamingNPCs.Call("ApplySquadCompanionMode", r.EntityId, anchorSteamId, true);
+                var raw = RoamingNPCs.Call("ApplySquadCompanionMode", r.EntityId, anchorSteamId, enableGatherProtectDeposit);
                 return raw is bool ok && ok;
             }
             catch (Exception ex)
@@ -1559,7 +1563,7 @@ namespace Oxide.Plugins
 
                 r.AnchorPosition = ResolveLeashPositionForAnchorSteam(r.AnchorSteamId, issuer);
                 n++;
-                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, steamForBridge))
+                if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, steamForBridge, enableGatherProtectDeposit: false))
                 {
                     roaming++;
                     TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect", r);
@@ -1593,7 +1597,7 @@ namespace Oxide.Plugins
 
             if (r.AnchorSteamId == 0UL) r.AnchorSteamId = steamForBridge;
             r.AnchorPosition = ResolveLeashPositionForAnchorSteam(r.AnchorSteamId, issuer);
-            if (TryRoamingApplySquadCompanion(r, steamForBridge))
+            if (TryRoamingApplySquadCompanion(r, steamForBridge, enableGatherProtectDeposit: false))
             {
                 TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect", r);
                 issuer.ChatMessage(
