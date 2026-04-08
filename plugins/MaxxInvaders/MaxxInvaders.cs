@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.23")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.24")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1897,7 +1897,7 @@ namespace Oxide.Plugins
         private void SaveStreamerAnchorFromIssuer(BasePlayer player)
         {
             if (player == null) return;
-            _cfg.DefaultAnchorSteamId = player.userID.ToString(CultureInfo.InvariantCulture);
+            _cfg.DefaultAnchorSteamId = (player.UserIDString ?? "").Trim();
             SaveConfig();
             player.ChatMessage(
                 $"[MaxxInvaders] Default streamer anchor saved ({_cfg.DefaultAnchorSteamId}). Spawns that omit an anchor use this; protect/gather follow each bot’s anchor when set.");
