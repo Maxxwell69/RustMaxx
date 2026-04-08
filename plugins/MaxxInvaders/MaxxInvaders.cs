@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.32")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.33")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -723,8 +723,10 @@ namespace Oxide.Plugins
             public bool IsRoamingNpc;
             /// <summary>RoamingNPCs bot template key used for this spawn.</summary>
             public string RoamingTemplateKey = "";
-            /// <summary>When true, path to streamer until inside arrival radius (protect uses ProtectStayRadiusMeters; recall uses ~20 m).</summary>
+            /// <summary>When true, path to streamer until inside arrival radius (protect uses ProtectStayRadiusMeters; guard uses <see cref="BridgeReturnArrivalMeters"/>; recall uses ~20 m).</summary>
             public bool ReturnRunActive;
+            /// <summary>When &gt; 0, overrides arrival distance for <see cref="ReturnRunActive"/> (e.g. guard = 28 m). Otherwise protect uses <see cref="InvaderConfig.ProtectStayRadiusMeters"/>.</summary>
+            public float BridgeReturnArrivalMeters;
             public Vector3 AnchorPosition;
             /// <summary>When non-zero, <see cref="AnchorPosition"/> is refreshed each behavior tick from this player (streamer patrol / webhook anchor).</summary>
             public ulong AnchorSteamId;
@@ -1893,9 +1895,17 @@ namespace Oxide.Plugins
                 if (ok && trackRuntime != null)
                 {
                     trackRuntime.BridgeTaskExplicitLast = NormalizeBridgeTaskKey(task);
+                    trackRuntime.BridgeReturnArrivalMeters = 0f;
                     if (trackRuntime.BridgeTaskExplicitLast == "protect")
                     {
                         trackRuntime.ReturnRunActive = true;
+                        trackRuntime.ProtectGuardSnapAllowedAfterUtc = DateTime.UtcNow.AddSeconds(
+                            Mathf.Max(1f, _cfg.ProtectGuardSettleSeconds));
+                    }
+                    else if (trackRuntime.BridgeTaskExplicitLast == "guard")
+                    {
+                        trackRuntime.ReturnRunActive = true;
+                        trackRuntime.BridgeReturnArrivalMeters = 28f;
                         trackRuntime.ProtectGuardSnapAllowedAfterUtc = DateTime.UtcNow.AddSeconds(
                             Mathf.Max(1f, _cfg.ProtectGuardSettleSeconds));
                     }
@@ -2103,7 +2113,7 @@ namespace Oxide.Plugins
                 issuer.ChatMessage($"[MaxxInvaders] Task '{task}' set on {r.NpcId}.");
             else
                 issuer.ChatMessage(
-                    "[MaxxInvaders] Task failed. Valid: wood, stone, cloth, hunt, protect, gather, mixed, idle (all = gather).");
+                    "[MaxxInvaders] Task failed. Valid: wood, stone, cloth, hunt, protect, guard, gather, mixed, idle (all = gather).");
         }
 
         private void TrySetBridgeDepositBoxForInvader(BasePlayer player, InvaderRuntime r, ulong boxNetId)
@@ -2181,13 +2191,17 @@ namespace Oxide.Plugins
                         r.AnchorPosition = ap.transform.position;
                 }
 
-                // Run toward streamer (RET / protect): pathfind until inside arrival radius, then stop — RoamingNPCs runs combat.
+                // Run toward streamer (RET / protect / guard): pathfind until inside arrival radius, then stop — RoamingNPCs runs combat.
                 if (r.ReturnRunActive && r.AnchorPosition != Vector3.zero)
                 {
                     var distToAnchor = Vector3.Distance(pos, r.AnchorPosition);
-                    var arrivalMeters = RoamingExplicitTaskIsProtectTether(r)
-                        ? Mathf.Clamp(_cfg.ProtectStayRadiusMeters, 2f, 40f)
-                        : ReturnRunArrivalMeters;
+                    float arrivalMeters;
+                    if (r.BridgeReturnArrivalMeters > 0f)
+                        arrivalMeters = r.BridgeReturnArrivalMeters;
+                    else if (RoamingExplicitTaskIsProtectTether(r))
+                        arrivalMeters = Mathf.Clamp(_cfg.ProtectStayRadiusMeters, 2f, 40f);
+                    else
+                        arrivalMeters = ReturnRunArrivalMeters;
                     if (distToAnchor > arrivalMeters)
                     {
                         TrySetDestinationBasePlayer(r.NpcPlayer, r.AnchorPosition);
@@ -2612,7 +2626,7 @@ namespace Oxide.Plugins
             if (parts.Count < 2)
             {
                 arg.ReplyWith(
-                    "Usage: maxxinvaders.task <viewerId|npcId> <wood|stone|cloth|hunt|protect|gather|mixed|idle> [anchorSteam64]");
+                    "Usage: maxxinvaders.task <viewerId|npcId> <wood|stone|cloth|hunt|protect|guard|gather|mixed|idle> [anchorSteam64]");
                 return;
             }
 
@@ -2653,7 +2667,7 @@ namespace Oxide.Plugins
             if (parts.Count < 1)
             {
                 arg.ReplyWith(
-                    "Usage: maxxinvaders.taskall <wood|stone|cloth|hunt|protect|gather|mixed|idle>  —  applies to all Roaming bridge bots.");
+                    "Usage: maxxinvaders.taskall <wood|stone|cloth|hunt|protect|guard|gather|mixed|idle>  —  applies to all Roaming bridge bots.");
                 return;
             }
 
@@ -3144,7 +3158,7 @@ namespace Oxide.Plugins
                     if (args.Length < 2)
                     {
                         player.ChatMessage(
-                            "Usage: /maxxinvaders task all <wood|stone|cloth|hunt|protect|gather|mixed|idle>  OR  task <npcId> <task>");
+                            "Usage: /maxxinvaders task all <wood|stone|cloth|hunt|protect|guard|gather|mixed|idle>  OR  task <npcId> <task>");
                         return;
                     }
 
@@ -3939,14 +3953,15 @@ namespace Oxide.Plugins
             RowBtn("protect", "Pr", cProt, 0.48f, 0.56f, 0.33f, 0.60f);
             RowBtn("gather", "Ga", cGather, 0.48f, 0.56f, 0.62f, 0.78f);
             RowBtn("mixed", "Mx", cMixed, 0.48f, 0.56f, 0.80f, 0.96f);
-            RowBtn("idle", "Id", cIdle, 0.38f, 0.46f, 0.04f, 0.48f);
+            RowBtn("idle", "Id", cIdle, 0.38f, 0.46f, 0.04f, 0.26f);
+            RowBtn("guard", "Gd", cProt, 0.38f, 0.46f, 0.28f, 0.46f);
             AddCuiButtonWithText(
                 container,
                 root,
                 $"maxxinvaders.gui deposit {nid} 1",
                 cDep,
                 "Dep",
-                "0.50 0.38",
+                "0.48 0.38",
                 "0.72 0.46",
                 9);
             AddCuiButtonWithText(

@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.39")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.40")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -9829,8 +9829,22 @@ namespace Oxide.Plugins
                         setup.Personality = PersonalityBot.Defensive;
                         setup.BattleState._protectBridgeAnchorPlayer = true;
                         setup.BridgePatrol.Enable = true;
-                        // Tight patrol around anchor — not 28m+ (that made bots wander then get teleported back by MaxxInvaders).
-                        setup.BridgePatrol.RadiusMeters = 8f;
+                        // Streamer escort: stay within ~10 m; patrol pulls inward when beyond the ring.
+                        setup.BridgePatrol.RadiusMeters = 10f;
+                        break;
+                    case "guard":
+                        BridgeBattleDefenseBaseline(false);
+                        MinerOff();
+                        setup.MinerState.CanPickupDroppedItems = true;
+                        setup.HunterState.CanHunt = false;
+                        setup.EnableRandomPersonality = false;
+                        setup.Personality = PersonalityBot.Defensive;
+                        setup.BattleState._protectBridgeAnchorPlayer = true;
+                        setup.BridgePatrol.Enable = true;
+                        setup.Controller ??= new ControllerSetup();
+                        setup.Controller.RadiusFindEntity = 40f;
+                        setup.Controller.BridgeBoostScanTimers();
+                        setup.BridgePatrol.RadiusMeters = 28f;
                         break;
                     case "gather":
                     case "all":
@@ -9875,8 +9889,9 @@ namespace Oxide.Plugins
                         return false;
                 }
 
-                // Do not re-apply far home-roam (40m patrol + 110m scan) after protect — that undoes tight bodyguard leash.
-                if (!string.Equals(t, "protect", StringComparison.OrdinalIgnoreCase))
+                // Do not re-apply far home-roam (40m patrol + 110m scan) after protect/guard — that undoes anchor leash.
+                if (!string.Equals(t, "protect", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(t, "guard", StringComparison.OrdinalIgnoreCase))
                     EnsureHomeBridgePatrolAfterTask();
                 pet.Data.BridgeLastAppliedTask = t == "all" ? "gather" : t;
                 pet.CustomBrain?.ChangeState(null);
@@ -9921,7 +9936,13 @@ namespace Oxide.Plugins
             if (hunt && MinerCoreOffDroppedOk()) return "hunt";
             if (MinerGatherAll() && prot && patrol && stor) return "gather";
             if (MinerGatherAll() && hunt && !prot && !patrol) return "mixed";
-            if (MinerCoreOffDroppedOk() && !hunt && prot && patrol) return "protect";
+            if (MinerCoreOffDroppedOk() && !hunt && prot && patrol)
+            {
+                var r = bp?.RadiusMeters ?? 0f;
+                // Tight escort (ApplyBridgeTask "protect") vs wider ring ("guard") — radius is the differentiator when hint is empty.
+                if (r >= 18f) return "guard";
+                return "protect";
+            }
             if (m.CanMiningWood && m.CanFuelUseFromChainsaw && !m.CanMiningOre && !m.CanMiningBarrel &&
                 !m.CanMiningRoadSign && !m.CanPickupCollectibleItems &&
                 !m.CanLootedContainer && !m.CanLootedCorpse && !m.CanButcherCorpse)
@@ -9947,6 +9968,8 @@ namespace Oxide.Plugins
                 if (listNpcPlayers == null || !listNpcPlayers.TryGetValue(petEntityNetId, out var pet) || pet == null ||
                     pet.IsDestroyed)
                     return "";
+                if (pet.Data?.BridgeDepositApproachActive == true)
+                    return "deposit";
                 var hint = pet.Data?.BridgeLastAppliedTask?.Trim();
                 if (!string.IsNullOrEmpty(hint)) return hint;
                 return InferBridgeTaskLabel(pet.Data?.Setup);
