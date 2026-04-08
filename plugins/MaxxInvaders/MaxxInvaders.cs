@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.28")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.29")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -708,6 +708,8 @@ namespace Oxide.Plugins
             public Vector3 AnchorPosition;
             /// <summary>When non-zero, <see cref="AnchorPosition"/> is refreshed each behavior tick from this player (streamer patrol / webhook anchor).</summary>
             public ulong AnchorSteamId;
+            /// <summary>Last bridge task set from MaxxInvaders (spawn/GUI/RCON). Used for emergency tether — RoamingNPCs <c>GetBridgeTaskLabel</c> infers "protect" from template flags and must not be used for tether.</summary>
+            public string BridgeTaskExplicitLast = "";
             public DateTime SpawnedAtUtc;
             public DateTime? ExpiresAtUtc;
         }
@@ -1132,7 +1134,7 @@ namespace Oxide.Plugins
                     TryRoamingApplySquadCompanion(runtime, runtime.AnchorSteamId);
                 ApplyPersistedBridgeDefaultsToRuntime(runtime);
                 if (_cfg.SpawnWithProtectNearHome && runtime.AnchorSteamId != 0UL)
-                    TryRoamingApplyBridgeTask(runtime.EntityId, runtime.AnchorSteamId, "protect");
+                    TryRoamingApplyBridgeTask(runtime.EntityId, runtime.AnchorSteamId, "protect", runtime);
             }
 
             if (_cfg.PerViewerCooldownSeconds > 0)
@@ -1532,7 +1534,7 @@ namespace Oxide.Plugins
                 if (r.IsRoamingNpc && TryRoamingApplySquadCompanion(r, steamForBridge))
                 {
                     roaming++;
-                    TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect");
+                    TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect", r);
                 }
             }
 
@@ -1565,7 +1567,7 @@ namespace Oxide.Plugins
             r.AnchorPosition = ResolveLeashPositionForAnchorSteam(r.AnchorSteamId, issuer);
             if (TryRoamingApplySquadCompanion(r, steamForBridge))
             {
-                TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect");
+                TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect", r);
                 issuer.ChatMessage(
                     "[MaxxInvaders] Protection mode restored for this bot (streamer anchor + tether center).");
             }
@@ -1847,13 +1849,29 @@ namespace Oxide.Plugins
             return 0UL;
         }
 
-        private bool TryRoamingApplyBridgeTask(ulong entityId, ulong anchorSteam, string task)
+        private static string NormalizeBridgeTaskKey(string task)
+        {
+            if (string.IsNullOrWhiteSpace(task)) return "";
+            return task.Trim().ToLowerInvariant();
+        }
+
+        /// <param name="trackRuntime">When set, stores <see cref="InvaderRuntime.BridgeTaskExplicitLast"/> for tether gating; clears <see cref="InvaderRuntime.ReturnRunActive"/> when task is not protect.</param>
+        private bool TryRoamingApplyBridgeTask(ulong entityId, ulong anchorSteam, string task,
+            InvaderRuntime trackRuntime = null)
         {
             if (RoamingNPCs == null || !RoamingNPCs.IsLoaded) return false;
             try
             {
                 var raw = RoamingNPCs.Call("ApplyBridgeTask", entityId, anchorSteam, task);
-                return raw is bool b && b;
+                var ok = raw is bool b && b;
+                if (ok && trackRuntime != null)
+                {
+                    trackRuntime.BridgeTaskExplicitLast = NormalizeBridgeTaskKey(task);
+                    if (trackRuntime.BridgeTaskExplicitLast != "protect")
+                        trackRuntime.ReturnRunActive = false;
+                }
+
+                return ok;
             }
             catch (Exception ex)
             {
@@ -1988,13 +2006,11 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>Whether MaxxInvaders emergency distance tether should apply: Roaming bots only when task is <c>protect</c>.</summary>
-        private bool RoamingBridgeTaskIsProtectForTether(InvaderRuntime r)
+        /// <summary>Emergency tether only when MaxxInvaders last applied <c>protect</c> — not RoamingNPCs inferred labels.</summary>
+        private static bool RoamingExplicitTaskIsProtectTether(InvaderRuntime r)
         {
             if (r == null || !r.IsRoamingNpc) return false;
-            var label = TryRoamingGetBridgeTaskLabel(r.EntityId);
-            if (string.IsNullOrWhiteSpace(label)) return false;
-            return label.Trim().Equals("protect", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(r.BridgeTaskExplicitLast?.Trim(), "protect", StringComparison.OrdinalIgnoreCase);
         }
 
         private ulong TryRoamingGetBridgeLootPetNetForPlayer(ulong looterUserId)
@@ -2024,7 +2040,7 @@ namespace Oxide.Plugins
             {
                 if (r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed || !r.IsRoamingNpc) continue;
                 var anchor = ResolveBridgeAnchorSteam(r, issuer);
-                if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task)) n++;
+                if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task, r)) n++;
             }
 
             issuer.ChatMessage(n > 0
@@ -2048,7 +2064,7 @@ namespace Oxide.Plugins
             }
 
             var anchor = ResolveBridgeAnchorSteam(r, issuer);
-            if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task))
+            if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task, r))
                 issuer.ChatMessage($"[MaxxInvaders] Task '{task}' set on {r.NpcId}.");
             else
                 issuer.ChatMessage(
@@ -2143,8 +2159,8 @@ namespace Oxide.Plugins
                     r.ReturnRunActive = false;
                 }
 
-                // Emergency teleport leash toward streamer: Roaming bridge bots only while task is protect (gather/hunt/mixed roam freely).
-                var applyEmergencyTether = !r.IsRoamingNpc || RoamingBridgeTaskIsProtectForTether(r);
+                // Emergency teleport leash: Roaming bots only while MaxxInvaders last set task to protect (not RoamingNPCs inference).
+                var applyEmergencyTether = !r.IsRoamingNpc || RoamingExplicitTaskIsProtectTether(r);
                 if (_cfg.MaxDistanceFromAnchor > 5f && applyEmergencyTether)
                 {
                     var anchor = r.AnchorPosition;
@@ -2547,7 +2563,7 @@ namespace Oxide.Plugins
                 a >= 10000000000000000UL)
                 anchor = a;
 
-            if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task)) arg.ReplyWith("OK");
+            if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task, r)) arg.ReplyWith("OK");
             else arg.ReplyWith("Error: task_failed_invalid_name_or_roamingnpcs");
         }
 
@@ -2575,7 +2591,7 @@ namespace Oxide.Plugins
             {
                 if (r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed || !r.IsRoamingNpc) continue;
                 var anchor = ResolveBridgeAnchorSteam(r, null);
-                if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task)) n++;
+                if (TryRoamingApplyBridgeTask(r.EntityId, anchor, task, r)) n++;
             }
 
             arg.ReplyWith(n > 0 ? $"OK applied={n} task={task}" : "Error: no_roaming_bots_or_task_failed");
