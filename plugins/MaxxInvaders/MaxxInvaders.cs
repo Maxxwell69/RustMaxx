@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.29")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.30")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -164,6 +164,12 @@ namespace Oxide.Plugins
             /// Gather, hunt, mixed, etc. are not tethered. Vanilla scientists still use this when the value is above 5 m.
             /// </summary>
             public float MaxDistanceFromAnchor { get; set; } = 140f;
+
+            /// <summary>
+            /// While bridge task is <c>protect</c>: bots return to the streamer once, then stay within this radius (m), alert for threats.
+            /// No further MaxxInvaders path orders after arrival — RoamingNPCs handles combat; we only soft-teleport if they drift outside this ring.
+            /// </summary>
+            public float ProtectStayRadiusMeters { get; set; } = 5f;
             public float MinimumDistanceFromPlayers { get; set; } = 8f;
             public bool BlockSpawnInSafeZones { get; set; } = true;
             public bool BlockSpawnInMonuments { get; set; } = true;
@@ -703,7 +709,7 @@ namespace Oxide.Plugins
             public bool IsRoamingNpc;
             /// <summary>RoamingNPCs bot template key used for this spawn.</summary>
             public string RoamingTemplateKey = "";
-            /// <summary>When true, NPC pathfinds toward <see cref="AnchorPosition"/> until within <see cref="ReturnRunArrivalMeters"/>.</summary>
+            /// <summary>When true, path to streamer until inside arrival radius (protect uses ProtectStayRadiusMeters; recall uses ~20 m).</summary>
             public bool ReturnRunActive;
             public Vector3 AnchorPosition;
             /// <summary>When non-zero, <see cref="AnchorPosition"/> is refreshed each behavior tick from this player (streamer patrol / webhook anchor).</summary>
@@ -714,6 +720,7 @@ namespace Oxide.Plugins
             public DateTime? ExpiresAtUtc;
         }
 
+        /// <summary>Recall / follow (non-protect): path until this close to anchor, then stop MaxxInvaders pathing.</summary>
         private const float ReturnRunArrivalMeters = 20f;
 
         #endregion
@@ -1540,7 +1547,7 @@ namespace Oxide.Plugins
 
             issuer.ChatMessage(
                 roaming > 0
-                    ? $"[MaxxInvaders] Protection mode on {roaming} Roaming bot(s): companion + protect task use each bot’s streamer anchor (tether follows streamer, not you)."
+                    ? $"[MaxxInvaders] Protect: {roaming} bot(s) move to streamer, guard within {_cfg.ProtectStayRadiusMeters:F0}m, hunt threats until you give another task (wood/gather/etc.)."
                     : n > 0
                         ? "[MaxxInvaders] No RoamingNPCs bots — protection applies to Roaming bridge bots only."
                         : "[MaxxInvaders] No active invaders.");
@@ -1569,7 +1576,7 @@ namespace Oxide.Plugins
             {
                 TryRoamingApplyBridgeTask(r.EntityId, steamForBridge, "protect", r);
                 issuer.ChatMessage(
-                    "[MaxxInvaders] Protection mode restored for this bot (streamer anchor + tether center).");
+                    $"[MaxxInvaders] Protect: bot returns to streamer, guards within {_cfg.ProtectStayRadiusMeters:F0}m until another task.");
             }
             else
                 issuer.ChatMessage("[MaxxInvaders] RoamingNPCs.ApplySquadCompanionMode failed (plugin unloaded or bot not tracked).");
@@ -1855,7 +1862,7 @@ namespace Oxide.Plugins
             return task.Trim().ToLowerInvariant();
         }
 
-        /// <param name="trackRuntime">When set, stores <see cref="InvaderRuntime.BridgeTaskExplicitLast"/> for tether gating; clears <see cref="InvaderRuntime.ReturnRunActive"/> when task is not protect.</param>
+        /// <param name="trackRuntime">When set, stores explicit task; protect → one return run to streamer then guard radius only.</param>
         private bool TryRoamingApplyBridgeTask(ulong entityId, ulong anchorSteam, string task,
             InvaderRuntime trackRuntime = null)
         {
@@ -1867,7 +1874,9 @@ namespace Oxide.Plugins
                 if (ok && trackRuntime != null)
                 {
                     trackRuntime.BridgeTaskExplicitLast = NormalizeBridgeTaskKey(task);
-                    if (trackRuntime.BridgeTaskExplicitLast != "protect")
+                    if (trackRuntime.BridgeTaskExplicitLast == "protect")
+                        trackRuntime.ReturnRunActive = true;
+                    else
                         trackRuntime.ReturnRunActive = false;
                 }
 
@@ -2146,11 +2155,14 @@ namespace Oxide.Plugins
                         r.AnchorPosition = ap.transform.position;
                 }
 
-                // Run back toward streamer anchor (GUI "Return") — pathfind until within 20m, no teleport.
+                // Run toward streamer (RET / protect): pathfind until inside arrival radius, then stop — RoamingNPCs runs combat.
                 if (r.ReturnRunActive && r.AnchorPosition != Vector3.zero)
                 {
                     var distToAnchor = Vector3.Distance(pos, r.AnchorPosition);
-                    if (distToAnchor > ReturnRunArrivalMeters)
+                    var arrivalMeters = RoamingExplicitTaskIsProtectTether(r)
+                        ? Mathf.Clamp(_cfg.ProtectStayRadiusMeters, 2f, 40f)
+                        : ReturnRunArrivalMeters;
+                    if (distToAnchor > arrivalMeters)
                     {
                         TrySetDestinationBasePlayer(r.NpcPlayer, r.AnchorPosition);
                         continue;
@@ -2159,9 +2171,31 @@ namespace Oxide.Plugins
                     r.ReturnRunActive = false;
                 }
 
-                // Emergency teleport leash: Roaming bots only while MaxxInvaders last set task to protect (not RoamingNPCs inference).
-                var applyEmergencyTether = !r.IsRoamingNpc || RoamingExplicitTaskIsProtectTether(r);
-                if (_cfg.MaxDistanceFromAnchor > 5f && applyEmergencyTether)
+                // Protect only: keep bot inside guard ring around streamer (drift / chase). Other Roaming tasks: no tether.
+                if (r.IsRoamingNpc && RoamingExplicitTaskIsProtectTether(r))
+                {
+                    var guard = Mathf.Clamp(_cfg.ProtectStayRadiusMeters, 2f, 40f);
+                    var anchor = r.AnchorPosition;
+                    if (anchor != Vector3.zero && Vector3.Distance(pos, anchor) > guard)
+                    {
+                        var back = anchor + Random.insideUnitSphere.Flatten() * Mathf.Min(1.85f, guard * 0.38f);
+                        back.y = TerrainMeta.HeightMap.GetHeight(back);
+                        if (ResolveNavMeshPosition(back, out var onMesh))
+                            back = onMesh;
+                        try
+                        {
+                            r.NpcPlayer.Teleport(back);
+                        }
+                        catch
+                        {
+                            /* ignored */
+                        }
+
+                        pos = r.NpcPlayer.transform.position;
+                        UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
+                    }
+                }
+                else if (!r.IsRoamingNpc && _cfg.MaxDistanceFromAnchor > 5f)
                 {
                     var anchor = r.AnchorPosition;
                     if (anchor != Vector3.zero && Vector3.Distance(pos, anchor) > _cfg.MaxDistanceFromAnchor)
@@ -2178,6 +2212,7 @@ namespace Oxide.Plugins
                         {
                             /* ignored */
                         }
+
                         pos = r.NpcPlayer.transform.position;
                         UpdateRecordPosition(r.EntityId, pos, r.NpcPlayer.health);
                     }
@@ -4311,6 +4346,14 @@ namespace Oxide.Plugins
                     if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var leash))
                     {
                         _cfg.MaxDistanceFromAnchor = Mathf.Clamp(leash, 0f, 1000f);
+                        SaveConfig();
+                    }
+
+                    break;
+                case nameof(InvaderConfig.ProtectStayRadiusMeters):
+                    if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var pr))
+                    {
+                        _cfg.ProtectStayRadiusMeters = Mathf.Clamp(pr, 2f, 40f);
                         SaveConfig();
                     }
 
