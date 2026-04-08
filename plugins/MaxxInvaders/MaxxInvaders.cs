@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.25")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.26")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1493,7 +1493,8 @@ namespace Oxide.Plugins
             foreach (var r in _registry.All().ToArray())
             {
                 if (r.NpcPlayer == null || r.NpcPlayer.IsDestroyed) continue;
-                var steamForBridge = r.AnchorSteamId != 0UL ? r.AnchorSteamId : issuer.userID;
+                ulong steamForBridge = r.AnchorSteamId;
+                if (steamForBridge == 0UL) steamForBridge = issuer.userID;
                 if (steamForBridge == 0UL) continue;
                 if (r.AnchorSteamId == 0UL) r.AnchorSteamId = steamForBridge;
 
@@ -1523,7 +1524,8 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var steamForBridge = r.AnchorSteamId != 0UL ? r.AnchorSteamId : issuer.userID;
+            ulong steamForBridge = r.AnchorSteamId;
+            if (steamForBridge == 0UL) steamForBridge = issuer.userID;
             if (steamForBridge == 0UL)
             {
                 issuer.ChatMessage("[MaxxInvaders] No anchor Steam ID on this bot.");
@@ -6655,12 +6657,14 @@ namespace Oxide.Plugins
                     player.ChatMessage("[MaxxInvaders] NPC not found.");
                 else
                 {
-                    var steam = rr.AnchorSteamId != 0UL ? rr.AnchorSteamId : player.userID;
+                    var botHadStreamerAnchor = rr.AnchorSteamId != 0UL;
+                    ulong steam = rr.AnchorSteamId;
+                    if (steam == 0UL) steam = player.userID;
                     if (rr.AnchorSteamId == 0UL) rr.AnchorSteamId = steam;
                     rr.AnchorPosition = ResolveLeashPositionForAnchorSteam(steam, player);
                     rr.ReturnRunActive = true;
                     player.ChatMessage(
-                        rr.AnchorSteamId != 0UL && rr.AnchorSteamId != player.userID
+                        botHadStreamerAnchor
                             ? "[MaxxInvaders] Bot is pathing back toward the streamer anchor (within 20 m)."
                             : "[MaxxInvaders] Bot is pathing back to within 20 m of you (not a teleport).");
                 }
