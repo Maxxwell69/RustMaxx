@@ -27,12 +27,25 @@ export async function POST(request: NextRequest) {
   if (!serverId) {
     return NextResponse.json({ error: "serverId is required" }, { status: 400 });
   }
-  const { rows } = await query<{ id: string }>(
-    "SELECT id FROM servers WHERE id = $1 LIMIT 1",
+  const { rows } = await query<{
+    id: string;
+    streamer_interactions_enabled: boolean;
+  }>(
+    "SELECT id, streamer_interactions_enabled FROM servers WHERE id = $1 LIMIT 1",
     [serverId]
   );
-  if (!rows[0]) {
+  const srv = rows[0];
+  if (!srv) {
     return NextResponse.json({ error: "Server not found" }, { status: 404 });
+  }
+  if (!srv.streamer_interactions_enabled) {
+    return NextResponse.json(
+      {
+        error:
+          "This server does not allow streamer interactions. The owner must enable them under Server setup → Streamer interactions.",
+      },
+      { status: 400 }
+    );
   }
 
   const { row, secretPlain } = await upsertStreamerWebhook(user.id, serverId);

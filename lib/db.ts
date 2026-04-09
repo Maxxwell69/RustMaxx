@@ -40,6 +40,10 @@ export type ServerRow = {
   map_last_fetched_at?: Date | string | null;
   /** TikFinity maxxinvaders: default patrol anchor (Steam64) when URL/body omit anchorSteam. */
   tikfinity_anchor_steam_id?: string | null;
+  /** Server owner allows streamers to target this server for TikFinity webhooks. */
+  streamer_interactions_enabled?: boolean;
+  /** Subset of platform streamer actions this server allows (owner-chosen). */
+  streamer_allowed_actions?: string[];
 };
 
 export type PublicServerRow = {

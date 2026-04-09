@@ -45,6 +45,8 @@ export type TikfinityWebhookRunContext = {
   resolveConnectionByEventName: (
     name: string
   ) => Promise<TikfinityConnectionForWebhook | null>;
+  /** Per-streamer hooks: restrict to these action keys (server owner + platform catalog). */
+  streamerAllowedActions?: string[] | null;
 };
 const TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID =
   process.env.TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID?.trim() ?? undefined;
@@ -353,6 +355,28 @@ export async function runTikfinityWebhook(
           debug:
             "Specify the action one of these ways: (1) URL ?action=wolf or ?event=wolf (same token URL), (2) JSON with action/event at top level or under data/event/payload (e.g. {\"data\":{\"event\":\"wolf\"}}), (3) streamer rule name matching that string, (4) chat fields message/text/…. Test: POST your hook URL with body {\"data\":{\"action\":\"wolf\"},\"nickname\":\"Test\"}.",
           giftName: payload?.giftName,
+        },
+        { status: 200 }
+      )
+    );
+  }
+
+  if (
+    ctx.streamerAllowedActions != null &&
+    !(ctx.streamerAllowedActions as string[]).includes(action)
+  ) {
+    return withCors(
+      NextResponse.json(
+        {
+          ok: false,
+          skipped: true,
+          reason: "This action is not allowed for streamers on this server.",
+          action,
+          debug: `Allowed on this server: ${
+            ctx.streamerAllowedActions.length
+              ? (ctx.streamerAllowedActions as string[]).join(", ")
+              : "(none — pick actions in RustMaxx → Servers → Streamer interactions)"
+          }`,
         },
         { status: 200 }
       )

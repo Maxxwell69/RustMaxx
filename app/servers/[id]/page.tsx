@@ -38,6 +38,8 @@ export default function ServerDetailPage() {
     location?: string | null;
     logo_url?: string | null;
     tikfinity_anchor_steam_id?: string | null;
+    streamer_interactions_enabled?: boolean;
+    streamer_allowed_actions?: string[];
   } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [listingForm, setListingForm] = useState({
@@ -65,6 +67,13 @@ export default function ServerDetailPage() {
   const [tikfinityAnchorSteam, setTikfinityAnchorSteam] = useState("");
   const [tikfinityAnchorSaving, setTikfinityAnchorSaving] = useState(false);
   const [tikfinityAnchorFeedback, setTikfinityAnchorFeedback] = useState<string | null>(null);
+  const [streamerEnabled, setStreamerEnabled] = useState(false);
+  const [streamerActions, setStreamerActions] = useState<string[]>([]);
+  const [streamerSelectable, setStreamerSelectable] = useState<
+    { action_key: string; label: string | null }[]
+  >([]);
+  const [streamerSaving, setStreamerSaving] = useState(false);
+  const [streamerFeedback, setStreamerFeedback] = useState<string | null>(null);
   const [profiledPlayers, setProfiledPlayers] = useState<ProfiledPlayer[]>([]);
   const [inactiveLoading, setInactiveLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -100,9 +109,29 @@ export default function ServerDetailPage() {
           setTikfinityAnchorSteam(
             typeof s.tikfinity_anchor_steam_id === "string" ? s.tikfinity_anchor_steam_id : ""
           );
+          setStreamerEnabled(Boolean(s.streamer_interactions_enabled));
+          setStreamerActions(
+            Array.isArray(s.streamer_allowed_actions) ? s.streamer_allowed_actions : []
+          );
         }
       })
       .catch(() => setServer(null));
+  }, [id]);
+
+  useEffect(() => {
+    fetch(`/api/servers/${id}/streamer-policy`, { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.selectable) return;
+        setStreamerSelectable(d.selectable);
+        if (typeof d.streamer_interactions_enabled === "boolean") {
+          setStreamerEnabled(d.streamer_interactions_enabled);
+        }
+        if (Array.isArray(d.streamer_allowed_actions)) {
+          setStreamerActions(d.streamer_allowed_actions);
+        }
+      })
+      .catch(() => {});
   }, [id]);
 
   // Load RustMaxx profiled players (inactive/active) for this server
@@ -321,6 +350,31 @@ export default function ServerDetailPage() {
     }
   }
 
+  async function saveStreamerPolicy() {
+    setStreamerFeedback(null);
+    setStreamerSaving(true);
+    try {
+      const res = await fetch(`/api/servers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          streamer_interactions_enabled: streamerEnabled,
+          streamer_allowed_actions: streamerActions,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStreamerFeedback(typeof data.error === "string" ? data.error : "Save failed");
+        return;
+      }
+      setServer((prev) => (prev ? { ...prev, ...data } : null));
+      setStreamerFeedback("Saved. Streamers can only use checked actions; MaxxInvaders / NPC roaming are not included.");
+    } finally {
+      setStreamerSaving(false);
+    }
+  }
+
   async function saveTikfinityAnchor() {
     setTikfinityAnchorFeedback(null);
     const t = tikfinityAnchorSteam.trim();
@@ -504,6 +558,79 @@ export default function ServerDetailPage() {
             className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
           >
             {rconSaving ? "Saving…" : "Save RCON settings"}
+          </button>
+        </div>
+      )}
+
+      {(server.myRole === "owner" || server.myRole === "admin") && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <h2 className="text-sm font-medium text-zinc-300">Streamer interactions</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Allow TikFinity streamers to target this server from{" "}
+            <strong className="text-zinc-400">Streamer interactions</strong>. Only RustChaos-style commands and TikTok
+            social announcements (no MaxxInvaders, Roaming NPC, or chaos-wave bundles).
+          </p>
+          <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+            <input
+              type="checkbox"
+              checked={streamerEnabled}
+              onChange={(e) => setStreamerEnabled(e.target.checked)}
+              className="rounded border-zinc-600"
+            />
+            Allow streamers to use this server for TikFinity webhooks
+          </label>
+          {streamerEnabled && streamerActions.length === 0 ? (
+            <p className="mt-3 text-xs text-amber-200/90">
+              Turn on at least one action below, or streamers&apos; webhooks will be rejected until you add some.
+            </p>
+          ) : null}
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-medium text-zinc-400">Allowed actions</p>
+            {streamerSelectable.length === 0 ? (
+              <p className="text-xs text-zinc-600">Loading actions…</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {streamerSelectable.map((opt) => (
+                  <label
+                    key={opt.action_key}
+                    className="flex cursor-pointer items-start gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-2 py-1.5 text-xs text-zinc-300 hover:border-zinc-700"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-zinc-600"
+                      checked={streamerActions.includes(opt.action_key)}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setStreamerActions((prev) =>
+                          on
+                            ? [...new Set([...prev, opt.action_key])]
+                            : prev.filter((a) => a !== opt.action_key)
+                        );
+                      }}
+                    />
+                    <span>
+                      <span className="font-medium text-zinc-200">{opt.label ?? opt.action_key}</span>
+                      <code className="ml-1 text-[10px] text-emerald-600/90">{opt.action_key}</code>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          {streamerFeedback && (
+            <p
+              className={`mt-2 text-xs ${streamerFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}
+            >
+              {streamerFeedback}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void saveStreamerPolicy()}
+            disabled={streamerSaving}
+            className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
+          >
+            {streamerSaving ? "Saving…" : "Save streamer settings"}
           </button>
         </div>
       )}

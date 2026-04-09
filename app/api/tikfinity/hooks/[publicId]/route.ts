@@ -11,6 +11,7 @@ import {
 import { findUserById } from "@/lib/users";
 import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
 import { getStreamerRuleByEventName } from "@/lib/streamer-tikfinity-rules";
+import { getStreamerPolicyForServer } from "@/lib/streamer-action-policy";
 
 function getHookToken(request: NextRequest): string | null {
   const q = request.nextUrl.searchParams.get("token")?.trim();
@@ -92,9 +93,33 @@ async function handleHook(
     );
   }
 
+  const policy = await getStreamerPolicyForServer(hook.server_id);
+  if (!policy) {
+    return withCors(
+      NextResponse.json(
+        { ok: false, error: "Server not found for this webhook." },
+        { status: 503 }
+      )
+    );
+  }
+  if (!policy.enabled) {
+    return withCors(
+      NextResponse.json(
+        {
+          ok: false,
+          error: "Streamer interactions are disabled for this server.",
+          debug:
+            "The server owner must enable streamer access under RustMaxx → Servers → this server → Streamer interactions.",
+        },
+        { status: 403 }
+      )
+    );
+  }
+
   return runTikfinityWebhook(request, body, {
     serverId: hook.server_id,
     resolveConnectionByEventName: (name) =>
       getStreamerRuleByEventName(hook.id, name),
+    streamerAllowedActions: policy.effectiveActions,
   });
 }

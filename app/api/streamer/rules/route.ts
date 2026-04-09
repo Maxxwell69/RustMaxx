@@ -8,6 +8,7 @@ import {
 } from "@/lib/streamer-tikfinity-rules";
 import { getStreamerWebhookForUser } from "@/lib/streamer-webhooks";
 import type { TikTriggerAction } from "@/lib/tikfinity";
+import { isActionAllowedForStreamerOnServer } from "@/lib/streamer-action-policy";
 
 export async function GET(request: NextRequest) {
   const session = getSession(request.headers.get("cookie"));
@@ -56,6 +57,15 @@ export async function POST(request: NextRequest) {
   }
   const name = typeof body.name === "string" ? body.name : "";
   const serverAction = body.serverAction as TikTriggerAction;
+  if (!(await isActionAllowedForStreamerOnServer(hook.server_id, serverAction))) {
+    return NextResponse.json(
+      {
+        error:
+          "This server does not allow that action for streamers. Ask the owner to enable it under Server setup, or pick another action.",
+      },
+      { status: 400 }
+    );
+  }
   const result = await createStreamerRule(hook.id, name, serverAction, {
     message: body.message,
     scrapAmount: body.scrapAmount,

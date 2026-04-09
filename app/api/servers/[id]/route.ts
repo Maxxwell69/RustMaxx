@@ -6,6 +6,10 @@ import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
 import { getServerWithRole, canEditServer, canDeleteServer } from "@/lib/server-access";
 import type { ServerRow } from "@/lib/db";
 import { parseSteam64Anchor } from "@/lib/maxxinvaders-anchor-steam";
+import {
+  assertOwnerActionsAllowedByCatalog,
+  validateAllowedActionsPayload,
+} from "@/lib/streamer-action-policy";
 
 export async function GET(
   request: NextRequest,
@@ -49,6 +53,10 @@ export async function PATCH(
     rcon_password?: string;
     /** TikFinity maxxinvaders default patrol anchor (Steam64); null or "" clears. */
     tikfinity_anchor_steam_id?: string | null;
+    /** Allow streamers to use TikFinity hooks targeting this server. */
+    streamer_interactions_enabled?: boolean;
+    /** Actions streamers may use (RustChaos / social only); owner-chosen subset of platform catalog. */
+    streamer_allowed_actions?: string[];
   };
   try {
     body = await request.json();
@@ -124,6 +132,29 @@ export async function PATCH(
     rconCredentialsChanged = true;
   }
 
+  if (body.streamer_interactions_enabled !== undefined) {
+    if (typeof body.streamer_interactions_enabled !== "boolean") {
+      return NextResponse.json(
+        { error: "streamer_interactions_enabled must be a boolean" },
+        { status: 400 }
+      );
+    }
+    updates.push(`streamer_interactions_enabled = $${idx++}`);
+    values.push(body.streamer_interactions_enabled);
+  }
+  if (body.streamer_allowed_actions !== undefined) {
+    const parsed = validateAllowedActionsPayload(body.streamer_allowed_actions);
+    if ("error" in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const catOk = await assertOwnerActionsAllowedByCatalog(parsed);
+    if ("error" in catOk) {
+      return NextResponse.json({ error: catOk.error }, { status: 400 });
+    }
+    updates.push(`streamer_allowed_actions = $${idx++}`);
+    values.push(parsed);
+  }
+
   if (body.tikfinity_anchor_steam_id !== undefined) {
     const raw = body.tikfinity_anchor_steam_id;
     if (raw === null || raw === "") {
@@ -155,7 +186,7 @@ export async function PATCH(
   if (rconCredentialsChanged) disconnect(serverId);
   values.push(serverId);
   const { rows } = await query<ServerRow>(
-    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id`,
+    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id, streamer_interactions_enabled, streamer_allowed_actions`,
     values
   );
   const auditFields = Object.keys(body).filter((k) => k !== "rcon_password");

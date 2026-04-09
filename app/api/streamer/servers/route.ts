@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
     name: string;
     listing_name: string | null;
   }>(
-    "SELECT id, name, listing_name FROM servers ORDER BY COALESCE(listing_name, name) ASC"
+    `SELECT id, name, listing_name FROM servers
+     WHERE streamer_interactions_enabled = true
+     ORDER BY COALESCE(listing_name, name) ASC`
   );
   return NextResponse.json({ servers: rows });
 }
