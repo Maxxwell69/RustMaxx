@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.36")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.37")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -3977,10 +3977,19 @@ namespace Oxide.Plugins
             AddCuiButtonWithText(
                 container,
                 root,
+                $"maxxinvaders.gui basebot mix {nid} 1",
+                "0.14 0.50 0.36 0.95",
+                "Mix",
+                "0.04 0.28",
+                "0.48 0.36",
+                9);
+            AddCuiButtonWithText(
+                container,
+                root,
                 $"maxxinvaders.gui basebot dismount {nid} 1",
                 cDismount,
                 "Out",
-                "0.04 0.28",
+                "0.52 0.28",
                 "0.96 0.36",
                 9);
 
@@ -5991,13 +6000,23 @@ namespace Oxide.Plugins
                 var nidSafe = (r.NpcId ?? "").Trim();
                 if (string.IsNullOrEmpty(nidSafe)) nidSafe = "?";
 
+                const string cMix = "0.15 0.52 0.38 0.95";
+                AddCuiButtonWithText(
+                    container,
+                    rowName,
+                    $"maxxinvaders.gui basebot mix {nidSafe}",
+                    cMix,
+                    "MIX (table)",
+                    "0.02 0.06",
+                    "0.48 0.42",
+                    8);
                 AddCuiButtonWithText(
                     container,
                     rowName,
                     $"maxxinvaders.gui basebot dismount {nidSafe}",
                     cOut,
                     "OUT (dismount)",
-                    "0.02 0.06",
+                    "0.52 0.06",
                     "0.98 0.42",
                     8);
             }
@@ -6012,7 +6031,7 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                "BaseBotch — dismount",
+                "BaseBotch — mixing table & dismount",
                 "0.03 0.93",
                 "0.97 0.98",
                 15,
@@ -6021,7 +6040,7 @@ namespace Oxide.Plugins
             AddCuiText(
                 container,
                 contentPanel,
-                "OUT sends BaseBotch dismount for a stuck bot (e.g. still mounted). Wheel mount/autorun controls are disabled for now.",
+                "MIX assigns the bot to the nearest mixing table within ~12 m of you (stand next to it). OUT dismounts a stuck bot. Wheel mount/autorun controls are disabled for now.",
                 "0.03 0.875",
                 "0.97 0.925",
                 10,
@@ -6104,6 +6123,33 @@ namespace Oxide.Plugins
             }
 
             player.ChatMessage($"[MaxxInvaders] BaseBotch: OUT (dismount) sent for {n} Roaming bot(s).");
+        }
+
+        private void TryBaseBotMixingNearPlayer(BasePlayer player, InvaderRuntime r)
+        {
+            if (player == null) return;
+            if (BaseBotch == null || !BaseBotch.IsLoaded)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBotch plugin is not loaded.");
+                return;
+            }
+
+            if (!r.IsRoamingNpc || r.NpcPlayer == null || r.NpcPlayer.IsDestroyed)
+            {
+                player.ChatMessage("[MaxxInvaders] BaseBotch: need a live Roaming bot (not a scientist).");
+                return;
+            }
+
+            try
+            {
+                var anchor = ResolveBridgeAnchorSteam(r, player);
+                BaseBotch.Call("AssignNpcToMixingTableNearPlayer", r.EntityId, player, anchor, null);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} BaseBotch AssignNpcToMixingTableNearPlayer: {ex.Message}");
+                player.ChatMessage("[MaxxInvaders] BaseBotch error — see server log.");
+            }
         }
 
         private void OpenGui(BasePlayer player, int page)
@@ -6653,6 +6699,14 @@ namespace Oxide.Plugins
                         TryBaseBotDismountSingle(player, rOut);
                     else
                         player.ChatMessage("[MaxxInvaders] BaseBotch: use OUT on a row or a bot id.");
+                }
+                else if (sub.Equals("mix", StringComparison.OrdinalIgnoreCase) ||
+                         sub.Equals("mixing", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (a.Length > 2 && TryFindInvader(a[2].Trim(), out var rMix))
+                        TryBaseBotMixingNearPlayer(player, rMix);
+                    else
+                        player.ChatMessage("[MaxxInvaders] BaseBotch: use MIX on a row or a bot id.");
                 }
                 else
                     player.ChatMessage("[MaxxInvaders] BaseBotch: unknown action.");

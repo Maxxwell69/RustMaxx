@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.5.3")]
+    [Info("BaseBotch", "RustMaxx", "1.5.4")]
     [Description("Base automation: water wheel mount/autorun, and NPC mixing-table crafting (pulls ingredients from anchor-owned storage).")]
     public class BaseBotch : RustPlugin
     {
@@ -126,6 +126,9 @@ namespace Oxide.Plugins
 
             // --- Mixing table (NPC workstation) ---
             public float MixingLookRayDistanceMeters = 6f;
+
+            /// <summary>MaxxInvaders GUI: assign to nearest mixing table within this radius of the player (no look ray).</summary>
+            public float MixingNearPlayerAssignRadiusMeters = 12f;
             public float MixingPollSeconds = 2.25f;
             public bool MixingPauseRoamingAi = true;
             public bool MixingTeleportNpcToStand = true;
@@ -2657,6 +2660,89 @@ namespace Oxide.Plugins
             return false;
         }
 
+        private ulong ResolveMixingAnchorForNpc(ulong npcEntityNetId, BasePlayer issuer, object anchorSteamObj)
+        {
+            var anchorSteam = ParseAnchorSteam(anchorSteamObj, issuer);
+            if (anchorSteam == 0UL && RoamingNPCs != null && RoamingNPCs.IsLoaded)
+            {
+                try
+                {
+                    var rawA = RoamingNPCs.Call("GetBridgeProtectAnchorUserId", npcEntityNetId);
+                    if (rawA is ulong ua && ua != 0UL) anchorSteam = ua;
+                    else if (rawA is long la && la > 0) anchorSteam = (ulong)la;
+                }
+                catch
+                {
+                    /* ignored */
+                }
+            }
+
+            if (anchorSteam == 0UL && issuer != null) anchorSteam = issuer.userID;
+            return anchorSteam;
+        }
+
+        /// <summary>Nearest <see cref="MixingTable"/> to <paramref name="center"/> (for GUI assign without look ray).</summary>
+        private MixingTable FindNearestMixingTable(Vector3 center, float maxRadiusMeters)
+        {
+            maxRadiusMeters = Mathf.Clamp(maxRadiusMeters, 2f, 40f);
+            var maxSqr = maxRadiusMeters * maxRadiusMeters;
+            var list = Pool.Get<List<BaseEntity>>();
+            try
+            {
+                Vis.Entities(center, maxRadiusMeters, list,
+                    LayerMask.GetMask("Deployed", "Construction", "Default", "World"), QueryTriggerInteraction.Ignore);
+                MixingTable best = null;
+                var bestSqr = float.MaxValue;
+                foreach (var ent in list)
+                {
+                    if (ent == null || ent.IsDestroyed) continue;
+                    var mt = ent as MixingTable ?? ent.GetComponent<MixingTable>();
+                    if (mt == null || mt.IsDestroyed || mt.net == null) continue;
+                    var sqr = (center - mt.transform.position).sqrMagnitude;
+                    if (sqr <= maxSqr && sqr < bestSqr)
+                    {
+                        bestSqr = sqr;
+                        best = mt;
+                    }
+                }
+
+                return best;
+            }
+            finally
+            {
+                Pool.FreeUnmanaged(ref list);
+            }
+        }
+
+        private bool TryCompleteMixingTableAssignment(BasePlayer npc, MixingTable table, BasePlayer issuer, ulong anchorSteam,
+            object recipeIdObj)
+        {
+            if (npc == null || table == null || table.IsDestroyed || table.net == null || issuer == null) return false;
+
+            var rid = string.IsNullOrWhiteSpace(recipeIdObj?.ToString())
+                ? "lowgrade_fuel"
+                : recipeIdObj.ToString().Trim().ToLowerInvariant();
+            if (!_cfg.MixingRecipes.ContainsKey(rid))
+            {
+                issuer.ChatMessage($"[BaseBotch] Unknown recipe id '{rid}'. Add it under MixingRecipes in BaseBotch.json.");
+                return false;
+            }
+
+            SaveMixingSessionAndPauseRoam(npc, anchorSteam);
+            _mixingByNpcNetId[npc.net.ID.Value] = new MixingStationSession
+            {
+                TableNetId = table.net.ID.Value,
+                RecipeId = rid,
+                AnchorSteam = anchorSteam,
+            };
+
+            issuer.ChatMessage(
+                anchorSteam != 0UL
+                    ? $"[BaseBotch] Mixing duty (recipe: {rid}). Mats are pulled from your boxes within ~{_cfg.MixingIngredientSearchRadiusMeters:F0} m (OwnerID). Outputs go to the bot's bag."
+                    : $"[BaseBotch] Mixing duty (recipe: {rid}). Set anchor Steam ID (MaxxInvaders bot) so mats can auto-pull from your storage; else keep mats in the bot's bag.");
+            return true;
+        }
+
         /// <summary>
         /// MaxxInvaders / RCON: assign an NPC bot to the mixing table you are looking at. Ingredients are pulled from anchor-owned storage when configured.
         /// Optional <paramref name="recipeIdObj"/> is recipe key from config (default lowgrade_fuel).
@@ -2685,23 +2771,7 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            var anchorSteam = ParseAnchorSteam(anchorSteamObj, issuer);
-            if (anchorSteam == 0UL && RoamingNPCs != null && RoamingNPCs.IsLoaded)
-            {
-                try
-                {
-                    var rawA = RoamingNPCs.Call("GetBridgeProtectAnchorUserId", npcEntityNetId);
-                    if (rawA is ulong ua && ua != 0UL) anchorSteam = ua;
-                    else if (rawA is long la && la > 0) anchorSteam = (ulong)la;
-                }
-                catch
-                {
-                    /* ignored */
-                }
-            }
-
-            // Unspecified anchor (0): after bridge lookup, use issuer so pull-from-storage still works for non-bridge bots.
-            if (anchorSteam == 0UL && issuer != null) anchorSteam = issuer.userID;
+            var anchorSteam = ResolveMixingAnchorForNpc(npcEntityNetId, issuer, anchorSteamObj);
 
             if (issuer.eyes == null) return false;
             if (!Physics.Raycast(
@@ -2724,28 +2794,47 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            var rid = string.IsNullOrWhiteSpace(recipeIdObj?.ToString())
-                ? "lowgrade_fuel"
-                : recipeIdObj.ToString().Trim().ToLowerInvariant();
-            if (!_cfg.MixingRecipes.ContainsKey(rid))
+            return TryCompleteMixingTableAssignment(npc, table, issuer, anchorSteam, recipeIdObj);
+        }
+
+        /// <summary>
+        /// MaxxInvaders GUI: assign bot to the nearest mixing table within <see cref="ConfigData.MixingNearPlayerAssignRadiusMeters"/> of the player (stand next to the table). Same anchor/recipe rules as <see cref="AssignNpcToMixingTableFromLook"/>.
+        /// </summary>
+        [HookMethod("AssignNpcToMixingTableNearPlayer")]
+        public object AssignNpcToMixingTableNearPlayer(ulong npcEntityNetId, BasePlayer issuer, object anchorSteamObj = null,
+            object recipeIdObj = null)
+        {
+            if (issuer == null || !issuer.IsConnected) return false;
+            var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
+            if (npc == null || npc.IsDestroyed)
             {
-                issuer.ChatMessage($"[BaseBotch] Unknown recipe id '{rid}'. Add it under MixingRecipes in BaseBotch.json.");
+                issuer.ChatMessage("[BaseBotch] NPC not found.");
                 return false;
             }
 
-            SaveMixingSessionAndPauseRoam(npc, anchorSteam);
-            _mixingByNpcNetId[npc.net.ID.Value] = new MixingStationSession
+            if (!npc.IsNpc)
             {
-                TableNetId = table.net.ID.Value,
-                RecipeId = rid,
-                AnchorSteam = anchorSteam,
-            };
+                issuer.ChatMessage("[BaseBotch] That entity is not an NPC bot.");
+                return false;
+            }
 
-            issuer.ChatMessage(
-                anchorSteam != 0UL
-                    ? $"[BaseBotch] Mixing duty (recipe: {rid}). Mats are pulled from your boxes within ~{_cfg.MixingIngredientSearchRadiusMeters:F0} m (OwnerID). Outputs go to the bot's bag."
-                    : $"[BaseBotch] Mixing duty (recipe: {rid}). Set anchor Steam ID (MaxxInvaders bot) so mats can auto-pull from your storage; else keep mats in the bot's bag.");
-            return true;
+            if (npc.isMounted)
+            {
+                issuer.ChatMessage("[BaseBotch] Dismount the bot from vehicles/wheel before assigning a workstation.");
+                return false;
+            }
+
+            var anchorSteam = ResolveMixingAnchorForNpc(npcEntityNetId, issuer, anchorSteamObj);
+            var radius = Mathf.Clamp(_cfg.MixingNearPlayerAssignRadiusMeters, 2f, 40f);
+            var table = FindNearestMixingTable(issuer.transform.position, radius);
+            if (table == null)
+            {
+                issuer.ChatMessage(
+                    $"[BaseBotch] No mixing table within {radius:F0} m — stand next to the table or use /bmix.assign while looking at it.");
+                return false;
+            }
+
+            return TryCompleteMixingTableAssignment(npc, table, issuer, anchorSteam, recipeIdObj);
         }
 
         [HookMethod("StopNpcMixingStation")]
