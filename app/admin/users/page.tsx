@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  MEMBERSHIP_LEVELS,
+  MEMBERSHIP_LEVEL_LABELS,
+  type MembershipLevel,
+} from "@/lib/membership-level";
 
 type User = {
   id: string;
   email: string;
   role: string;
   display_name: string | null;
+  membership_level: MembershipLevel;
   created_at: string;
 };
 
@@ -29,7 +35,16 @@ export default function AdminUsersPage() {
         }
         return r.json();
       })
-      .then((data) => setUsers(Array.isArray(data) ? data : []))
+      .then((data) =>
+        setUsers(
+          Array.isArray(data)
+            ? data.map((u: User) => ({
+                ...u,
+                membership_level: u.membership_level ?? "standard",
+              }))
+            : []
+        )
+      )
       .catch(() => setError("Failed to load users."))
       .finally(() => setLoading(false));
   }, []);
@@ -49,7 +64,45 @@ export default function AdminUsersPage() {
         }
         setError("");
         setUsers((prev) =>
-          prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+          prev.map((u) =>
+            u.id === userId
+              ? {
+                  ...u,
+                  role: data.role ?? newRole,
+                  membership_level: data.membership_level ?? u.membership_level,
+                }
+              : u
+          )
+        );
+      })
+      .catch(() => setError("Update failed"))
+      .finally(() => setUpdating(null));
+  }
+
+  function updateMembershipLevel(userId: string, level: MembershipLevel) {
+    setUpdating(userId);
+    fetch(`/api/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ membershipLevel: level }),
+    })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, ...d })))
+      .then((data) => {
+        if (data.error) {
+          setError(data.error);
+          return;
+        }
+        setError("");
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === userId
+              ? {
+                  ...u,
+                  membership_level: data.membership_level ?? level,
+                  role: data.role ?? u.role,
+                }
+              : u
+          )
         );
       })
       .catch(() => setError("Update failed"))
@@ -62,10 +115,12 @@ export default function AdminUsersPage() {
         <Link href="/servers" className="text-rust-cyan hover:underline">
           ← Dashboard
         </Link>
-        <h1 className="text-xl font-semibold text-zinc-100">Manage users & roles</h1>
+        <h1 className="text-xl font-semibold text-zinc-100">Manage users, roles & levels</h1>
       </div>
       <p className="mb-4 text-sm text-zinc-500">
-        Only super_admin can access this page. Change a user&apos;s role or remove admin by setting them to guest.
+        Only super_admin can access this page. Change a user&apos;s <strong className="text-zinc-400">role</strong>{" "}
+        (permissions) and their <strong className="text-zinc-400">membership level</strong> (Standard / Pro / Elite)
+        for perks and future limits. Remove admin by setting role to guest.
       </p>
       {error && (
         <p className="mb-4 text-sm text-red-400">{error}</p>
@@ -79,7 +134,9 @@ export default function AdminUsersPage() {
               <tr className="border-b border-zinc-800 bg-zinc-800/50">
                 <th className="px-4 py-3 font-medium text-zinc-300">Email</th>
                 <th className="px-4 py-3 font-medium text-zinc-300">Role</th>
+                <th className="px-4 py-3 font-medium text-zinc-300">Level</th>
                 <th className="px-4 py-3 font-medium text-zinc-300">Change role</th>
+                <th className="px-4 py-3 font-medium text-zinc-300">Change level</th>
               </tr>
             </thead>
             <tbody>
@@ -89,6 +146,11 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3">
                     <span className="rounded bg-zinc-700 px-2 py-0.5 text-zinc-300">
                       {u.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="rounded bg-emerald-950/80 px-2 py-0.5 text-emerald-300">
+                      {MEMBERSHIP_LEVEL_LABELS[u.membership_level] ?? u.membership_level}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -114,6 +176,22 @@ export default function AdminUsersPage() {
                         Remove admin
                       </button>
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={u.membership_level}
+                      onChange={(e) =>
+                        updateMembershipLevel(u.id, e.target.value as MembershipLevel)
+                      }
+                      disabled={updating === u.id}
+                      className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-zinc-200 disabled:opacity-50"
+                    >
+                      {MEMBERSHIP_LEVELS.map((lev) => (
+                        <option key={lev} value={lev}>
+                          {MEMBERSHIP_LEVEL_LABELS[lev]}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                 </tr>
               ))}

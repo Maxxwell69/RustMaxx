@@ -1,6 +1,8 @@
 import { query } from "./db";
 import bcrypt from "bcryptjs";
 import type { UserRole } from "./permissions";
+import type { MembershipLevel } from "./membership-level";
+import { MEMBERSHIP_LEVELS } from "./membership-level";
 
 const SALT_ROUNDS = 10;
 
@@ -15,6 +17,7 @@ export type UserRow = {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   subscription_status: string;
+  membership_level: MembershipLevel;
   created_at: Date;
   updated_at: Date;
 };
@@ -24,11 +27,13 @@ export type UserProfile = {
   email: string;
   role: UserRole;
   display_name: string | null;
+  membership_level: MembershipLevel;
   created_at: string;
 };
 
 const USER_SELECT = `id, email, password_hash, role, display_name,
     steam_id, steam_linked_at, stripe_customer_id, stripe_subscription_id, subscription_status,
+    membership_level,
     created_at, updated_at`;
 
 export async function findUserByEmail(email: string): Promise<UserRow | null> {
@@ -65,8 +70,8 @@ export async function createUser(
 ): Promise<UserRow> {
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
   const { rows } = await query<UserRow>(
-    `INSERT INTO users (email, password_hash, role, display_name)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO users (email, password_hash, role, display_name, membership_level)
+     VALUES ($1, $2, $3, $4, 'standard')
      RETURNING ${USER_SELECT}`,
     [email.trim().toLowerCase(), hash, role, displayName ?? null]
   );
@@ -87,6 +92,7 @@ export function toProfile(row: UserRow): UserProfile {
     email: row.email,
     role: row.role,
     display_name: row.display_name,
+    membership_level: row.membership_level ?? "standard",
     created_at: row.created_at.toISOString(),
   };
 }
@@ -139,4 +145,16 @@ export async function setUserSteamId(
   );
   if (!rows[0]) return { error: "User not found" };
   return { ok: true };
+}
+
+export async function updateUserMembershipLevel(
+  userId: string,
+  level: MembershipLevel
+): Promise<UserRow | null> {
+  if (!MEMBERSHIP_LEVELS.includes(level)) return null;
+  const { rows } = await query<UserRow>(
+    `UPDATE users SET membership_level = $1, updated_at = now() WHERE id = $2 RETURNING ${USER_SELECT}`,
+    [level, userId]
+  );
+  return rows[0] ?? null;
 }
