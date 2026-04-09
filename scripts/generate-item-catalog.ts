@@ -107,7 +107,14 @@ export type ItemDefinition = {
 // Generated from Rust-Items.json (https://github.com/SzyMig/Rust-item-list-JSON). Regenerate: npx tsx scripts/generate-item-catalog.ts
 export const ITEM_CATALOG: ItemDefinition[] = [
 `;
-  const footer = "\n];\n";
+  const footer = `
+];
+
+export function findItemByShortname(shortname: string): ItemDefinition | undefined {
+  const q = shortname.trim();
+  return ITEM_CATALOG.find((i) => i.shortname === q);
+}
+`;
   const out = header + entries.join(",\n") + footer;
 
   const outPath = join(process.cwd(), "lib", "item-catalog.ts");

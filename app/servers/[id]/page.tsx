@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { LogoUpload } from "../logo-upload";
 import ServerAccessSection from "./server-access-section";
@@ -77,13 +77,30 @@ export default function ServerDetailPage() {
   const [streamerFeedback, setStreamerFeedback] = useState<string | null>(null);
   const [streamerItemShortnames, setStreamerItemShortnames] = useState<string[]>([]);
   const [streamerSelectableItems, setStreamerSelectableItems] = useState<
-    { shortname: string; label: string; category: string; default_amount: number }[]
+    {
+      shortname: string;
+      label: string;
+      category: string;
+      default_amount: number;
+      max_amount: number;
+      give_mode: "single" | "quantity";
+      stack_cap: number;
+    }[]
   >([]);
   const [profiledPlayers, setProfiledPlayers] = useState<ProfiledPlayer[]>([]);
   const [inactiveLoading, setInactiveLoading] = useState(true);
   const [setupTab, setSetupTab] = useState<"server" | "streamer">("server");
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  const streamerSingleItems = useMemo(
+    () => streamerSelectableItems.filter((i) => i.give_mode === "single"),
+    [streamerSelectableItems]
+  );
+  const streamerQtyItems = useMemo(
+    () => streamerSelectableItems.filter((i) => i.give_mode === "quantity"),
+    [streamerSelectableItems]
+  );
 
   const scrollToBottom = useCallback(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -944,40 +961,92 @@ export default function ServerDetailPage() {
                 <div className="border-t border-zinc-800 pt-4">
                   <p className="mb-1 text-xs font-medium text-zinc-400">Rust items (optional)</p>
                   <p className="mb-3 text-xs text-zinc-500">
-                    Super admins add items to the platform list. Choose which ones streamers may reference on this server
-                    (shown on the streamer dashboard for planning gifts / rules).
+                    Super admins tag each platform item as <strong className="text-zinc-400">single</strong> (one-off spawn
+                    or one inventory unit) or <strong className="text-zinc-400">quantity</strong> (stacked gives with
+                    default and max within the Rust stack). Check items below to allow them for streamer interactions on
+                    this server.
                   </p>
                   {streamerSelectableItems.length === 0 ? (
                     <p className="text-xs text-zinc-600">No platform items yet — ask a super admin to add some under Admin → Streamer items.</p>
                   ) : (
-                    <div className="max-h-56 space-y-1.5 overflow-y-auto rounded border border-zinc-800 bg-zinc-950/40 p-2">
-                      {streamerSelectableItems.map((it) => (
-                        <label
-                          key={it.shortname}
-                          className="flex cursor-pointer items-start gap-2 px-1 py-0.5 text-xs text-zinc-300 hover:bg-zinc-900/60"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-0.5 rounded border-zinc-600"
-                            checked={streamerItemShortnames.includes(it.shortname)}
-                            onChange={(e) => {
-                              const on = e.target.checked;
-                              setStreamerItemShortnames((prev) =>
-                                on
-                                  ? [...new Set([...prev, it.shortname])]
-                                  : prev.filter((s) => s !== it.shortname)
+                    <div className="max-h-72 space-y-4 overflow-y-auto rounded border border-zinc-800 bg-zinc-950/40 p-3">
+                      {streamerSingleItems.length > 0 ? (
+                        <div>
+                          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                            Single (one unit / spawn)
+                          </p>
+                          <ul className="space-y-1">
+                            {streamerSingleItems.map((it) => {
+                              const on = streamerItemShortnames.includes(it.shortname);
+                              return (
+                                <li key={it.shortname}>
+                                  <label className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-xs text-zinc-300 hover:bg-zinc-900/60">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5 rounded border-zinc-600"
+                                      checked={on}
+                                      onChange={(e) => {
+                                        const next = e.target.checked;
+                                        setStreamerItemShortnames((prev) =>
+                                          next
+                                            ? [...new Set([...prev, it.shortname])]
+                                            : prev.filter((s) => s !== it.shortname)
+                                        );
+                                      }}
+                                    />
+                                    <span>
+                                      <span className={on ? "text-emerald-400" : "text-zinc-600"}>{on ? "✓ " : ""}</span>
+                                      <span className="text-zinc-200">{it.label}</span>
+                                      <code className="ml-1 text-[10px] text-zinc-500">{it.shortname}</code>
+                                      <span className="ml-1 text-[10px] text-zinc-600">· ×1 · {it.category}</span>
+                                    </span>
+                                  </label>
+                                </li>
                               );
-                            }}
-                          />
-                          <span>
-                            <span className="text-zinc-200">{it.label}</span>
-                            <code className="ml-1 text-[10px] text-zinc-500">{it.shortname}</code>
-                            <span className="ml-1 text-[10px] text-zinc-600">
-                              ×{it.default_amount} · {it.category}
-                            </span>
-                          </span>
-                        </label>
-                      ))}
+                            })}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {streamerQtyItems.length > 0 ? (
+                        <div>
+                          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                            Quantity (stacked gives)
+                          </p>
+                          <ul className="space-y-1">
+                            {streamerQtyItems.map((it) => {
+                              const on = streamerItemShortnames.includes(it.shortname);
+                              return (
+                                <li key={it.shortname}>
+                                  <label className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-xs text-zinc-300 hover:bg-zinc-900/60">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5 rounded border-zinc-600"
+                                      checked={on}
+                                      onChange={(e) => {
+                                        const next = e.target.checked;
+                                        setStreamerItemShortnames((prev) =>
+                                          next
+                                            ? [...new Set([...prev, it.shortname])]
+                                            : prev.filter((s) => s !== it.shortname)
+                                        );
+                                      }}
+                                    />
+                                    <span>
+                                      <span className={on ? "text-emerald-400" : "text-zinc-600"}>{on ? "✓ " : ""}</span>
+                                      <span className="text-zinc-200">{it.label}</span>
+                                      <code className="ml-1 text-[10px] text-zinc-500">{it.shortname}</code>
+                                      <span className="ml-1 text-[10px] text-zinc-600">
+                                        · default {it.default_amount} · max {it.max_amount} (stack cap {it.stack_cap}) ·{" "}
+                                        {it.category}
+                                      </span>
+                                    </span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>

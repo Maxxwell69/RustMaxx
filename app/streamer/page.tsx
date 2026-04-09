@@ -75,6 +75,9 @@ type State = {
     label: string;
     category: string;
     amount: number;
+    max_amount: number;
+    give_mode: "single" | "quantity";
+    stack_cap: number;
   }>;
 };
 
@@ -547,7 +550,14 @@ export default function StreamerDashboardPage() {
               >
                 <span className="text-zinc-200">{it.label}</span>{" "}
                 <code className="text-emerald-600/80">{it.shortname}</code>{" "}
-                <span className="text-zinc-600">×{it.amount}</span>
+                <span className="ml-1 rounded bg-zinc-800 px-1 text-[10px] text-zinc-500">
+                  {it.give_mode === "single" ? "single" : "qty"}
+                </span>
+                <span className="text-zinc-600">
+                  {it.give_mode === "single"
+                    ? " · ×1"
+                    : ` · default ${it.amount} · max ${it.max_amount} (stack ${it.stack_cap})`}
+                </span>
               </li>
             ))}
           </ul>
