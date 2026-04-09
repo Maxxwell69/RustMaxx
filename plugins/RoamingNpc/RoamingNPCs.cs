@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.41")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.42")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -9980,6 +9980,24 @@ namespace Oxide.Plugins
             {
                 PrintError($"[RoamingNPCs] GetBridgeTaskLabel: {ex}");
                 return "";
+            }
+        }
+
+        /// <summary>BaseBotch: bridge streamer Steam64 for storage OwnerID matching (0 if not tracked / not bridge).</summary>
+        [HookMethod("GetBridgeProtectAnchorUserId")]
+        public object GetBridgeProtectAnchorUserId(ulong petEntityNetId)
+        {
+            try
+            {
+                if (listNpcPlayers == null || !listNpcPlayers.TryGetValue(petEntityNetId, out var pet) || pet == null ||
+                    pet.IsDestroyed)
+                    return 0UL;
+                return pet.Data?.BridgeProtectAnchorUserId ?? 0UL;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] GetBridgeProtectAnchorUserId: {ex}");
+                return 0UL;
             }
         }
 

@@ -12,8 +12,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.5.1")]
-    [Description("Base automation: water wheel mount/autorun, and NPC mixing-table crafting (ingredients from bot bag).")]
+    [Info("BaseBotch", "RustMaxx", "1.5.3")]
+    [Description("Base automation: water wheel mount/autorun, and NPC mixing-table crafting (pulls ingredients from anchor-owned storage).")]
     public class BaseBotch : RustPlugin
     {
         [PluginReference] private Plugin RoamingNPCs;
@@ -131,6 +131,14 @@ namespace Oxide.Plugins
             public bool MixingTeleportNpcToStand = true;
             public float MixingStandOffsetMeters = 1.15f;
             public bool MixingDebugReflection = false;
+
+            /// <summary>Pull missing recipe mats from boxes/cupboards/furnaces with <see cref="BaseEntity.OwnerID"/> = streamer Steam ID (same as MaxxInvaders deposit).</summary>
+            public bool MixingPullFromAnchorStorage = true;
+
+            public float MixingIngredientSearchRadiusMeters = 24f;
+
+            /// <summary>Max deployables scanned per pull (performance).</summary>
+            public int MixingIngredientSearchMaxEntities = 96;
 
             /// <summary>Recipe id → ordered ingredients (slot order matters on the table).</summary>
             public Dictionary<string, MixingRecipeCfg> MixingRecipes = new()
@@ -2299,6 +2307,12 @@ namespace Oxide.Plugins
                 recipe.Ingredients.Count == 0)
                 return;
 
+            if (_cfg.MixingPullFromAnchorStorage && session.AnchorSteam != 0UL)
+                TryPullMissingRecipeIngredientsFromAnchorStorage(npc, recipe, session.AnchorSteam, session.TableNetId);
+
+            if (!PlayerMainHasFullRecipe(npc, recipe))
+                return;
+
             if (!TryClearContainer(ingredientContainer))
                 return;
 
@@ -2357,20 +2371,132 @@ namespace Oxide.Plugins
                 var def = ItemManager.FindItemDefinition(ing.ShortName.Trim());
                 if (def == null) return false;
                 var need = ing.Amount;
-                var item = FindItemInContainer(src, def);
-                if (item == null || item.amount < need) return false;
-                var stack = need >= item.amount ? item : item.SplitItem(need);
-                if (stack == null || stack.amount < need) return false;
-                if (!stack.MoveToContainer(dest, slot, true))
+                while (need > 0)
                 {
-                    stack.Drop(npc.transform.position, npc.GetDropVelocity());
-                    return false;
+                    var item = FindItemInContainer(src, def);
+                    if (item == null) return false;
+                    var take = Mathf.Min(need, item.amount);
+                    var stack = take >= item.amount ? item : item.SplitItem(take);
+                    if (stack == null || stack.amount < take) return false;
+                    if (!stack.MoveToContainer(dest, slot, true))
+                    {
+                        stack.Drop(npc.transform.position, npc.GetDropVelocity());
+                        return false;
+                    }
+
+                    need -= take;
                 }
 
                 slot++;
             }
 
             return true;
+        }
+
+        private static bool PlayerMainHasFullRecipe(BasePlayer npc, MixingRecipeCfg recipe)
+        {
+            if (npc?.inventory?.containerMain == null || recipe?.Ingredients == null) return false;
+            var main = npc.inventory.containerMain;
+            foreach (var ing in recipe.Ingredients)
+            {
+                if (ing == null || string.IsNullOrWhiteSpace(ing.ShortName) || ing.Amount <= 0) continue;
+                var def = ItemManager.FindItemDefinition(ing.ShortName.Trim());
+                if (def == null) return false;
+                if (CountItemsInContainer(main, def) < ing.Amount) return false;
+            }
+
+            return true;
+        }
+
+        private static int CountItemsInContainer(ItemContainer c, ItemDefinition def)
+        {
+            if (c == null || def == null) return 0;
+            var n = 0;
+            foreach (var it in c.itemList)
+            {
+                if (it != null && it.info == def) n += it.amount;
+            }
+
+            return n;
+        }
+
+        /// <summary>Move missing stacks from anchor-owned <see cref="StorageContainer"/>s near the table into the bot main bag.</summary>
+        private void TryPullMissingRecipeIngredientsFromAnchorStorage(BasePlayer npc, MixingRecipeCfg recipe, ulong anchorSteamId,
+            ulong mixingTableNetId)
+        {
+            if (npc?.inventory?.containerMain == null || recipe?.Ingredients == null || anchorSteamId == 0UL) return;
+            var main = npc.inventory.containerMain;
+            var center = npc.transform.position;
+            var radius = Mathf.Clamp(_cfg.MixingIngredientSearchRadiusMeters, 4f, 80f);
+            var maxEnt = Mathf.Clamp(_cfg.MixingIngredientSearchMaxEntities, 16, 256);
+            var list = Pool.Get<List<BaseEntity>>();
+            try
+            {
+                Vis.Entities(center, radius, list,
+                    LayerMask.GetMask("Deployed", "Construction", "Default", "World"), QueryTriggerInteraction.Ignore);
+                var storages = new List<StorageContainer>();
+                foreach (var ent in list)
+                {
+                    if (ent == null || ent.IsDestroyed || ent.net == null) continue;
+                    if (ent.net.ID.Value == mixingTableNetId) continue;
+                    if (ent is not StorageContainer sc) continue;
+                    if (sc.inventory == null) continue;
+                    if (sc.OwnerID != anchorSteamId) continue;
+                    if (storages.Count >= maxEnt) break;
+                    storages.Add(sc);
+                }
+
+                storages.Sort((a, b) => Vector3.Distance(center, a.transform.position)
+                    .CompareTo(Vector3.Distance(center, b.transform.position)));
+
+                foreach (var ing in recipe.Ingredients)
+                {
+                    if (ing == null || string.IsNullOrWhiteSpace(ing.ShortName) || ing.Amount <= 0) continue;
+                    var def = ItemManager.FindItemDefinition(ing.ShortName.Trim());
+                    if (def == null) continue;
+                    var have = CountItemsInContainer(main, def);
+                    var missing = ing.Amount - have;
+                    if (missing <= 0) continue;
+                    foreach (var sc in storages)
+                    {
+                        if (missing <= 0) break;
+                        missing -= TryMoveItemAmountBetweenContainers(sc.inventory, def, missing, main, npc);
+                    }
+                }
+            }
+            finally
+            {
+                Pool.FreeUnmanaged(ref list);
+            }
+        }
+
+        /// <summary>Returns amount actually moved.</summary>
+        private static int TryMoveItemAmountBetweenContainers(ItemContainer src, ItemDefinition def, int need,
+            ItemContainer dest, BasePlayer npcForDropFallback)
+        {
+            if (src == null || dest == null || def == null || need <= 0) return 0;
+            var moved = 0;
+            while (need > 0)
+            {
+                var item = FindItemInContainer(src, def);
+                if (item == null) break;
+                var take = Mathf.Min(need, item.amount);
+                var stack = take >= item.amount ? item : item.SplitItem(take);
+                if (stack == null) break;
+                if (!stack.MoveToContainer(dest))
+                {
+                    if (npcForDropFallback != null)
+                        stack.Drop(npcForDropFallback.transform.position, npcForDropFallback.GetDropVelocity());
+                    else
+                        stack.Remove();
+                    break;
+                }
+
+                moved += take;
+                need -= take;
+            }
+
+            return moved;
         }
 
         private static Item FindItemInContainer(ItemContainer c, ItemDefinition def)
@@ -2532,7 +2658,7 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// MaxxInvaders / RCON: assign an NPC bot to the mixing table you are looking at. Bot must carry recipe ingredients in main inventory.
+        /// MaxxInvaders / RCON: assign an NPC bot to the mixing table you are looking at. Ingredients are pulled from anchor-owned storage when configured.
         /// Optional <paramref name="recipeIdObj"/> is recipe key from config (default lowgrade_fuel).
         /// </summary>
         [HookMethod("AssignNpcToMixingTableFromLook")]
@@ -2540,7 +2666,6 @@ namespace Oxide.Plugins
             object recipeIdObj = null)
         {
             if (issuer == null || !issuer.IsConnected) return false;
-            var anchorSteam = ParseAnchorSteam(anchorSteamObj, issuer);
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcEntityNetId)) as BasePlayer;
             if (npc == null || npc.IsDestroyed)
             {
@@ -2559,6 +2684,24 @@ namespace Oxide.Plugins
                 issuer.ChatMessage("[BaseBotch] Dismount the bot from vehicles/wheel before assigning a workstation.");
                 return false;
             }
+
+            var anchorSteam = ParseAnchorSteam(anchorSteamObj, issuer);
+            if (anchorSteam == 0UL && RoamingNPCs != null && RoamingNPCs.IsLoaded)
+            {
+                try
+                {
+                    var rawA = RoamingNPCs.Call("GetBridgeProtectAnchorUserId", npcEntityNetId);
+                    if (rawA is ulong ua && ua != 0UL) anchorSteam = ua;
+                    else if (rawA is long la && la > 0) anchorSteam = (ulong)la;
+                }
+                catch
+                {
+                    /* ignored */
+                }
+            }
+
+            // Unspecified anchor (0): after bridge lookup, use issuer so pull-from-storage still works for non-bridge bots.
+            if (anchorSteam == 0UL && issuer != null) anchorSteam = issuer.userID;
 
             if (issuer.eyes == null) return false;
             if (!Physics.Raycast(
@@ -2599,7 +2742,9 @@ namespace Oxide.Plugins
             };
 
             issuer.ChatMessage(
-                $"[BaseBotch] Bot assigned to mixing table (recipe: {rid}). Keep ingredients in the bot's bag; outputs return to the bot.");
+                anchorSteam != 0UL
+                    ? $"[BaseBotch] Mixing duty (recipe: {rid}). Mats are pulled from your boxes within ~{_cfg.MixingIngredientSearchRadiusMeters:F0} m (OwnerID). Outputs go to the bot's bag."
+                    : $"[BaseBotch] Mixing duty (recipe: {rid}). Set anchor Steam ID (MaxxInvaders bot) so mats can auto-pull from your storage; else keep mats in the bot's bag.");
             return true;
         }
 
@@ -2641,19 +2786,27 @@ namespace Oxide.Plugins
 
             if (args == null || args.Length < 1)
             {
-                player.ChatMessage("Usage: /bmix.assign <npcId> [recipeId]  —  look at mixing table. Default recipe: lowgrade_fuel");
+                player.ChatMessage(
+                    "Usage: /bmix.assign <entityNetId> [recipeId] [anchorSteam64]  —  look at mixing table. Anchor defaults to bridge streamer (RoamingNPCs) or your Steam ID.");
                 return;
             }
 
             var npcId = args[0].Trim();
             var recipe = args.Length >= 2 ? args[1].Trim() : null;
+            // Default 0: AssignNpcToMixingTableFromLook resolves Roaming bridge anchor first, then issuer.
+            object anchorObj = 0UL;
+            if (args.Length >= 3 &&
+                ulong.TryParse(args[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var explicitAnchor) &&
+                explicitAnchor > 0UL)
+                anchorObj = explicitAnchor;
+
             if (!ulong.TryParse(npcId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var eid))
             {
                 player.ChatMessage("[BaseBotch] npcId must be the entity net ID (use MaxxInvaders npc list / F1 debug).");
                 return;
             }
 
-            AssignNpcToMixingTableFromLook(eid, player, player.userID, recipe);
+            AssignNpcToMixingTableFromLook(eid, player, anchorObj, recipe);
         }
 
         [ChatCommand("bmix.stop")]
