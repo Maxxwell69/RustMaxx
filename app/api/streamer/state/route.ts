@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { findUserById } from "@/lib/users";
 import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
 import { canUseStreamerNetwork } from "@/lib/streamer-entitlement";
-import { getStreamerWebhookForUser } from "@/lib/streamer-webhooks";
+import { listStreamerWebhooksForUser } from "@/lib/streamer-webhooks";
 import { listStreamerRules } from "@/lib/streamer-tikfinity-rules";
 import { query } from "@/lib/db";
 import { getEffectiveStreamerItemsForServer } from "@/lib/streamer-item-policy";
@@ -18,8 +18,8 @@ function appOrigin(): string | null {
   }
 }
 
-export async function GET(request: NextRequest) {
-  const session = getSession(request.headers.get("cookie"));
+export async function GET(_request: NextRequest) {
+  const session = getSession(_request.headers.get("cookie"));
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -32,24 +32,85 @@ export async function GET(request: NextRequest) {
     subscriptionStatus: user.subscription_status,
   });
   const dashboardOk = canAccessStreamerDashboard(user);
-  const hook = await getStreamerWebhookForUser(user.id);
-  let serverName: string | null = null;
-  if (hook) {
-    const { rows } = await query<{ name: string }>(
-      "SELECT name FROM servers WHERE id = $1 LIMIT 1",
-      [hook.server_id]
-    );
-    serverName = rows[0]?.name ?? null;
-  }
-  const rules = hook ? await listStreamerRules(hook.id) : [];
-  const allowedStreamerItems = hook
-    ? await getEffectiveStreamerItemsForServer(hook.server_id)
-    : [];
   const origin = appOrigin();
-  const webhookUrl =
-    origin && hook
-      ? `${origin}/api/tikfinity/hooks/${hook.public_id}`
-      : null;
+
+  const hooksRows = await listStreamerWebhooksForUser(user.id);
+
+  const hooks: Array<{
+    id: string;
+    publicId: string;
+    serverId: string;
+    serverName: string | null;
+    webhookUrl: string | null;
+  }> = [];
+
+  const rulesOut: Array<{
+    id: string;
+    hookId: string;
+    serverId: string;
+    serverName: string | null;
+    name: string;
+    server_action: string;
+    message: string | null;
+    scrap_amount: number;
+    npc_template_key: string | null;
+    created_at: string;
+  }> = [];
+
+  const allowedStreamerItemsByServer: Array<{
+    serverId: string;
+    serverName: string | null;
+    items: Awaited<ReturnType<typeof getEffectiveStreamerItemsForServer>>;
+  }> = [];
+
+  for (const h of hooksRows) {
+    const { rows: sn } = await query<{ name: string }>(
+      "SELECT name FROM servers WHERE id = $1 LIMIT 1",
+      [h.server_id]
+    );
+    const serverName = sn[0]?.name ?? null;
+    const webhookUrl =
+      origin
+        ? `${origin}/api/tikfinity/hooks/${h.public_id}`
+        : `/api/tikfinity/hooks/${h.public_id}`;
+    hooks.push({
+      id: h.id,
+      publicId: h.public_id,
+      serverId: h.server_id,
+      serverName,
+      webhookUrl,
+    });
+
+    const ruleRows = await listStreamerRules(h.id);
+    for (const r of ruleRows) {
+      rulesOut.push({
+        id: r.id,
+        hookId: h.id,
+        serverId: h.server_id,
+        serverName,
+        name: r.name,
+        server_action: r.server_action,
+        message: r.message,
+        scrap_amount: r.scrap_amount,
+        npc_template_key: r.npc_template_key,
+        created_at:
+          r.created_at instanceof Date
+            ? r.created_at.toISOString()
+            : String(r.created_at),
+      });
+    }
+
+    const items = await getEffectiveStreamerItemsForServer(h.server_id);
+    if (items.length > 0) {
+      allowedStreamerItemsByServer.push({
+        serverId: h.server_id,
+        serverName,
+        items,
+      });
+    }
+  }
+
+  rulesOut.sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return NextResponse.json({
     user: {
@@ -61,15 +122,8 @@ export async function GET(request: NextRequest) {
       billingOk,
       dashboardOk,
     },
-    hook: hook
-      ? {
-          publicId: hook.public_id,
-          serverId: hook.server_id,
-          serverName,
-          webhookUrl,
-        }
-      : null,
-    rules,
-    allowedStreamerItems,
+    hooks,
+    rules: rulesOut,
+    allowedStreamerItemsByServer,
   });
 }

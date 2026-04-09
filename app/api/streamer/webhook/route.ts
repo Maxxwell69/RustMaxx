@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { findUserById } from "@/lib/users";
 import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
 import { query } from "@/lib/db";
-import { upsertStreamerWebhook } from "@/lib/streamer-webhooks";
+import { createWebhookForServer } from "@/lib/streamer-webhooks";
 
 export async function POST(request: NextRequest) {
   const session = getSession(request.headers.get("cookie"));
@@ -48,18 +48,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { row, secretPlain } = await upsertStreamerWebhook(user.id, serverId);
+  const { row, secretPlain } = await createWebhookForServer(user.id, serverId);
   const base = (process.env.APP_URL ?? process.env.SITE_URL ?? "").replace(/\/$/, "");
 
   return NextResponse.json({
     hook: {
+      id: row.id,
       publicId: row.public_id,
       serverId: row.server_id,
       webhookUrl: base
         ? `${base}/api/tikfinity/hooks/${row.public_id}`
         : `/api/tikfinity/hooks/${row.public_id}`,
     },
-    /** Present only when the hook row was first created — save this secret; use ?token=... in TikFinity. */
+    /** Only when a new server webhook was created — use ?token= in TikFinity. */
     webhookSecret: secretPlain,
+    created: Boolean(secretPlain),
   });
 }

@@ -121,3 +121,17 @@ export async function deleteStreamerRule(
   );
   return { deleted: (rowCount ?? 0) > 0 };
 }
+
+/** Delete a rule if it belongs to any of this user's webhooks. */
+export async function deleteStreamerRuleForUser(
+  ruleId: string,
+  userId: string
+): Promise<boolean> {
+  const { rowCount } = await query(
+    `DELETE FROM streamer_tikfinity_rules r
+     USING streamer_webhooks w
+     WHERE r.id = $1::uuid AND r.streamer_webhook_id = w.id AND w.user_id = $2::uuid`,
+    [ruleId, userId]
+  );
+  return (rowCount ?? 0) > 0;
+}

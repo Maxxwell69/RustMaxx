@@ -6,7 +6,7 @@ import {
   createStreamerRule,
   listStreamerRules,
 } from "@/lib/streamer-tikfinity-rules";
-import { getStreamerWebhookForUser } from "@/lib/streamer-webhooks";
+import { getWebhookByIdForUser } from "@/lib/streamer-webhooks";
 import type { TikTriggerAction } from "@/lib/tikfinity";
 import { isActionAllowedForStreamerOnServer } from "@/lib/streamer-action-policy";
 
@@ -19,9 +19,17 @@ export async function GET(request: NextRequest) {
   if (!user || !canAccessStreamerDashboard(user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const hook = await getStreamerWebhookForUser(user.id);
+  const url = new URL(request.url);
+  const hookId = url.searchParams.get("hookId")?.trim() ?? "";
+  if (!hookId) {
+    return NextResponse.json(
+      { error: "hookId query required (use dashboard state or pick a webhook)." },
+      { status: 400 }
+    );
+  }
+  const hook = await getWebhookByIdForUser(user.id, hookId);
   if (!hook) {
-    return NextResponse.json({ rules: [], needsWebhook: true });
+    return NextResponse.json({ error: "Webhook not found" }, { status: 404 });
   }
   const rules = await listStreamerRules(hook.id);
   return NextResponse.json({ rules, needsWebhook: false });
@@ -36,14 +44,8 @@ export async function POST(request: NextRequest) {
   if (!user || !canAccessStreamerDashboard(user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const hook = await getStreamerWebhookForUser(user.id);
-  if (!hook) {
-    return NextResponse.json(
-      { error: "Choose a server and save your webhook first." },
-      { status: 400 }
-    );
-  }
   let body: {
+    hookId?: string;
     name?: string;
     serverAction?: string;
     message?: string | null;
@@ -54,6 +56,20 @@ export async function POST(request: NextRequest) {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const hookId = typeof body.hookId === "string" ? body.hookId.trim() : "";
+  if (!hookId) {
+    return NextResponse.json(
+      { error: "hookId is required (which server’s webhook should get this rule?)." },
+      { status: 400 }
+    );
+  }
+  const hook = await getWebhookByIdForUser(user.id, hookId);
+  if (!hook) {
+    return NextResponse.json(
+      { error: "Webhook not found. Add that server under Game server first." },
+      { status: 400 }
+    );
   }
   const name = typeof body.name === "string" ? body.name : "";
   const serverAction = body.serverAction as TikTriggerAction;

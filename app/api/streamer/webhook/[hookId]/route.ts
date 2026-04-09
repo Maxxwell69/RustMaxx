@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { findUserById } from "@/lib/users";
 import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
-import { deleteStreamerRuleForUser } from "@/lib/streamer-tikfinity-rules";
+import { deleteWebhookForUser } from "@/lib/streamer-webhooks";
 
 export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  context: { params: Promise<{ hookId: string }> }
 ) {
-  const session = getSession(request.headers.get("cookie"));
+  const session = getSession(_request.headers.get("cookie"));
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -16,10 +16,14 @@ export async function DELETE(
   if (!user || !canAccessStreamerDashboard(user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const { id } = await context.params;
-  const deleted = await deleteStreamerRuleForUser(id, user.id);
-  if (!deleted) {
-    return NextResponse.json({ error: "Rule not found" }, { status: 404 });
+  const { hookId } = await context.params;
+  const id = typeof hookId === "string" ? hookId.trim() : "";
+  if (!id) {
+    return NextResponse.json({ error: "hookId required" }, { status: 400 });
+  }
+  const ok = await deleteWebhookForUser(user.id, id);
+  if (!ok) {
+    return NextResponse.json({ error: "Webhook not found" }, { status: 404 });
   }
   return NextResponse.json({ ok: true });
 }

@@ -18,7 +18,7 @@ type ServerOption = {
  * Super admins see every server for support/testing.
  */
 export async function GET(_request: NextRequest) {
-  const session = getSession(request.headers.get("cookie"));
+  const session = getSession(_request.headers.get("cookie"));
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -40,34 +40,59 @@ export async function getStreamerWebhookByPublicId(
   return rows[0] ?? null;
 }
 
+export async function listStreamerWebhooksForUser(
+  userId: string
+): Promise<StreamerWebhookRow[]> {
+  const { rows } = await query<StreamerWebhookRow>(
+    `SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at
+     FROM streamer_webhooks WHERE user_id = $1 ORDER BY created_at ASC`,
+    [userId]
+  );
+  return rows;
+}
+
+/** @deprecated Prefer listStreamerWebhooksForUser — kept for single-hook call sites. */
 export async function getStreamerWebhookForUser(
   userId: string
 ): Promise<StreamerWebhookRow | null> {
+  const list = await listStreamerWebhooksForUser(userId);
+  return list[0] ?? null;
+}
+
+export async function getWebhookByUserAndServer(
+  userId: string,
+  serverId: string
+): Promise<StreamerWebhookRow | null> {
   const { rows } = await query<StreamerWebhookRow>(
-    "SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at FROM streamer_webhooks WHERE user_id = $1 LIMIT 1",
-    [userId]
+    `SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at
+     FROM streamer_webhooks WHERE user_id = $1 AND server_id = $2 LIMIT 1`,
+    [userId, serverId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getWebhookByIdForUser(
+  userId: string,
+  webhookId: string
+): Promise<StreamerWebhookRow | null> {
+  const { rows } = await query<StreamerWebhookRow>(
+    `SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at
+     FROM streamer_webhooks WHERE id = $1 AND user_id = $2 LIMIT 1`,
+    [webhookId, userId]
   );
   return rows[0] ?? null;
 }
 
 /**
- * Create or move webhook to another server. On first create, returns plaintext secret once.
+ * Ensure a webhook row exists for this user+server. New rows get a plaintext secret once.
  */
-export async function upsertStreamerWebhook(
+export async function createWebhookForServer(
   userId: string,
   serverId: string
 ): Promise<{ row: StreamerWebhookRow; secretPlain?: string }> {
-  const existing = await getStreamerWebhookForUser(userId);
+  const existing = await getWebhookByUserAndServer(userId, serverId);
   if (existing) {
-    const { rows } = await query<StreamerWebhookRow>(
-      `UPDATE streamer_webhooks SET server_id = $1, updated_at = now()
-       WHERE user_id = $2
-       RETURNING id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at`,
-      [serverId, userId]
-    );
-    const row = rows[0];
-    if (!row) throw new Error("update streamer_webhooks failed");
-    return { row };
+    return { row: existing };
   }
 
   const plain = generatePlainSecret();
@@ -83,17 +108,28 @@ export async function upsertStreamerWebhook(
   return { row, secretPlain: plain };
 }
 
-/** Rotate secret; returns new plaintext once. */
+export async function deleteWebhookForUser(
+  userId: string,
+  webhookId: string
+): Promise<boolean> {
+  const { rowCount } = await query(
+    `DELETE FROM streamer_webhooks WHERE id = $1 AND user_id = $2`,
+    [webhookId, userId]
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 export async function rotateStreamerWebhookSecret(
-  userId: string
+  userId: string,
+  webhookId: string
 ): Promise<{ secretPlain: string } | null> {
-  const hook = await getStreamerWebhookForUser(userId);
+  const hook = await getWebhookByIdForUser(userId, webhookId);
   if (!hook) return null;
   const plain = generatePlainSecret();
   const secret_hash = await hashWebhookSecret(plain);
   await query(
-    "UPDATE streamer_webhooks SET secret_hash = $1, updated_at = now() WHERE user_id = $2",
-    [secret_hash, userId]
+    "UPDATE streamer_webhooks SET secret_hash = $1, updated_at = now() WHERE id = $2 AND user_id = $3",
+    [secret_hash, webhookId, userId]
   );
   return { secretPlain: plain };
 }
