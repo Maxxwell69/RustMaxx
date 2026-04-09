@@ -81,7 +81,12 @@ type State = {
   }>;
 };
 
-type ServerRow = { id: string; name: string; listing_name: string | null };
+type ServerRow = {
+  id: string;
+  name: string;
+  listing_name: string | null;
+  streamer_interactions_enabled: boolean;
+};
 
 type ActionOpt = {
   action: string;
@@ -131,7 +136,20 @@ export default function StreamerDashboardPage() {
     } as State);
     if (srvRes.ok) {
       const j = await srvRes.json().catch(() => ({}));
-      setServers(j.servers ?? []);
+      const raw = Array.isArray(j.servers) ? j.servers : [];
+      const normalized: ServerRow[] = raw.map((s: Record<string, unknown>) => ({
+        id: String(s.id ?? ""),
+        name: String(s.name ?? ""),
+        listing_name: typeof s.listing_name === "string" ? s.listing_name : null,
+        streamer_interactions_enabled: Boolean(s.streamer_interactions_enabled),
+      }));
+      normalized.sort((a, b) => {
+        if (a.streamer_interactions_enabled !== b.streamer_interactions_enabled) {
+          return a.streamer_interactions_enabled ? -1 : 1;
+        }
+        return (a.listing_name || a.name).localeCompare(b.listing_name || b.name);
+      });
+      setServers(normalized);
     }
     if (actRes.ok) {
       const j = await actRes.json().catch(() => ({}));
@@ -413,8 +431,19 @@ export default function StreamerDashboardPage() {
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Game server</h2>
         <p className="mb-3 text-xs text-zinc-500">
           Choose which RustMaxx server receives TikFinity actions, then use the single line in the box below in
-          TikFinity.
+          TikFinity. Servers you own or are on the team for always appear here; others appear once they enable{" "}
+          <strong className="text-zinc-400">Streamer interactions</strong> under Server setup.
         </p>
+        {servers.length === 0 ? (
+          <p className="mb-4 rounded-lg border border-amber-800/60 bg-amber-950/30 p-3 text-sm text-amber-100/95">
+            No servers are available yet. If this is your server, open{" "}
+            <Link href="/servers" className="text-rust-cyan hover:underline">
+              Servers
+            </Link>
+            , pick it, go to <strong className="text-zinc-100">Streamer interactions</strong>, and turn on{" "}
+            <em>Allow streamers to use this server for TikFinity webhooks</em>, then save and refresh this page.
+          </p>
+        ) : null}
         <form onSubmit={saveWebhook} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label className="mb-1 block text-xs text-zinc-500">RustMaxx server</label>
@@ -425,12 +454,22 @@ export default function StreamerDashboardPage() {
               required
             >
               <option value="">Select server…</option>
-              {servers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.listing_name || s.name}
-                </option>
-              ))}
+              {servers.map((s) => {
+                const label = s.listing_name || s.name;
+                const ready = s.streamer_interactions_enabled;
+                return (
+                  <option key={s.id} value={s.id}>
+                    {ready ? label : `${label} — turn on Streamer interactions first`}
+                  </option>
+                );
+              })}
             </select>
+            {servers.some((s) => !s.streamer_interactions_enabled) ? (
+              <p className="mt-2 text-xs text-zinc-500">
+                Servers marked <em>turn on Streamer interactions first</em> need that toggle under Server setup before
+                Save webhook will succeed.
+              </p>
+            ) : null}
           </div>
           <button
             type="submit"

@@ -4,8 +4,20 @@ import { findUserById } from "@/lib/users";
 import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
 import { query } from "@/lib/db";
 
-/** RustMaxx-managed servers the streamer can target (v1: full catalog). */
-export async function GET(request: NextRequest) {
+type ServerOption = {
+  id: string;
+  name: string;
+  listing_name: string | null;
+  streamer_interactions_enabled: boolean;
+};
+
+/**
+ * Servers the streamer can attach their webhook to:
+ * - Any server that has already enabled streamer interactions (public pool), OR
+ * - Any server this user owns or is on the team for (so owners see their server and can enable the toggle first).
+ * Super admins see every server for support/testing.
+ */
+export async function GET(_request: NextRequest) {
   const session = getSession(request.headers.get("cookie"));
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -17,14 +29,31 @@ export async function GET(request: NextRequest) {
       { status: 403 }
     );
   }
-  const { rows } = await query<{
-    id: string;
-    name: string;
-    listing_name: string | null;
-  }>(
-    `SELECT id, name, listing_name FROM servers
-     WHERE streamer_interactions_enabled = true
-     ORDER BY COALESCE(listing_name, name) ASC`
-  );
+
+  let rows: ServerOption[];
+
+  if (user.role === "super_admin") {
+    const res = await query<ServerOption>(
+      `SELECT id, name, listing_name, streamer_interactions_enabled
+       FROM servers
+       ORDER BY COALESCE(listing_name, name) ASC`
+    );
+    rows = res.rows;
+  } else {
+    const res = await query<ServerOption>(
+      `SELECT DISTINCT s.id, s.name, s.listing_name, s.streamer_interactions_enabled
+       FROM servers s
+       WHERE s.streamer_interactions_enabled = true
+          OR s.owner_id = $1
+          OR EXISTS (
+            SELECT 1 FROM server_users su
+            WHERE su.server_id = s.id AND su.user_id = $1
+          )
+       ORDER BY COALESCE(s.listing_name, s.name) ASC`,
+      [user.id]
+    );
+    rows = res.rows;
+  }
+
   return NextResponse.json({ servers: rows });
 }
