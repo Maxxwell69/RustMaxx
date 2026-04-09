@@ -6,6 +6,20 @@ import { Logo } from "@/components/marketing/Logo";
 import { SteamIdForm } from "@/components/profile/SteamIdForm";
 import { STREAMER_SPAWN_PRESETS } from "@/lib/streamer-spawn-presets";
 
+const STREAMER_WH_SECRET_STORAGE = "rustmaxx_streamer_wh";
+
+function persistWebhookSecret(publicId: string | undefined, secret: string) {
+  if (typeof window === "undefined" || !publicId || !secret) return;
+  try {
+    sessionStorage.setItem(
+      STREAMER_WH_SECRET_STORAGE,
+      JSON.stringify({ publicId, secret })
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
 type State = {
   user: {
     email: string;
@@ -48,6 +62,7 @@ export default function StreamerDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [serverId, setServerId] = useState("");
   const [secretShown, setSecretShown] = useState<string | null>(null);
+  const [urlCopied, setUrlCopied] = useState(false);
   const [ruleName, setRuleName] = useState("");
   const [ruleAction, setRuleAction] = useState("");
   const [npcTemplate, setNpcTemplate] = useState("");
@@ -99,6 +114,23 @@ export default function StreamerDashboardPage() {
     if (state?.hook?.serverId) setServerId(state.hook.serverId);
   }, [state?.hook?.serverId]);
 
+  useEffect(() => {
+    const publicId = state?.hook?.publicId;
+    if (!publicId || typeof window === "undefined") return;
+    try {
+      const raw = sessionStorage.getItem(STREAMER_WH_SECRET_STORAGE);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { publicId?: string; secret?: string };
+      if (parsed.publicId === publicId && typeof parsed.secret === "string" && parsed.secret) {
+        setSecretShown(parsed.secret);
+      } else if (parsed.publicId && parsed.publicId !== publicId) {
+        sessionStorage.removeItem(STREAMER_WH_SECRET_STORAGE);
+      }
+    } catch {
+      sessionStorage.removeItem(STREAMER_WH_SECRET_STORAGE);
+    }
+  }, [state?.hook?.publicId]);
+
   async function saveWebhook(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
@@ -114,12 +146,18 @@ export default function StreamerDashboardPage() {
       setErr(data.error ?? "Save failed");
       return;
     }
-    if (data.webhookSecret) setSecretShown(data.webhookSecret);
+    if (data.webhookSecret) {
+      setSecretShown(data.webhookSecret);
+      const pid =
+        typeof data.hook?.publicId === "string" ? data.hook.publicId : undefined;
+      persistWebhookSecret(pid, data.webhookSecret);
+    }
     await load();
   }
 
   async function rotateSecret() {
     setErr("");
+    const publicId = state?.hook?.publicId;
     setSecretShown(null);
     const res = await fetch("/api/streamer/webhook/rotate", {
       method: "POST",
@@ -130,7 +168,21 @@ export default function StreamerDashboardPage() {
       setErr(data.error ?? "Rotate failed");
       return;
     }
-    if (data.webhookSecret) setSecretShown(data.webhookSecret);
+    if (data.webhookSecret) {
+      setSecretShown(data.webhookSecret);
+      persistWebhookSecret(publicId, data.webhookSecret);
+    }
+  }
+
+  async function copyFullWebhookUrl(fullUrl: string) {
+    setErr("");
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setUrlCopied(true);
+      window.setTimeout(() => setUrlCopied(false), 2000);
+    } catch {
+      setErr("Could not copy to clipboard");
+    }
   }
 
   async function addRule(e: React.FormEvent) {
@@ -234,6 +286,10 @@ export default function StreamerDashboardPage() {
   }
 
   const { user, hook, rules } = state;
+  const fullTikfinityUrl =
+    hook?.webhookUrl && secretShown
+      ? `${hook.webhookUrl}?token=${encodeURIComponent(secretShown)}`
+      : null;
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl p-6">
@@ -317,23 +373,49 @@ export default function StreamerDashboardPage() {
         </form>
         {hook?.webhookUrl ? (
           <div className="mt-4 text-sm">
-            <p className="mb-1 text-zinc-500">TikFinity URL (add your token):</p>
-            <code className="block break-all rounded bg-zinc-950 p-2 text-xs text-emerald-300">
-              {hook.webhookUrl}?token=YOUR_SECRET
-            </code>
-            <button
-              type="button"
-              onClick={() => rotateSecret()}
-              className="mt-2 text-xs text-rust-cyan hover:underline"
-            >
-              Generate new secret
-            </button>
-          </div>
-        ) : null}
-        {secretShown ? (
-          <div className="mt-3 rounded-lg border border-emerald-800 bg-emerald-950/40 p-3 text-sm text-emerald-100">
-            <strong>Copy now:</strong>{" "}
-            <code className="break-all">{secretShown}</code>
+            {fullTikfinityUrl ? (
+              <>
+                <p className="mb-1 text-zinc-500">
+                  Full webhook URL for TikFinity (secret included — keep private):
+                </p>
+                <code className="block break-all rounded bg-zinc-950 p-2 text-xs text-emerald-300">
+                  {fullTikfinityUrl}
+                </code>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void copyFullWebhookUrl(fullTikfinityUrl)}
+                    className="rounded-lg border border-emerald-700 bg-emerald-950/50 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-900/50"
+                  >
+                    {urlCopied ? "Copied" : "Copy full URL"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => rotateSecret()}
+                    className="text-xs text-rust-cyan hover:underline"
+                  >
+                    Generate new secret
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mb-1 text-zinc-500">
+                  Full URL appears here after you save a new webhook (first time) or click{" "}
+                  <button
+                    type="button"
+                    onClick={() => rotateSecret()}
+                    className="text-rust-cyan hover:underline"
+                  >
+                    Generate new secret
+                  </button>{" "}
+                  — the secret is only shown once per action.
+                </p>
+                <code className="block break-all rounded bg-zinc-950 p-2 text-xs text-zinc-500">
+                  {hook.webhookUrl}?token=…
+                </code>
+              </>
+            )}
           </div>
         ) : null}
       </section>
