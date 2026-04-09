@@ -207,7 +207,6 @@ export default function StreamerDashboardPage() {
   }
 
   const { user, hook, rules } = state;
-  const canUse = user.dashboardOk;
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl p-6">
@@ -220,8 +219,8 @@ export default function StreamerDashboardPage() {
         />
         <h1 className="text-xl font-semibold text-zinc-100">Streamer interactions</h1>
         <p className="text-center text-sm text-zinc-400">
-          Add your Steam64, subscribe, choose a RustMaxx server, then point TikFinity at your private webhook URL with
-          your secret token.
+          Add your Steam64, choose a RustMaxx server, then point TikFinity at your private webhook URL with your secret
+          token.
         </p>
       </div>
 
@@ -263,140 +262,132 @@ export default function StreamerDashboardPage() {
         />
       </section>
 
-      {!canUse ? (
-        <p className="rounded-lg border border-amber-900/50 bg-amber-950/30 p-4 text-sm text-amber-100">
-          Complete subscription (or use SKIP_BILLING in development) to configure your webhook and rules.
-        </p>
-      ) : (
-        <>
-          <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-            <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Game server</h2>
-            <form onSubmit={saveWebhook} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <label className="mb-1 block text-xs text-zinc-500">RustMaxx server</label>
-                <select
-                  value={serverId || hook?.serverId || ""}
-                  onChange={(e) => setServerId(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100"
-                  required
-                >
-                  <option value="">Select server…</option>
-                  {servers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.listing_name || s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="submit"
-                className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white"
-              >
-                Save webhook
-              </button>
-            </form>
-            {hook?.webhookUrl ? (
-              <div className="mt-4 text-sm">
-                <p className="mb-1 text-zinc-500">TikFinity URL (add your token):</p>
-                <code className="block break-all rounded bg-zinc-950 p-2 text-xs text-emerald-300">
-                  {hook.webhookUrl}?token=YOUR_SECRET
-                </code>
-                <button
-                  type="button"
-                  onClick={() => rotateSecret()}
-                  className="mt-2 text-xs text-rust-cyan hover:underline"
-                >
-                  Generate new secret
-                </button>
-              </div>
-            ) : null}
-            {secretShown ? (
-              <div className="mt-3 rounded-lg border border-emerald-800 bg-emerald-950/40 p-3 text-sm text-emerald-100">
-                <strong>Copy now:</strong>{" "}
-                <code className="break-all">{secretShown}</code>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-            <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
-              Event → action rules
-            </h2>
-            <p className="mb-4 text-xs text-zinc-500">
-              When TikFinity sends an event name (e.g. in <code>action</code> or chat fields) matching a rule, that
-              server action runs — same as Admin → Streamer interactions.
-            </p>
-            <form onSubmit={addRule} className="mb-6 grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs text-zinc-500">TikFinity event name</label>
-                <input
-                  value={ruleName}
-                  onChange={(e) => setRuleName(e.target.value)}
-                  placeholder="e.g. rose or !bunny1"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-500">Server action</label>
-                <select
-                  value={ruleAction}
-                  onChange={(e) => setRuleAction(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
-                >
-                  {actions.map((a) => (
-                    <option key={a.action} value={a.action}>
-                      {a.label} ({a.action})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {ruleAction === "npcmaxx" ? (
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs text-zinc-500">Roaming template key (required)</label>
-                  <input
-                    value={npcTemplate}
-                    onChange={(e) => setNpcTemplate(e.target.value)}
-                    placeholder="streamer_patrol"
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
-                  />
-                </div>
-              ) : null}
-              <div className="sm:col-span-2">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900"
-                >
-                  Add rule
-                </button>
-              </div>
-            </form>
-            <ul className="space-y-2">
-              {rules.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm"
-                >
-                  <span>
-                    <code className="text-emerald-300">{r.name}</code> →{" "}
-                    <code className="text-zinc-300">{r.server_action}</code>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => deleteRule(r.id)}
-                    className="text-xs text-red-400 hover:underline"
-                  >
-                    Remove
-                  </button>
-                </li>
+      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Game server</h2>
+        <form onSubmit={saveWebhook} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label className="mb-1 block text-xs text-zinc-500">RustMaxx server</label>
+            <select
+              value={serverId || hook?.serverId || ""}
+              onChange={(e) => setServerId(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100"
+              required
+            >
+              <option value="">Select server…</option>
+              {servers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.listing_name || s.name}
+                </option>
               ))}
-              {rules.length === 0 ? (
-                <li className="text-sm text-zinc-500">No rules yet.</li>
-              ) : null}
-            </ul>
-          </section>
-        </>
-      )}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white"
+          >
+            Save webhook
+          </button>
+        </form>
+        {hook?.webhookUrl ? (
+          <div className="mt-4 text-sm">
+            <p className="mb-1 text-zinc-500">TikFinity URL (add your token):</p>
+            <code className="block break-all rounded bg-zinc-950 p-2 text-xs text-emerald-300">
+              {hook.webhookUrl}?token=YOUR_SECRET
+            </code>
+            <button
+              type="button"
+              onClick={() => rotateSecret()}
+              className="mt-2 text-xs text-rust-cyan hover:underline"
+            >
+              Generate new secret
+            </button>
+          </div>
+        ) : null}
+        {secretShown ? (
+          <div className="mt-3 rounded-lg border border-emerald-800 bg-emerald-950/40 p-3 text-sm text-emerald-100">
+            <strong>Copy now:</strong>{" "}
+            <code className="break-all">{secretShown}</code>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
+          Event → action rules
+        </h2>
+        <p className="mb-4 text-xs text-zinc-500">
+          When TikFinity sends an event name (e.g. in <code>action</code> or chat fields) matching a rule, that server
+          action runs — same as Admin → Streamer interactions.
+        </p>
+        <form onSubmit={addRule} className="mb-6 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">TikFinity event name</label>
+            <input
+              value={ruleName}
+              onChange={(e) => setRuleName(e.target.value)}
+              placeholder="e.g. rose or !bunny1"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">Server action</label>
+            <select
+              value={ruleAction}
+              onChange={(e) => setRuleAction(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+            >
+              {actions.map((a) => (
+                <option key={a.action} value={a.action}>
+                  {a.label} ({a.action})
+                </option>
+              ))}
+            </select>
+          </div>
+          {ruleAction === "npcmaxx" ? (
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-zinc-500">Roaming template key (required)</label>
+              <input
+                value={npcTemplate}
+                onChange={(e) => setNpcTemplate(e.target.value)}
+                placeholder="streamer_patrol"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+            </div>
+          ) : null}
+          <div className="sm:col-span-2">
+            <button
+              type="submit"
+              className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900"
+            >
+              Add rule
+            </button>
+          </div>
+        </form>
+        <ul className="space-y-2">
+          {rules.map((r) => (
+            <li
+              key={r.id}
+              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm"
+            >
+              <span>
+                <code className="text-emerald-300">{r.name}</code> →{" "}
+                <code className="text-zinc-300">{r.server_action}</code>
+              </span>
+              <button
+                type="button"
+                onClick={() => deleteRule(r.id)}
+                className="text-xs text-red-400 hover:underline"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+          {rules.length === 0 ? (
+            <li className="text-sm text-zinc-500">No rules yet.</li>
+          ) : null}
+        </ul>
+      </section>
 
       <p className="mt-8 text-center text-xs text-zinc-600">
         <Link href="/servers" className="text-zinc-500 hover:text-zinc-300">
