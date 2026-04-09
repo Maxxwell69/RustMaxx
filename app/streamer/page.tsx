@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/marketing/Logo";
 import { SteamIdForm } from "@/components/profile/SteamIdForm";
+import { STREAMER_SPAWN_PRESETS } from "@/lib/streamer-spawn-presets";
 
 type State = {
   user: {
@@ -50,6 +51,7 @@ export default function StreamerDashboardPage() {
   const [ruleName, setRuleName] = useState("");
   const [ruleAction, setRuleAction] = useState("");
   const [npcTemplate, setNpcTemplate] = useState("");
+  const [quickAdding, setQuickAdding] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setErr("");
@@ -154,6 +156,31 @@ export default function StreamerDashboardPage() {
     }
     setRuleName("");
     await load();
+  }
+
+  async function addQuickPreset(preset: (typeof STREAMER_SPAWN_PRESETS)[number]) {
+    setErr("");
+    setQuickAdding(preset.ruleName);
+    try {
+      const res = await fetch("/api/streamer/rules", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: preset.ruleName,
+          serverAction: preset.serverAction,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(typeof data.error === "string" ? data.error : "Could not add rule");
+        return;
+      }
+      setRuleName("");
+      await load();
+    } finally {
+      setQuickAdding(null);
+    }
   }
 
   async function deleteRule(id: string) {
@@ -319,6 +346,39 @@ export default function StreamerDashboardPage() {
           When TikFinity sends an event name (e.g. in <code>action</code> or chat fields) matching a rule, that server
           action runs — same as Admin → Streamer interactions.
         </p>
+
+        <div className="mb-6 rounded-lg border border-zinc-700/80 bg-zinc-950/40 p-4">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+            Quick spawns (Rust)
+          </h3>
+          <p className="mb-3 text-xs text-zinc-500">
+            One-click rules for common RustChaos spawns. TikFinity should send an event name that matches the rule (e.g.{" "}
+            <code className="rounded bg-zinc-800 px-1">bear</code>, <code className="rounded bg-zinc-800 px-1">wolf</code>
+            , <code className="rounded bg-zinc-800 px-1">scientist</code>) or use{" "}
+            <code className="rounded bg-zinc-800 px-1">?action=bear</code> on your webhook URL.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {STREAMER_SPAWN_PRESETS.map((p) => (
+              <button
+                key={p.ruleName}
+                type="button"
+                disabled={quickAdding !== null}
+                onClick={() => void addQuickPreset(p)}
+                className="rounded-lg border border-zinc-600 bg-zinc-800/80 px-3 py-3 text-left text-sm transition-colors hover:border-rust-cyan/50 hover:bg-zinc-800 disabled:opacity-50"
+              >
+                <span className="font-medium text-zinc-100">{p.label}</span>
+                <span className="mt-1 block text-xs text-zinc-500">{p.description}</span>
+                <span className="mt-2 block font-mono text-[10px] text-emerald-600/90">
+                  rule: {p.ruleName} → {p.serverAction}
+                </span>
+                {quickAdding === p.ruleName ? (
+                  <span className="mt-1 block text-xs text-rust-cyan">Adding…</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <form onSubmit={addRule} className="mb-6 grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs text-zinc-500">TikFinity event name</label>
