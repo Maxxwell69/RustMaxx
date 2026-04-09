@@ -808,21 +808,42 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
 };
 
 /**
+ * TikFinity often nests the custom event / action name under `data`, `event`, or `payload`, or puts
+ * `event: { name: "wolf" }` — not only top-level `action` / `event` strings.
+ */
+function readExplicitActionFromRecord(o: Record<string, unknown>): string {
+  for (const k of ["action", "actionName", "eventName", "trigger"] as const) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  const ev = o.event;
+  if (typeof ev === "string" && ev.trim()) return ev.trim();
+  if (ev && typeof ev === "object" && !Array.isArray(ev)) {
+    const eo = ev as Record<string, unknown>;
+    for (const k of ["name", "action", "event", "eventName", "type"]) {
+      const v = eo[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return "";
+}
+
+/**
  * Raw action/event name for admin-connection lookup and getActionFromPayload.
- * Order: explicit action fields, then first token from common TikFinity chat fields (message, text, …).
+ * Order: explicit action fields (flat + nested under data/event/payload), then chat command token.
  */
 export function getRawActionNameFromPayload(body: unknown): string {
   if (!body || typeof body !== "object") return "";
   const o = body as Record<string, unknown>;
-  const raw =
-    typeof o.action === "string"
-      ? o.action.trim()
-      : typeof o.actionName === "string"
-        ? o.actionName.trim()
-        : typeof o.event === "string"
-          ? o.event.trim()
-          : "";
+  let raw = readExplicitActionFromRecord(o);
   if (raw) return raw;
+  for (const nestKey of ["data", "event", "payload"] as const) {
+    const inner = o[nestKey];
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      raw = readExplicitActionFromRecord(inner as Record<string, unknown>);
+      if (raw) return raw;
+    }
+  }
   return extractChatCommandTokenFromBody(body) ?? "";
 }
 

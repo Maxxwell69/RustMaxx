@@ -285,16 +285,21 @@ export async function runTikfinityWebhook(
   const crewJoinResponse = await handleCrewRnpcJoin(request, body, ctx.serverId);
   if (crewJoinResponse) return crewJoinResponse;
 
-  // Action from URL query (e.g. ?action=likes) – one webhook URL per TikFinity action
-  const queryAction = request.nextUrl.searchParams.get("action")?.trim().toLowerCase();
-  const actionFromQuery = queryAction ? getActionFromPayload({ action: queryAction }) : null;
+  // Action from URL query — TikFinity sometimes uses ?event=customName instead of ?action=
+  const q = request.nextUrl.searchParams;
+  const queryActionRaw =
+    q.get("action")?.trim() ?? q.get("event")?.trim() ?? "";
+  const actionFromQuery = queryActionRaw
+    ? getActionFromPayload({ action: queryActionRaw.toLowerCase() })
+    : null;
   const templateFromQuery = request.nextUrl.searchParams.get("template")?.trim() ?? null;
 
   // Admin connection (scrap/message/template metadata) by TikFinity event name — load whenever the body names an event,
   // even if ?action= will choose the final command (so chaos URLs still get connection scrap defaults).
   let connectionFromAdmin: TikfinityConnectionForWebhook | null = null;
   let tikfinityEventNameForLog: string | null = null;
-  const rawConnectionName = getRawActionNameFromPayload(body);
+  const fromBody = getRawActionNameFromPayload(body);
+  const rawConnectionName = (fromBody.trim() || queryActionRaw).trim();
   if (rawConnectionName) {
     const conn = await ctx.resolveConnectionByEventName(rawConnectionName);
     if (conn) {
@@ -346,7 +351,7 @@ export async function runTikfinityWebhook(
             ? "Gift not mapped to an action"
             : "No action specified. TikFinity sent empty/default body.",
           debug:
-            "Specify the action one of these ways: (1) URL query ?action=bunny1 (or wolf, likes, …), (2) JSON {\"action\":\"bunny1\"}, (3) TikFinity connection name matching the action (Admin → Streamer interactions), (4) chat-style body with message/text containing the command, e.g. {\"message\":\"!bunny1\",\"nickname\":\"Viewer\"}. RustMaxx reads message, text, comment, chatMessage, msg, content, and nested data/event/payload. Test with POST ?action=bunny1 and body {\"viewerName\":\"Test\"}.",
+            "Specify the action one of these ways: (1) URL ?action=wolf or ?event=wolf (same token URL), (2) JSON with action/event at top level or under data/event/payload (e.g. {\"data\":{\"event\":\"wolf\"}}), (3) streamer rule name matching that string, (4) chat fields message/text/…. Test: POST your hook URL with body {\"data\":{\"action\":\"wolf\"},\"nickname\":\"Test\"}.",
           giftName: payload?.giftName,
         },
         { status: 200 }
