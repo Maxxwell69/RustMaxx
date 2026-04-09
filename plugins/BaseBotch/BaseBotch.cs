@@ -9,10 +9,11 @@ using Oxide.Core;
 using Oxide.Core.Plugins;
 using Rust;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace Oxide.Plugins
 {
-    [Info("BaseBotch", "RustMaxx", "1.5.4")]
+    [Info("BaseBotch", "RustMaxx", "1.5.5")]
     [Description("Base automation: water wheel mount/autorun, and NPC mixing-table crafting (pulls ingredients from anchor-owned storage).")]
     public class BaseBotch : RustPlugin
     {
@@ -2513,20 +2514,77 @@ namespace Oxide.Plugins
             return null;
         }
 
+        /// <summary>
+        /// Terrain height alone is wrong for bases (floor is above terrain). Raycast down from above the table,
+        /// skip the table collider, then snap to NavMesh so the NPC agent has valid ground like MaxxInvaders TP.
+        /// </summary>
+        private bool TryGetMixingStandWorldPoint(MixingTable table, out Vector3 stand)
+        {
+            stand = default;
+            if (table == null) return false;
+            var tpos = table.transform.position;
+            var flatFwd = table.transform.forward;
+            flatFwd.y = 0f;
+            if (flatFwd.sqrMagnitude < 0.01f) flatFwd = Vector3.forward;
+            flatFwd.Normalize();
+            var flat = tpos - flatFwd * Mathf.Clamp(_cfg.MixingStandOffsetMeters, 0.4f, 3f);
+            var tableNetId = table.net?.ID.Value ?? 0UL;
+            var terrainH = TerrainMeta.HeightMap.GetHeight(flat);
+            var rayTopY = Mathf.Max(tpos.y, terrainH) + 16f;
+            var origin = new Vector3(flat.x, rayTopY, flat.z);
+            var mask = LayerMask.GetMask("Terrain", "World", "Construction", "Deployed", "Default");
+            var hits = Physics.RaycastAll(origin, Vector3.down, 55f, mask, QueryTriggerInteraction.Ignore);
+            if (hits != null && hits.Length > 0)
+            {
+                Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+                foreach (var h in hits)
+                {
+                    var col = h.collider;
+                    if (col == null) continue;
+                    BaseEntity ent = null;
+                    try
+                    {
+                        ent = col.ToBaseEntity();
+                    }
+                    catch
+                    {
+                        /* ignored */
+                    }
+
+                    if (ent != null)
+                    {
+                        if (ent.net != null && ent.net.ID.Value == tableNetId) continue;
+                        if (ent is MixingTable) continue;
+                    }
+
+                    stand = h.point + Vector3.up * 0.05f;
+                    goto haveApprox;
+                }
+            }
+
+            stand = new Vector3(flat.x, tpos.y, flat.z);
+            haveApprox:
+
+            if (NavMesh.SamplePosition(stand, out var navHit, 3.5f, NavMesh.AllAreas))
+                stand = navHit.position;
+            else if (NavMesh.SamplePosition(stand, out navHit, 10f, NavMesh.AllAreas))
+                stand = navHit.position;
+            else if (NavMesh.SamplePosition(stand, out navHit, 22f, NavMesh.AllAreas)) stand = navHit.position;
+
+            return true;
+        }
+
         private void TryTeleportNpcNearMixingTable(BasePlayer npc, MixingTable table)
         {
             if (npc == null || table == null) return;
             try
             {
+                if (!TryGetMixingStandWorldPoint(table, out var stand)) return;
                 var tpos = table.transform.position;
-                var flatFwd = table.transform.forward;
-                flatFwd.y = 0f;
-                if (flatFwd.sqrMagnitude < 0.01f) flatFwd = Vector3.forward;
-                flatFwd.Normalize();
-                var stand = tpos - flatFwd * Mathf.Clamp(_cfg.MixingStandOffsetMeters, 0.4f, 3f);
-                stand.y = TerrainMeta.HeightMap.GetHeight(stand);
-                npc.transform.position = stand;
+                npc.Teleport(stand);
                 npc.transform.LookAt(new Vector3(tpos.x, npc.transform.position.y, tpos.z));
+                if (NavMesh.SamplePosition(npc.transform.position, out var after, 2.5f, NavMesh.AllAreas))
+                    npc.Teleport(after.position);
                 npc.SendNetworkUpdate();
             }
             catch
