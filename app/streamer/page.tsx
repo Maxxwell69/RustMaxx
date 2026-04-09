@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/marketing/Logo";
+import { SteamIdForm } from "@/components/profile/SteamIdForm";
 
 type State = {
   user: {
@@ -219,8 +220,8 @@ export default function StreamerDashboardPage() {
         />
         <h1 className="text-xl font-semibold text-zinc-100">Streamer interactions</h1>
         <p className="text-center text-sm text-zinc-400">
-          Link Steam, subscribe, choose a RustMaxx server, then point TikFinity at your private webhook URL with your
-          secret token.
+          Add your Steam64, subscribe, choose a RustMaxx server, then point TikFinity at your private webhook URL with
+          your secret token.
         </p>
       </div>
 
@@ -249,21 +250,17 @@ export default function StreamerDashboardPage() {
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Steam</h2>
-        {user.steamId ? (
-          <p className="text-sm text-zinc-300">
-            Linked Steam64: <code className="rounded bg-zinc-800 px-1">{user.steamId}</code>
-          </p>
-        ) : (
-          <>
-            <p className="mb-3 text-sm text-zinc-400">Link your Steam account once (OpenID via Steam).</p>
-            <a
-              href="/api/auth/steam"
-              className="inline-block rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-100 hover:bg-zinc-800"
-            >
-              Link Steam
-            </a>
-          </>
-        )}
+        <p className="mb-3 text-sm text-zinc-400">
+          Use the same Steam64 as in-game (TikFinity anchor / patrol). You can also set this on{" "}
+          <Link href="/profile#steam" className="text-rust-cyan hover:underline">
+            Profile
+          </Link>
+          .
+        </p>
+        <SteamIdForm
+          initialSteamId={user.steamId}
+          onSaved={() => void load()}
+        />
       </section>
 
       {!canUse ? (

@@ -7,6 +7,7 @@ import {
   MEMBERSHIP_LEVEL_LABELS,
   type MembershipLevel,
 } from "@/lib/membership-level";
+import { SteamIdForm } from "@/components/profile/SteamIdForm";
 
 type Profile = {
   id: string;
@@ -194,15 +195,6 @@ function ProfilePageContent() {
   }, [router]);
 
   useEffect(() => {
-    const steam = searchParams.get("steam");
-    if (!steam || !["linked", "verify_failed", "link_failed"].includes(steam)) return;
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((p) => p && setProfile(p))
-      .catch(() => {});
-  }, [searchParams]);
-
-  useEffect(() => {
     if (!profile) return;
     fetch("/api/twitch/status")
       .then((r) => (r.ok ? r.json() : { linked: false }))
@@ -364,33 +356,13 @@ function ProfilePageContent() {
             </div>
           </div>
 
-          <div className="mt-8 border-t border-zinc-800 pt-6">
+          <div id="steam" className="mt-8 border-t border-zinc-800 pt-6">
             <h2 className="mb-3 text-lg font-semibold text-zinc-100">Steam</h2>
-            {searchParams.get("steam") === "linked" && (
-              <p className="mb-3 text-sm text-green-400">
-                Steam linked successfully — your account details appear below.
-              </p>
-            )}
-            {searchParams.get("steam") === "verify_failed" && (
-              <p className="mb-3 text-sm text-amber-400">
-                Steam could not verify the login. Try &quot;Link Steam account&quot; again.
-              </p>
-            )}
-            {searchParams.get("steam") === "link_failed" && (
-              <p className="mb-3 text-sm text-amber-400">
-                {(() => {
-                  const r = searchParams.get("reason");
-                  if (!r) return "Could not save Steam link.";
-                  try {
-                    return decodeURIComponent(r);
-                  } catch {
-                    return r;
-                  }
-                })()}
-              </p>
-            )}
+            <p className="mb-4 text-sm text-zinc-500">
+              Enter your Steam64 ID so RustMaxx can tie in-game actions to you (TikFinity, patrol anchor, MaxxInvaders).
+            </p>
             {profile.steam ? (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start">
                 {profile.steam.avatarUrl ? (
                   <img
                     src={profile.steam.avatarUrl}
@@ -406,14 +378,14 @@ function ProfilePageContent() {
                 )}
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-sm font-medium text-zinc-100">
-                    {profile.steam.personaName ?? "Steam account"}
+                    {profile.steam.personaName ?? "Steam"}
                   </p>
                   <p className="font-mono text-xs text-zinc-500">
                     {profile.steam.steamId}
                   </p>
                   {profile.steam.linkedAt && (
                     <p className="text-xs text-zinc-500">
-                      Linked {new Date(profile.steam.linkedAt).toLocaleString()}
+                      Saved {new Date(profile.steam.linkedAt).toLocaleString()}
                     </p>
                   )}
                   <a
@@ -433,19 +405,11 @@ function ProfilePageContent() {
                   )}
                 </div>
               </div>
-            ) : (
-              <div>
-                <p className="mb-2 text-sm text-zinc-500">
-                  Link your Steam account so RustMaxx can tie in-game actions to your Steam ID (TikFinity / patrol anchor).
-                </p>
-                <a
-                  href="/api/auth/steam"
-                  className="inline-block rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-700"
-                >
-                  Link Steam account
-                </a>
-              </div>
-            )}
+            ) : null}
+            <SteamIdForm
+              initialSteamId={profile.steam?.steamId ?? null}
+              onSaved={(p) => setProfile(p as Profile)}
+            />
           </div>
 
           <div className="mt-8 border-t border-zinc-800 pt-6">

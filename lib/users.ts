@@ -126,12 +126,20 @@ export async function updateUserRole(
   return rows[0] ?? null;
 }
 
-/** Link Steam64 after OpenID verification; fails if steam_id already taken. */
+/** Set or clear Steam64 on the user (manual entry). Empty string clears. */
 export async function setUserSteamId(
   userId: string,
   steamId: string
 ): Promise<{ ok: true } | { error: string }> {
   const trimmed = steamId.trim();
+  if (trimmed === "") {
+    const { rows } = await query<UserRow>(
+      `UPDATE users SET steam_id = NULL, steam_linked_at = NULL, updated_at = now() WHERE id = $1 RETURNING ${USER_SELECT}`,
+      [userId]
+    );
+    if (!rows[0]) return { error: "User not found" };
+    return { ok: true };
+  }
   if (!/^\d{17}$/.test(trimmed)) return { error: "Steam id must be 17 digits (Steam64)." };
   const { rows: taken } = await query<{ id: string }>(
     "SELECT id FROM users WHERE steam_id = $1 AND id <> $2 LIMIT 1",
