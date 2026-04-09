@@ -290,6 +290,15 @@ export default function StreamerDashboardPage() {
     hook?.webhookUrl && secretShown
       ? `${hook.webhookUrl}?token=${encodeURIComponent(secretShown)}`
       : null;
+  /** TikFinity often sends an empty POST body; `&action=` matches your Event → action rule name. */
+  const exampleRuleForUrl =
+    rules.find((r) => r.name.toLowerCase().trim() === "wolf")?.name ??
+    rules[0]?.name ??
+    "wolf";
+  const fullTikfinityUrlWithRuleAction =
+    fullTikfinityUrl && exampleRuleForUrl
+      ? `${fullTikfinityUrl}&action=${encodeURIComponent(exampleRuleForUrl)}`
+      : null;
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl p-6">
@@ -396,6 +405,38 @@ export default function StreamerDashboardPage() {
                 >
                   {urlCopied ? "Copied to clipboard" : "Copy webhook URL"}
                 </button>
+                <div className="mt-4 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-100/95">
+                  <p className="mb-2 font-medium text-amber-50">
+                    Seeing{" "}
+                    <code className="rounded bg-zinc-900 px-1 text-[11px] text-amber-200">
+                      skipped / empty body
+                    </code>{" "}
+                    in TikFinity?
+                  </p>
+                  <p className="mb-2 text-amber-100/85">
+                    TikFinity often does not send JSON. Put the rule name on the URL instead (must match an{" "}
+                    <strong className="font-medium text-zinc-100">Event → action</strong> rule below). Example uses rule{" "}
+                    <code className="rounded bg-zinc-900 px-1">{exampleRuleForUrl}</code>:
+                  </p>
+                  {fullTikfinityUrlWithRuleAction ? (
+                    <>
+                      <code className="mb-2 block break-all rounded border border-amber-900/40 bg-black/35 p-2 text-[11px] leading-relaxed text-emerald-200/95">
+                        {fullTikfinityUrlWithRuleAction}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => void copyFullWebhookUrl(fullTikfinityUrlWithRuleAction)}
+                        className="rounded-lg border border-amber-700/80 bg-amber-900/30 px-3 py-1.5 text-[11px] font-medium text-amber-100 hover:bg-amber-900/50"
+                      >
+                        Copy URL with &amp;action=
+                      </button>
+                    </>
+                  ) : null}
+                  <p className="mt-2 text-[11px] text-zinc-500">
+                    Or set TikFinity custom / Raw JSON to{" "}
+                    <code className="rounded bg-zinc-800 px-1 text-zinc-300">{`{"action":"${exampleRuleForUrl}"}`}</code>.
+                  </p>
+                </div>
                 {secretShown ? (
                   <div className="mt-4 border-t border-zinc-800 pt-4">
                     <p className="mb-1 text-xs text-zinc-500">
