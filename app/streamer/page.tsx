@@ -302,8 +302,7 @@ export default function StreamerDashboardPage() {
         />
         <h1 className="text-xl font-semibold text-zinc-100">Streamer interactions</h1>
         <p className="text-center text-sm text-zinc-400">
-          Add your Steam64, choose a RustMaxx server, then point TikFinity at your private webhook URL with your secret
-          token.
+          Add your Steam64, pick a server, then copy one webhook line from below into TikFinity — no separate token step.
         </p>
       </div>
 
@@ -347,6 +346,10 @@ export default function StreamerDashboardPage() {
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Game server</h2>
+        <p className="mb-3 text-xs text-zinc-500">
+          Choose which RustMaxx server receives TikFinity actions, then use the single line in the box below in
+          TikFinity.
+        </p>
         <form onSubmit={saveWebhook} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label className="mb-1 block text-xs text-zinc-500">RustMaxx server</label>
@@ -371,49 +374,62 @@ export default function StreamerDashboardPage() {
             Save webhook
           </button>
         </form>
+
         {hook?.webhookUrl ? (
-          <div className="mt-4 text-sm">
+          <div className="mt-6 rounded-lg border border-emerald-900/50 bg-zinc-950/60 p-4">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-600/90">
+              TikFinity — copy one line
+            </h3>
             {fullTikfinityUrl ? (
               <>
-                <p className="mb-1 text-zinc-500">
-                  Full webhook URL for TikFinity (secret included — keep private):
+                <p className="mb-3 text-sm text-zinc-300">
+                  Paste this entire string into TikFinity as the webhook URL. It already includes your secret — you do
+                  not need to copy anything else.
                 </p>
-                <code className="block break-all rounded bg-zinc-950 p-2 text-xs text-emerald-300">
+                <code className="mb-3 block break-all rounded border border-emerald-900/40 bg-black/40 p-3 text-xs leading-relaxed text-emerald-300">
                   {fullTikfinityUrl}
                 </code>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void copyFullWebhookUrl(fullTikfinityUrl)}
-                    className="rounded-lg border border-emerald-700 bg-emerald-950/50 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-900/50"
-                  >
-                    {urlCopied ? "Copied" : "Copy full URL"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => rotateSecret()}
-                    className="text-xs text-rust-cyan hover:underline"
-                  >
-                    Generate new secret
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => void copyFullWebhookUrl(fullTikfinityUrl)}
+                  className="w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-600 sm:w-auto"
+                >
+                  {urlCopied ? "Copied to clipboard" : "Copy webhook URL"}
+                </button>
+                {secretShown ? (
+                  <div className="mt-4 border-t border-zinc-800 pt-4">
+                    <p className="mb-1 text-xs text-zinc-500">
+                      Only if TikFinity asks for a <span className="text-zinc-400">token</span> or{" "}
+                      <span className="text-zinc-400">secret</span> in a separate field (optional):
+                    </p>
+                    <code className="block break-all rounded bg-zinc-900/80 p-2 text-xs text-zinc-400">{secretShown}</code>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => rotateSecret()}
+                  className="mt-4 text-xs text-rust-cyan hover:underline"
+                >
+                  Generate new secret (invalidates the URL above until you copy the new line)
+                </button>
               </>
             ) : (
               <>
-                <p className="mb-1 text-zinc-500">
-                  Full URL appears here after you save a new webhook (first time) or click{" "}
-                  <button
-                    type="button"
-                    onClick={() => rotateSecret()}
-                    className="text-rust-cyan hover:underline"
-                  >
-                    Generate new secret
-                  </button>{" "}
-                  — the secret is only shown once per action.
+                <p className="mb-3 text-sm text-zinc-400">
+                  To show the full URL here, save this webhook for the first time or click below. The complete line
+                  appears once — then use <strong className="font-medium text-zinc-200">Copy webhook URL</strong> only.
                 </p>
-                <code className="block break-all rounded bg-zinc-950 p-2 text-xs text-zinc-500">
+                <code className="mb-3 block break-all rounded border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-600">
                   {hook.webhookUrl}?token=…
                 </code>
+                <button
+                  type="button"
+                  onClick={() => rotateSecret()}
+                  className="rounded-lg border border-emerald-800/80 bg-emerald-950/40 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-900/40"
+                >
+                  Show full webhook URL
+                </button>
+                <p className="mt-2 text-xs text-zinc-600">Same as &quot;Generate new secret&quot; if you already had a webhook.</p>
               </>
             )}
           </div>
