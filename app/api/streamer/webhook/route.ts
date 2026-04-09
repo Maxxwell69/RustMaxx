@@ -1,0 +1,52 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
+import { findUserById } from "@/lib/users";
+import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
+import { query } from "@/lib/db";
+import { upsertStreamerWebhook } from "@/lib/streamer-webhooks";
+
+export async function POST(request: NextRequest) {
+  const session = getSession(request.headers.get("cookie"));
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const user = await findUserById(session.userId);
+  if (!user || !canAccessStreamerDashboard(user)) {
+    return NextResponse.json(
+      { error: "Forbidden: active subscription and streamer access required" },
+      { status: 403 }
+    );
+  }
+  let body: { serverId?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const serverId = typeof body.serverId === "string" ? body.serverId.trim() : "";
+  if (!serverId) {
+    return NextResponse.json({ error: "serverId is required" }, { status: 400 });
+  }
+  const { rows } = await query<{ id: string }>(
+    "SELECT id FROM servers WHERE id = $1 LIMIT 1",
+    [serverId]
+  );
+  if (!rows[0]) {
+    return NextResponse.json({ error: "Server not found" }, { status: 404 });
+  }
+
+  const { row, secretPlain } = await upsertStreamerWebhook(user.id, serverId);
+  const base = (process.env.APP_URL ?? process.env.SITE_URL ?? "").replace(/\/$/, "");
+
+  return NextResponse.json({
+    hook: {
+      publicId: row.public_id,
+      serverId: row.server_id,
+      webhookUrl: base
+        ? `${base}/api/tikfinity/hooks/${row.public_id}`
+        : `/api/tikfinity/hooks/${row.public_id}`,
+    },
+    /** Present only when the hook row was first created — save this secret; use ?token=... in TikFinity. */
+    webhookSecret: secretPlain,
+  });
+}

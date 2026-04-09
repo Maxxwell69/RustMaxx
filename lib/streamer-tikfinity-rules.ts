@@ -1,0 +1,123 @@
+/**
+ * Per-streamer TikFinity rules (same whitelist as admin tikfinity_connections).
+ */
+
+import { query } from "@/lib/db";
+import {
+  TIKTRIGGER_ACTIONS,
+  type TikTriggerAction,
+} from "@/lib/tikfinity";
+import {
+  parseNpcTemplateKey,
+  type TikfinityConnectionForWebhook,
+} from "@/lib/tikfinity-connections";
+
+export type StreamerTikfinityRuleRow = {
+  id: string;
+  streamer_webhook_id: string;
+  name: string;
+  server_action: string;
+  message: string | null;
+  scrap_amount: number;
+  npc_template_key: string | null;
+  created_at: Date;
+};
+
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/^!+/, "");
+}
+
+const SCRAP_MAX = 10000;
+
+export async function getStreamerRuleByEventName(
+  streamerWebhookId: string,
+  name: string
+): Promise<TikfinityConnectionForWebhook | null> {
+  const key = normalizeName(name);
+  if (!key) return null;
+  const { rows } = await query<StreamerTikfinityRuleRow>(
+    `SELECT id, streamer_webhook_id, name, server_action, COALESCE(scrap_amount, 0) AS scrap_amount, message, npc_template_key
+     FROM streamer_tikfinity_rules WHERE streamer_webhook_id = $1 AND lower(trim(name)) = $2 LIMIT 1`,
+    [streamerWebhookId, key]
+  );
+  const row = rows[0];
+  if (
+    !row?.server_action ||
+    !(TIKTRIGGER_ACTIONS as readonly string[]).includes(row.server_action)
+  )
+    return null;
+  return {
+    id: row.id,
+    server_action: row.server_action as TikTriggerAction,
+    scrap_amount: Number(row.scrap_amount) || 0,
+    message: row.message ?? null,
+    npc_template_key: row.npc_template_key ?? null,
+  };
+}
+
+export async function listStreamerRules(
+  streamerWebhookId: string
+): Promise<StreamerTikfinityRuleRow[]> {
+  const { rows } = await query<StreamerTikfinityRuleRow>(
+    `SELECT id, streamer_webhook_id, name, server_action, message, COALESCE(scrap_amount, 0) AS scrap_amount, npc_template_key, created_at
+     FROM streamer_tikfinity_rules WHERE streamer_webhook_id = $1 ORDER BY created_at DESC`,
+    [streamerWebhookId]
+  );
+  return rows.map((r) => ({
+    ...r,
+    scrap_amount: Number(r.scrap_amount) || 0,
+  }));
+}
+
+export async function createStreamerRule(
+  streamerWebhookId: string,
+  name: string,
+  serverAction: TikTriggerAction,
+  options: {
+    message?: string | null;
+    scrapAmount?: number;
+    npcTemplateKey?: string | null;
+  } = {}
+): Promise<{ id: string } | { error: string }> {
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Name is required" };
+  if (!(TIKTRIGGER_ACTIONS as readonly string[]).includes(serverAction))
+    return { error: "Invalid server action" };
+  const scrap = Math.min(SCRAP_MAX, Math.max(0, Number(options.scrapAmount) || 0));
+  const message =
+    options.message != null ? String(options.message).trim() || null : null;
+  let npcTemplateKey: string | null = null;
+  if (serverAction === "npcmaxx") {
+    const parsed = parseNpcTemplateKey(options.npcTemplateKey);
+    if (!parsed) {
+      return {
+        error:
+          "Roaming template key is required for Roaming NPC (1–64 chars, letters, numbers, _, -).",
+      };
+    }
+    npcTemplateKey = parsed;
+  }
+  const { rows: existing } = await query<{ n: string }>(
+    "SELECT 1 AS n FROM streamer_tikfinity_rules WHERE streamer_webhook_id = $1 AND lower(trim(name)) = $2 LIMIT 1",
+    [streamerWebhookId, normalizeName(trimmed)]
+  );
+  if (existing.length > 0) return { error: "A rule with this event name already exists" };
+  const { rows } = await query<{ id: string }>(
+    `INSERT INTO streamer_tikfinity_rules (streamer_webhook_id, name, server_action, message, scrap_amount, npc_template_key)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [streamerWebhookId, trimmed, serverAction, message, scrap, npcTemplateKey]
+  );
+  if (!rows[0]) return { error: "Insert failed" };
+  return { id: rows[0].id };
+}
+
+export async function deleteStreamerRule(
+  ruleId: string,
+  streamerWebhookId: string
+): Promise<{ deleted: boolean }> {
+  const { rowCount } = await query(
+    "DELETE FROM streamer_tikfinity_rules WHERE id = $1 AND streamer_webhook_id = $2",
+    [ruleId, streamerWebhookId]
+  );
+  return { deleted: (rowCount ?? 0) > 0 };
+}
