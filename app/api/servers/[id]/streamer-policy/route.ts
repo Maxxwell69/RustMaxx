@@ -4,6 +4,7 @@ import { getServerWithRole, canEditServer } from "@/lib/server-access";
 import {
   getSelectableStreamerActionsForServer,
 } from "@/lib/streamer-action-policy";
+import { getSelectablePlatformStreamerItems } from "@/lib/streamer-item-policy";
 import { query } from "@/lib/db";
 
 /** Server owner/admin: list platform streamer actions + current server flags (for setup UI). */
@@ -23,17 +24,23 @@ export async function GET(
   const { rows } = await query<{
     streamer_interactions_enabled: boolean;
     streamer_allowed_actions: string[];
+    streamer_allowed_item_shortnames: string[] | null;
   }>(
-    `SELECT streamer_interactions_enabled, streamer_allowed_actions FROM servers WHERE id = $1`,
+    `SELECT streamer_interactions_enabled, streamer_allowed_actions, streamer_allowed_item_shortnames FROM servers WHERE id = $1`,
     [serverId]
   );
   const row = rows[0];
   const selectable = await getSelectableStreamerActionsForServer();
+  const selectableItems = await getSelectablePlatformStreamerItems();
   return NextResponse.json({
     streamer_interactions_enabled: row?.streamer_interactions_enabled ?? false,
     streamer_allowed_actions: Array.isArray(row?.streamer_allowed_actions)
       ? row.streamer_allowed_actions
       : [],
+    streamer_allowed_item_shortnames: Array.isArray(row?.streamer_allowed_item_shortnames)
+      ? row.streamer_allowed_item_shortnames
+      : [],
     selectable,
+    selectableItems,
   });
 }

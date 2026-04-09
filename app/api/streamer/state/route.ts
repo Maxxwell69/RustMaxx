@@ -6,6 +6,7 @@ import { canUseStreamerNetwork } from "@/lib/streamer-entitlement";
 import { getStreamerWebhookForUser } from "@/lib/streamer-webhooks";
 import { listStreamerRules } from "@/lib/streamer-tikfinity-rules";
 import { query } from "@/lib/db";
+import { getEffectiveStreamerItemsForServer } from "@/lib/streamer-item-policy";
 
 function appOrigin(): string | null {
   const u = process.env.APP_URL?.trim() ?? process.env.SITE_URL?.trim();
@@ -41,6 +42,9 @@ export async function GET(request: NextRequest) {
     serverName = rows[0]?.name ?? null;
   }
   const rules = hook ? await listStreamerRules(hook.id) : [];
+  const allowedStreamerItems = hook
+    ? await getEffectiveStreamerItemsForServer(hook.server_id)
+    : [];
   const origin = appOrigin();
   const webhookUrl =
     origin && hook
@@ -66,5 +70,6 @@ export async function GET(request: NextRequest) {
         }
       : null,
     rules,
+    allowedStreamerItems,
   });
 }

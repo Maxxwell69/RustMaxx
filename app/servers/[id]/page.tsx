@@ -40,6 +40,7 @@ export default function ServerDetailPage() {
     tikfinity_anchor_steam_id?: string | null;
     streamer_interactions_enabled?: boolean;
     streamer_allowed_actions?: string[];
+    streamer_allowed_item_shortnames?: string[];
   } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [listingForm, setListingForm] = useState({
@@ -74,6 +75,10 @@ export default function ServerDetailPage() {
   >([]);
   const [streamerSaving, setStreamerSaving] = useState(false);
   const [streamerFeedback, setStreamerFeedback] = useState<string | null>(null);
+  const [streamerItemShortnames, setStreamerItemShortnames] = useState<string[]>([]);
+  const [streamerSelectableItems, setStreamerSelectableItems] = useState<
+    { shortname: string; label: string; category: string; default_amount: number }[]
+  >([]);
   const [profiledPlayers, setProfiledPlayers] = useState<ProfiledPlayer[]>([]);
   const [inactiveLoading, setInactiveLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -113,6 +118,9 @@ export default function ServerDetailPage() {
           setStreamerActions(
             Array.isArray(s.streamer_allowed_actions) ? s.streamer_allowed_actions : []
           );
+          setStreamerItemShortnames(
+            Array.isArray(s.streamer_allowed_item_shortnames) ? s.streamer_allowed_item_shortnames : []
+          );
         }
       })
       .catch(() => setServer(null));
@@ -122,13 +130,17 @@ export default function ServerDetailPage() {
     fetch(`/api/servers/${id}/streamer-policy`, { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!d?.selectable) return;
-        setStreamerSelectable(d.selectable);
+        if (!d) return;
+        if (Array.isArray(d.selectable)) setStreamerSelectable(d.selectable);
+        if (Array.isArray(d.selectableItems)) setStreamerSelectableItems(d.selectableItems);
         if (typeof d.streamer_interactions_enabled === "boolean") {
           setStreamerEnabled(d.streamer_interactions_enabled);
         }
         if (Array.isArray(d.streamer_allowed_actions)) {
           setStreamerActions(d.streamer_allowed_actions);
+        }
+        if (Array.isArray(d.streamer_allowed_item_shortnames)) {
+          setStreamerItemShortnames(d.streamer_allowed_item_shortnames);
         }
       })
       .catch(() => {});
@@ -361,6 +373,7 @@ export default function ServerDetailPage() {
         body: JSON.stringify({
           streamer_interactions_enabled: streamerEnabled,
           streamer_allowed_actions: streamerActions,
+          streamer_allowed_item_shortnames: streamerItemShortnames,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -369,7 +382,9 @@ export default function ServerDetailPage() {
         return;
       }
       setServer((prev) => (prev ? { ...prev, ...data } : null));
-      setStreamerFeedback("Saved. Streamers can only use checked actions; MaxxInvaders / NPC roaming are not included.");
+      setStreamerFeedback(
+        "Saved. Streamers can only use checked actions and items you allow; MaxxInvaders / NPC roaming are not included."
+      );
     } finally {
       setStreamerSaving(false);
     }
@@ -611,6 +626,46 @@ export default function ServerDetailPage() {
                     <span>
                       <span className="font-medium text-zinc-200">{opt.label ?? opt.action_key}</span>
                       <code className="ml-1 text-[10px] text-emerald-600/90">{opt.action_key}</code>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-6 border-t border-zinc-800 pt-4">
+            <p className="mb-1 text-xs font-medium text-zinc-400">Rust items (optional)</p>
+            <p className="mb-3 text-xs text-zinc-500">
+              Super admins add items to the platform list. Choose which ones streamers may reference on this server
+              (shown on the streamer dashboard for planning gifts / rules).
+            </p>
+            {streamerSelectableItems.length === 0 ? (
+              <p className="text-xs text-zinc-600">No platform items yet — ask a super admin to add some under Admin → Streamer items.</p>
+            ) : (
+              <div className="max-h-56 space-y-1.5 overflow-y-auto rounded border border-zinc-800 bg-zinc-950/40 p-2">
+                {streamerSelectableItems.map((it) => (
+                  <label
+                    key={it.shortname}
+                    className="flex cursor-pointer items-start gap-2 px-1 py-0.5 text-xs text-zinc-300 hover:bg-zinc-900/60"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-zinc-600"
+                      checked={streamerItemShortnames.includes(it.shortname)}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setStreamerItemShortnames((prev) =>
+                          on
+                            ? [...new Set([...prev, it.shortname])]
+                            : prev.filter((s) => s !== it.shortname)
+                        );
+                      }}
+                    />
+                    <span>
+                      <span className="text-zinc-200">{it.label}</span>
+                      <code className="ml-1 text-[10px] text-zinc-500">{it.shortname}</code>
+                      <span className="ml-1 text-[10px] text-zinc-600">
+                        ×{it.default_amount} · {it.category}
+                      </span>
                     </span>
                   </label>
                 ))}

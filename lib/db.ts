@@ -44,6 +44,8 @@ export type ServerRow = {
   streamer_interactions_enabled?: boolean;
   /** Subset of platform streamer actions this server allows (owner-chosen). */
   streamer_allowed_actions?: string[];
+  /** Subset of streamer_platform_items streamers may reference on this server. */
+  streamer_allowed_item_shortnames?: string[];
 };
 
 export type PublicServerRow = {

@@ -1209,3 +1209,8 @@ export const ITEM_CATALOG: ItemDefinition[] = [
   { shortname: "yellow.berry", label: "Yellow Berry", amount: 20, category: "food" },
   { shortname: "yellowidtag", label: "Yellow ID Tag", amount: 5000, category: "resources" }
 ];
+
+export function findItemByShortname(shortname: string): ItemDefinition | undefined {
+  const q = shortname.trim();
+  return ITEM_CATALOG.find((i) => i.shortname === q);
+}

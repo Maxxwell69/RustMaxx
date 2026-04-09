@@ -10,6 +10,10 @@ import {
   assertOwnerActionsAllowedByCatalog,
   validateAllowedActionsPayload,
 } from "@/lib/streamer-action-policy";
+import {
+  assertOwnerStreamerItemsAllowedByCatalog,
+  validateStreamerItemShortnamesPayload,
+} from "@/lib/streamer-item-policy";
 
 export async function GET(
   request: NextRequest,
@@ -57,6 +61,8 @@ export async function PATCH(
     streamer_interactions_enabled?: boolean;
     /** Actions streamers may use (RustChaos / social only); owner-chosen subset of platform catalog. */
     streamer_allowed_actions?: string[];
+    /** Rust item shortnames streamers may reference; subset of platform streamer items. */
+    streamer_allowed_item_shortnames?: string[];
   };
   try {
     body = await request.json();
@@ -154,6 +160,18 @@ export async function PATCH(
     updates.push(`streamer_allowed_actions = $${idx++}`);
     values.push(parsed);
   }
+  if (body.streamer_allowed_item_shortnames !== undefined) {
+    const parsed = validateStreamerItemShortnamesPayload(body.streamer_allowed_item_shortnames);
+    if ("error" in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const itemOk = await assertOwnerStreamerItemsAllowedByCatalog(parsed);
+    if ("error" in itemOk) {
+      return NextResponse.json({ error: itemOk.error }, { status: 400 });
+    }
+    updates.push(`streamer_allowed_item_shortnames = $${idx++}`);
+    values.push(parsed);
+  }
 
   if (body.tikfinity_anchor_steam_id !== undefined) {
     const raw = body.tikfinity_anchor_steam_id;
@@ -186,7 +204,7 @@ export async function PATCH(
   if (rconCredentialsChanged) disconnect(serverId);
   values.push(serverId);
   const { rows } = await query<ServerRow>(
-    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id, streamer_interactions_enabled, streamer_allowed_actions`,
+    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id, streamer_interactions_enabled, streamer_allowed_actions, streamer_allowed_item_shortnames`,
     values
   );
   const auditFields = Object.keys(body).filter((k) => k !== "rcon_password");

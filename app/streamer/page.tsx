@@ -70,6 +70,12 @@ type State = {
     scrap_amount: number;
     npc_template_key: string | null;
   }>;
+  allowedStreamerItems: Array<{
+    shortname: string;
+    label: string;
+    category: string;
+    amount: number;
+  }>;
 };
 
 type ServerRow = { id: string; name: string; listing_name: string | null };
@@ -113,7 +119,13 @@ export default function StreamerDashboardPage() {
       setLoading(false);
       return;
     }
-    setState(sJson as State);
+    const raw = sJson as Record<string, unknown>;
+    setState({
+      ...raw,
+      allowedStreamerItems: Array.isArray(raw.allowedStreamerItems)
+        ? (raw.allowedStreamerItems as State["allowedStreamerItems"])
+        : [],
+    } as State);
     if (srvRes.ok) {
       const j = await srvRes.json().catch(() => ({}));
       setServers(j.servers ?? []);
@@ -323,7 +335,7 @@ export default function StreamerDashboardPage() {
     );
   }
 
-  const { user, hook, rules } = state;
+  const { user, hook, rules, allowedStreamerItems = [] } = state;
   const fullTikfinityUrl =
     hook?.webhookUrl && secretShown
       ? `${hook.webhookUrl}?token=${encodeURIComponent(secretShown)}`
@@ -517,6 +529,30 @@ export default function StreamerDashboardPage() {
           </div>
         ) : null}
       </section>
+
+      {hook && allowedStreamerItems.length > 0 ? (
+        <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
+            Rust items (this server)
+          </h2>
+          <p className="mb-3 text-xs text-zinc-500">
+            The server owner enabled these items for your streamer setup (reference for gifts / rules). They do not
+            spawn in-game by themselves.
+          </p>
+          <ul className="flex flex-wrap gap-2">
+            {allowedStreamerItems.map((it) => (
+              <li
+                key={it.shortname}
+                className="rounded border border-zinc-700 bg-zinc-950/50 px-2 py-1 text-xs text-zinc-300"
+              >
+                <span className="text-zinc-200">{it.label}</span>{" "}
+                <code className="text-emerald-600/80">{it.shortname}</code>{" "}
+                <span className="text-zinc-600">×{it.amount}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
