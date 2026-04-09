@@ -81,6 +81,7 @@ export default function ServerDetailPage() {
   >([]);
   const [profiledPlayers, setProfiledPlayers] = useState<ProfiledPlayer[]>([]);
   const [inactiveLoading, setInactiveLoading] = useState(true);
+  const [setupTab, setSetupTab] = useState<"server" | "streamer">("server");
   const logEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -518,222 +519,9 @@ export default function ServerDetailPage() {
         Uses <strong>WebRCON</strong> (WebSocket). If you get timeout on Railway, run RustMaxx locally (<code>npm run dev</code>) so the connection comes from your PC.
       </p>
 
-      {(server.myRole === "owner" || server.myRole === "admin") && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-          <h2 className="text-sm font-medium text-zinc-300">RCON host, port &amp; password</h2>
-          <p className="mt-1 text-xs text-zinc-500">
-            The password is stored in RustMaxx but never shown again after save. Use your host&apos;s{" "}
-            <strong className="text-zinc-400">WebRCON</strong> port (e.g. Shockbyte &quot;RCON&quot; in Ports — not game or query).
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs text-zinc-400">Host (IP only)</label>
-              <input
-                type="text"
-                value={rconForm.host}
-                onChange={(e) => setRconForm((f) => ({ ...f, host: e.target.value }))}
-                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
-                placeholder="e.g. 51.79.46.205"
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-zinc-400">RCON port</label>
-              <input
-                type="number"
-                value={rconForm.port}
-                onChange={(e) => setRconForm((f) => ({ ...f, port: e.target.value }))}
-                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
-                placeholder="e.g. 28016"
-                min={1}
-                max={65535}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs text-zinc-400">New RCON password (optional)</label>
-              <input
-                type="password"
-                value={rconForm.password}
-                onChange={(e) => setRconForm((f) => ({ ...f, password: e.target.value }))}
-                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
-                placeholder="Leave blank to keep current password"
-                autoComplete="new-password"
-              />
-            </div>
-          </div>
-          {rconFeedback && (
-            <p className={`mt-2 text-xs ${rconFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}>
-              {rconFeedback}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => void saveRcon()}
-            disabled={rconSaving}
-            className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
-          >
-            {rconSaving ? "Saving…" : "Save RCON settings"}
-          </button>
-        </div>
-      )}
-
-      {(server.myRole === "owner" || server.myRole === "admin") && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-          <h2 className="text-sm font-medium text-zinc-300">Streamer interactions</h2>
-          <p className="mt-1 text-xs text-zinc-500">
-            Allow TikFinity streamers to target this server from{" "}
-            <strong className="text-zinc-400">Streamer interactions</strong>. Only RustChaos-style commands and TikTok
-            social announcements (no MaxxInvaders, Roaming NPC, or chaos-wave bundles).
-          </p>
-          <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
-            <input
-              type="checkbox"
-              checked={streamerEnabled}
-              onChange={(e) => setStreamerEnabled(e.target.checked)}
-              className="rounded border-zinc-600"
-            />
-            Allow streamers to use this server for TikFinity webhooks
-          </label>
-          {streamerEnabled && streamerActions.length === 0 ? (
-            <p className="mt-3 text-xs text-amber-200/90">
-              Turn on at least one action below, or streamers&apos; webhooks will be rejected until you add some.
-            </p>
-          ) : null}
-          <div className="mt-4">
-            <p className="mb-2 text-xs font-medium text-zinc-400">Allowed actions</p>
-            {streamerSelectable.length === 0 ? (
-              <p className="text-xs text-zinc-600">Loading actions…</p>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {streamerSelectable.map((opt) => (
-                  <label
-                    key={opt.action_key}
-                    className="flex cursor-pointer items-start gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-2 py-1.5 text-xs text-zinc-300 hover:border-zinc-700"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 rounded border-zinc-600"
-                      checked={streamerActions.includes(opt.action_key)}
-                      onChange={(e) => {
-                        const on = e.target.checked;
-                        setStreamerActions((prev) =>
-                          on
-                            ? [...new Set([...prev, opt.action_key])]
-                            : prev.filter((a) => a !== opt.action_key)
-                        );
-                      }}
-                    />
-                    <span>
-                      <span className="font-medium text-zinc-200">{opt.label ?? opt.action_key}</span>
-                      <code className="ml-1 text-[10px] text-emerald-600/90">{opt.action_key}</code>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="mt-6 border-t border-zinc-800 pt-4">
-            <p className="mb-1 text-xs font-medium text-zinc-400">Rust items (optional)</p>
-            <p className="mb-3 text-xs text-zinc-500">
-              Super admins add items to the platform list. Choose which ones streamers may reference on this server
-              (shown on the streamer dashboard for planning gifts / rules).
-            </p>
-            {streamerSelectableItems.length === 0 ? (
-              <p className="text-xs text-zinc-600">No platform items yet — ask a super admin to add some under Admin → Streamer items.</p>
-            ) : (
-              <div className="max-h-56 space-y-1.5 overflow-y-auto rounded border border-zinc-800 bg-zinc-950/40 p-2">
-                {streamerSelectableItems.map((it) => (
-                  <label
-                    key={it.shortname}
-                    className="flex cursor-pointer items-start gap-2 px-1 py-0.5 text-xs text-zinc-300 hover:bg-zinc-900/60"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 rounded border-zinc-600"
-                      checked={streamerItemShortnames.includes(it.shortname)}
-                      onChange={(e) => {
-                        const on = e.target.checked;
-                        setStreamerItemShortnames((prev) =>
-                          on
-                            ? [...new Set([...prev, it.shortname])]
-                            : prev.filter((s) => s !== it.shortname)
-                        );
-                      }}
-                    />
-                    <span>
-                      <span className="text-zinc-200">{it.label}</span>
-                      <code className="ml-1 text-[10px] text-zinc-500">{it.shortname}</code>
-                      <span className="ml-1 text-[10px] text-zinc-600">
-                        ×{it.default_amount} · {it.category}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-          {streamerFeedback && (
-            <p
-              className={`mt-2 text-xs ${streamerFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}
-            >
-              {streamerFeedback}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => void saveStreamerPolicy()}
-            disabled={streamerSaving}
-            className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
-          >
-            {streamerSaving ? "Saving…" : "Save streamer settings"}
-          </button>
-        </div>
-      )}
-
-      {(server.myRole === "owner" || server.myRole === "admin") && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-          <h2 className="text-sm font-medium text-zinc-300">TikFinity patrol anchor (optional)</h2>
-          <p className="mt-1 text-xs text-zinc-500">
-            Set your <strong className="text-zinc-400">Steam64</strong> (17 digits) once.{" "}
-            <code className="rounded bg-zinc-800 px-1">maxxinvaders</code> webhooks for this server then spawn / leash viewer bots{" "}
-            <strong className="text-zinc-400">near you</strong> when you are online or sleeping — no{" "}
-            <code className="rounded bg-zinc-800 px-1">?anchorSteam=</code> in the TikFinity URL. Tune leash radius in{" "}
-            <code className="rounded bg-zinc-800 px-1">MaxxInvaders.json</code> on the game server (
-            <code className="rounded bg-zinc-800 px-1">MaxDistanceFromAnchor</code>).
-          </p>
-          <div className="mt-3">
-            <label className="mb-1 block text-xs text-zinc-400">Streamer / base owner Steam64</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={tikfinityAnchorSteam}
-              onChange={(e) => setTikfinityAnchorSteam(e.target.value.replace(/\D/g, "").slice(0, 17))}
-              className="w-full max-w-md rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 font-mono text-sm text-zinc-100"
-              placeholder="76561198963850965"
-              autoComplete="off"
-            />
-          </div>
-          {tikfinityAnchorFeedback && (
-            <p
-              className={`mt-2 text-xs ${tikfinityAnchorFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}
-            >
-              {tikfinityAnchorFeedback}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => void saveTikfinityAnchor()}
-            disabled={tikfinityAnchorSaving}
-            className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
-          >
-            {tikfinityAnchorSaving ? "Saving…" : "Save patrol anchor"}
-          </button>
-        </div>
-      )}
-
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
         <div className="border-b border-zinc-800 px-3 py-2 text-sm text-zinc-400">
-          Console & chat (last 200 + live)
+          RCON console (last 200 + live)
         </div>
         <div className="h-[400px] overflow-y-auto p-3 font-mono text-sm">
           {logs.map((log, i) => (
@@ -749,50 +537,6 @@ export default function ServerDetailPage() {
           ))}
           <div ref={logEndRef} />
         </div>
-      </div>
-
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-        <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
-          <span>RustMaxx player profiles on this server</span>
-        </div>
-        {inactiveLoading ? (
-          <div className="p-3 text-sm text-zinc-500">Loading profiles…</div>
-        ) : profiledPlayers.length === 0 ? (
-          <div className="p-3 text-sm text-zinc-500">
-            No saved player profiles yet. Players will appear here when you add them to groups.
-          </div>
-        ) : (
-          <div className="p-3 text-sm">
-            <p className="mb-2 text-xs text-zinc-500">
-              Inactive players are ones that have a RustMaxx profile here but are not currently
-              reported in any Oxide group on this server.
-            </p>
-            <ul className="space-y-1">
-              {profiledPlayers.map((p) => (
-                <li key={p.player_id} className="flex flex-wrap items-center gap-2">
-                  <Link
-                    href={`/servers/${id}/players/${encodeURIComponent(
-                      p.player_id
-                    )}?name=${encodeURIComponent(p.player_name || p.player_id)}`}
-                    className="text-rust-cyan hover:underline"
-                  >
-                    {p.player_name || p.player_id}
-                  </Link>
-                  <span className="text-xs text-zinc-500">{p.player_id}</span>
-                  <span
-                    className={`ml-2 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
-                      p.active
-                        ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700/60"
-                        : "bg-zinc-800 text-zinc-300 border border-zinc-600"
-                    }`}
-                  >
-                    {p.active ? "Active" : "Inactive"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -867,102 +611,395 @@ export default function ServerDetailPage() {
       </div>
 
       {(server.myRole === "owner" || server.myRole === "admin") && (
-      <ServerAccessSection serverId={id} currentUserId={currentUserId ?? ""} />
-      )}
-
-      {userRole !== null && (server.myRole === "owner" || server.myRole === "admin") && (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-        <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
-          <span>Public server list</span>
-        </div>
-        <div className="p-4 space-y-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={listingForm.listed}
-              onChange={(e) => setListingForm((f) => ({ ...f, listed: e.target.checked }))}
-              className="rounded border-zinc-600 bg-zinc-800 text-rust-cyan focus:ring-rust-cyan"
-            />
-            <span className="text-sm text-zinc-300">Show on public server list</span>
-          </label>
-          <p className="text-xs text-zinc-500">
-            When enabled, this server appears on the public <a href="/server-list" target="_blank" rel="noopener noreferrer" className="text-rust-cyan hover:underline">/server-list</a> page so players can find and connect to it.
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <h2 className="text-sm font-medium text-zinc-300">RCON host, port &amp; password</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            The password is stored in RustMaxx but never shown again after save. Use your host&apos;s{" "}
+            <strong className="text-zinc-400">WebRCON</strong> port (e.g. Shockbyte &quot;RCON&quot; in Ports — not game or query).
           </p>
-          {listingForm.listed && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs text-zinc-400">Listing name (optional)</label>
-                <input
-                  type="text"
-                  value={listingForm.listing_name}
-                  onChange={(e) => setListingForm((f) => ({ ...f, listing_name: e.target.value }))}
-                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
-                  placeholder={server?.name ?? "Display name"}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-400">Listing description (optional)</label>
-                <input
-                  type="text"
-                  value={listingForm.listing_description}
-                  onChange={(e) => setListingForm((f) => ({ ...f, listing_description: e.target.value }))}
-                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
-                  placeholder="Short description"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-400">Game host (for Connect)</label>
-                <input
-                  type="text"
-                  value={listingForm.game_host}
-                  onChange={(e) => setListingForm((f) => ({ ...f, game_host: e.target.value }))}
-                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
-                  placeholder="IP or hostname"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-400">Game port (join port)</label>
-                <input
-                  type="number"
-                  value={listingForm.game_port}
-                  onChange={(e) => setListingForm((f) => ({ ...f, game_port: e.target.value }))}
-                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
-                  placeholder="28015"
-                  min={1}
-                  max={65535}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-400">Location</label>
-                <input
-                  type="text"
-                  value={listingForm.location}
-                  onChange={(e) => setListingForm((f) => ({ ...f, location: e.target.value }))}
-                  className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
-                  placeholder="e.g. Quebec"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-400">Logo</label>
-                <LogoUpload
-                  value={listingForm.logo_url}
-                  onChange={(url) => setListingForm((f) => ({ ...f, logo_url: url }))}
-                  disabled={listingSaving}
-                  className="mt-1"
-                />
-              </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Host (IP only)</label>
+              <input
+                type="text"
+                value={rconForm.host}
+                onChange={(e) => setRconForm((f) => ({ ...f, host: e.target.value }))}
+                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                placeholder="e.g. 51.79.46.205"
+                autoComplete="off"
+              />
             </div>
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">RCON port</label>
+              <input
+                type="number"
+                value={rconForm.port}
+                onChange={(e) => setRconForm((f) => ({ ...f, port: e.target.value }))}
+                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                placeholder="e.g. 28016"
+                min={1}
+                max={65535}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs text-zinc-400">New RCON password (optional)</label>
+              <input
+                type="password"
+                value={rconForm.password}
+                onChange={(e) => setRconForm((f) => ({ ...f, password: e.target.value }))}
+                className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                placeholder="Leave blank to keep current password"
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+          {rconFeedback && (
+            <p className={`mt-2 text-xs ${rconFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}>
+              {rconFeedback}
+            </p>
           )}
           <button
             type="button"
-            onClick={saveListing}
-            disabled={listingSaving}
-            className="rounded bg-rust-cyan px-3 py-1.5 text-sm font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
+            onClick={() => void saveRcon()}
+            disabled={rconSaving}
+            className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
           >
-            {listingSaving ? "Saving…" : "Save listing"}
+            {rconSaving ? "Saving…" : "Save RCON settings"}
           </button>
         </div>
+      )}
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+        <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
+          <span>RustMaxx player profiles on this server</span>
+        </div>
+        {inactiveLoading ? (
+          <div className="p-3 text-sm text-zinc-500">Loading profiles…</div>
+        ) : profiledPlayers.length === 0 ? (
+          <div className="p-3 text-sm text-zinc-500">
+            No saved player profiles yet. Players will appear here when you add them to groups.
+          </div>
+        ) : (
+          <div className="p-3 text-sm">
+            <p className="mb-2 text-xs text-zinc-500">
+              Inactive players are ones that have a RustMaxx profile here but are not currently
+              reported in any Oxide group on this server.
+            </p>
+            <ul className="space-y-1">
+              {profiledPlayers.map((p) => (
+                <li key={p.player_id} className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/servers/${id}/players/${encodeURIComponent(
+                      p.player_id
+                    )}?name=${encodeURIComponent(p.player_name || p.player_id)}`}
+                    className="text-rust-cyan hover:underline"
+                  >
+                    {p.player_name || p.player_id}
+                  </Link>
+                  <span className="text-xs text-zinc-500">{p.player_id}</span>
+                  <span
+                    className={`ml-2 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                      p.active
+                        ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700/60"
+                        : "bg-zinc-800 text-zinc-300 border border-zinc-600"
+                    }`}
+                  >
+                    {p.active ? "Active" : "Inactive"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
+
+      {(server.myRole === "owner" || server.myRole === "admin") && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+          <div className="flex border-b border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setSetupTab("server")}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                setupTab === "server"
+                  ? "bg-zinc-800/80 text-zinc-100 border-b-2 border-rust-cyan -mb-px"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Server setup
+            </button>
+            <button
+              type="button"
+              onClick={() => setSetupTab("streamer")}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                setupTab === "streamer"
+                  ? "bg-zinc-800/80 text-zinc-100 border-b-2 border-rust-cyan -mb-px"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Streamer interactions
+            </button>
+          </div>
+          <div className="space-y-4 p-4">
+            {setupTab === "server" && (
+              <>
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+                  <h2 className="text-sm font-medium text-zinc-300">TikFinity patrol anchor (optional)</h2>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Set your <strong className="text-zinc-400">Steam64</strong> (17 digits) once.{" "}
+                    <code className="rounded bg-zinc-800 px-1">maxxinvaders</code> webhooks for this server then spawn / leash viewer bots{" "}
+                    <strong className="text-zinc-400">near you</strong> when you are online or sleeping — no{" "}
+                    <code className="rounded bg-zinc-800 px-1">?anchorSteam=</code> in the TikFinity URL. Tune leash radius in{" "}
+                    <code className="rounded bg-zinc-800 px-1">MaxxInvaders.json</code> on the game server (
+                    <code className="rounded bg-zinc-800 px-1">MaxDistanceFromAnchor</code>).
+                  </p>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-xs text-zinc-400">Streamer / base owner Steam64</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={tikfinityAnchorSteam}
+                      onChange={(e) => setTikfinityAnchorSteam(e.target.value.replace(/\D/g, "").slice(0, 17))}
+                      className="w-full max-w-md rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 font-mono text-sm text-zinc-100"
+                      placeholder="76561198963850965"
+                      autoComplete="off"
+                    />
+                  </div>
+                  {tikfinityAnchorFeedback && (
+                    <p
+                      className={`mt-2 text-xs ${tikfinityAnchorFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}
+                    >
+                      {tikfinityAnchorFeedback}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void saveTikfinityAnchor()}
+                    disabled={tikfinityAnchorSaving}
+                    className="mt-3 rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
+                  >
+                    {tikfinityAnchorSaving ? "Saving…" : "Save patrol anchor"}
+                  </button>
+                </div>
+                <ServerAccessSection serverId={id} currentUserId={currentUserId ?? ""} />
+                {userRole !== null && (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 overflow-hidden">
+                    <div className="border-b border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 flex items-center justify-between">
+                      <span>Public server list</span>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={listingForm.listed}
+                          onChange={(e) => setListingForm((f) => ({ ...f, listed: e.target.checked }))}
+                          className="rounded border-zinc-600 bg-zinc-800 text-rust-cyan focus:ring-rust-cyan"
+                        />
+                        <span className="text-sm text-zinc-300">Show on public server list</span>
+                      </label>
+                      <p className="text-xs text-zinc-500">
+                        When enabled, this server appears on the public{" "}
+                        <a
+                          href="/server-list"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-rust-cyan hover:underline"
+                        >
+                          /server-list
+                        </a>{" "}
+                        page so players can find and connect to it.
+                      </p>
+                      {listingForm.listed && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-400">Listing name (optional)</label>
+                            <input
+                              type="text"
+                              value={listingForm.listing_name}
+                              onChange={(e) => setListingForm((f) => ({ ...f, listing_name: e.target.value }))}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                              placeholder={server?.name ?? "Display name"}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-400">Listing description (optional)</label>
+                            <input
+                              type="text"
+                              value={listingForm.listing_description}
+                              onChange={(e) => setListingForm((f) => ({ ...f, listing_description: e.target.value }))}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                              placeholder="Short description"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-400">Game host (for Connect)</label>
+                            <input
+                              type="text"
+                              value={listingForm.game_host}
+                              onChange={(e) => setListingForm((f) => ({ ...f, game_host: e.target.value }))}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                              placeholder="IP or hostname"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-400">Game port (join port)</label>
+                            <input
+                              type="number"
+                              value={listingForm.game_port}
+                              onChange={(e) => setListingForm((f) => ({ ...f, game_port: e.target.value }))}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                              placeholder="28015"
+                              min={1}
+                              max={65535}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-400">Location</label>
+                            <input
+                              type="text"
+                              value={listingForm.location}
+                              onChange={(e) => setListingForm((f) => ({ ...f, location: e.target.value }))}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                              placeholder="e.g. Quebec"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-400">Logo</label>
+                            <LogoUpload
+                              value={listingForm.logo_url}
+                              onChange={(url) => setListingForm((f) => ({ ...f, logo_url: url }))}
+                              disabled={listingSaving}
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={saveListing}
+                        disabled={listingSaving}
+                        className="rounded bg-rust-cyan px-3 py-1.5 text-sm font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
+                      >
+                        {listingSaving ? "Saving…" : "Save listing"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {setupTab === "streamer" && (
+              <div className="space-y-4">
+                <h2 className="text-sm font-medium text-zinc-300">Streamer interactions</h2>
+                <p className="text-xs text-zinc-500">
+                  Allow TikFinity streamers to target this server from{" "}
+                  <strong className="text-zinc-400">Streamer interactions</strong>. Only RustChaos-style commands and TikTok
+                  social announcements (no MaxxInvaders, Roaming NPC, or chaos-wave bundles).
+                </p>
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={streamerEnabled}
+                    onChange={(e) => setStreamerEnabled(e.target.checked)}
+                    className="rounded border-zinc-600"
+                  />
+                  Allow streamers to use this server for TikFinity webhooks
+                </label>
+                {streamerEnabled && streamerActions.length === 0 ? (
+                  <p className="text-xs text-amber-200/90">
+                    Turn on at least one action below, or streamers&apos; webhooks will be rejected until you add some.
+                  </p>
+                ) : null}
+                <div>
+                  <p className="mb-2 text-xs font-medium text-zinc-400">Allowed actions</p>
+                  {streamerSelectable.length === 0 ? (
+                    <p className="text-xs text-zinc-600">Loading actions…</p>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {streamerSelectable.map((opt) => (
+                        <label
+                          key={opt.action_key}
+                          className="flex cursor-pointer items-start gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-2 py-1.5 text-xs text-zinc-300 hover:border-zinc-700"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 rounded border-zinc-600"
+                            checked={streamerActions.includes(opt.action_key)}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setStreamerActions((prev) =>
+                                on
+                                  ? [...new Set([...prev, opt.action_key])]
+                                  : prev.filter((a) => a !== opt.action_key)
+                              );
+                            }}
+                          />
+                          <span>
+                            <span className="font-medium text-zinc-200">{opt.label ?? opt.action_key}</span>
+                            <code className="ml-1 text-[10px] text-emerald-600/90">{opt.action_key}</code>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="border-t border-zinc-800 pt-4">
+                  <p className="mb-1 text-xs font-medium text-zinc-400">Rust items (optional)</p>
+                  <p className="mb-3 text-xs text-zinc-500">
+                    Super admins add items to the platform list. Choose which ones streamers may reference on this server
+                    (shown on the streamer dashboard for planning gifts / rules).
+                  </p>
+                  {streamerSelectableItems.length === 0 ? (
+                    <p className="text-xs text-zinc-600">No platform items yet — ask a super admin to add some under Admin → Streamer items.</p>
+                  ) : (
+                    <div className="max-h-56 space-y-1.5 overflow-y-auto rounded border border-zinc-800 bg-zinc-950/40 p-2">
+                      {streamerSelectableItems.map((it) => (
+                        <label
+                          key={it.shortname}
+                          className="flex cursor-pointer items-start gap-2 px-1 py-0.5 text-xs text-zinc-300 hover:bg-zinc-900/60"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 rounded border-zinc-600"
+                            checked={streamerItemShortnames.includes(it.shortname)}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setStreamerItemShortnames((prev) =>
+                                on
+                                  ? [...new Set([...prev, it.shortname])]
+                                  : prev.filter((s) => s !== it.shortname)
+                              );
+                            }}
+                          />
+                          <span>
+                            <span className="text-zinc-200">{it.label}</span>
+                            <code className="ml-1 text-[10px] text-zinc-500">{it.shortname}</code>
+                            <span className="ml-1 text-[10px] text-zinc-600">
+                              ×{it.default_amount} · {it.category}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {streamerFeedback && (
+                  <p
+                    className={`text-xs ${streamerFeedback.startsWith("Saved") ? "text-emerald-400/90" : "text-red-400"}`}
+                  >
+                    {streamerFeedback}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void saveStreamerPolicy()}
+                  disabled={streamerSaving}
+                  className="rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-zinc-600 disabled:opacity-50"
+                >
+                  {streamerSaving ? "Saving…" : "Save streamer settings"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
