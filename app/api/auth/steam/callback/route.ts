@@ -23,15 +23,15 @@ export async function GET(request: NextRequest) {
   const steamId = await verifySteamOpenIdCallback(request.nextUrl.searchParams);
   if (!steamId) {
     return NextResponse.redirect(
-      new URL("/streamer?steam=verify_failed", baseUrl(request))
+      new URL("/profile?steam=verify_failed", baseUrl(request))
     );
   }
   const result = await setUserSteamId(session.userId, steamId);
   if ("error" in result) {
     const q = new URLSearchParams({ steam: "link_failed", reason: result.error });
     return NextResponse.redirect(
-      new URL(`/streamer?${q.toString()}`, baseUrl(request))
+      new URL(`/profile?${q.toString()}`, baseUrl(request))
     );
   }
-  return NextResponse.redirect(new URL("/streamer?steam=linked", baseUrl(request)));
+  return NextResponse.redirect(new URL("/profile?steam=linked", baseUrl(request)));
 }

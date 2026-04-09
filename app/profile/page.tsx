@@ -3,6 +3,10 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  MEMBERSHIP_LEVEL_LABELS,
+  type MembershipLevel,
+} from "@/lib/membership-level";
 
 type Profile = {
   id: string;
@@ -10,6 +14,14 @@ type Profile = {
   role: string;
   display_name: string | null;
   created_at: string;
+  membership_level?: string;
+  steam?: {
+    steamId: string;
+    personaName: string | null;
+    profileUrl: string;
+    avatarUrl: string | null;
+    linkedAt: string | null;
+  } | null;
 };
 
 type TwitchStatus = {
@@ -175,9 +187,20 @@ function ProfilePageContent() {
         }
         return r.json();
       })
-      .then(setProfile)
+      .then((p) => {
+        setProfile(p);
+      })
       .finally(() => setLoading(false));
   }, [router]);
+
+  useEffect(() => {
+    const steam = searchParams.get("steam");
+    if (!steam || !["linked", "verify_failed", "link_failed"].includes(steam)) return;
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => p && setProfile(p))
+      .catch(() => {});
+  }, [searchParams]);
 
   useEffect(() => {
     if (!profile) return;
@@ -282,7 +305,19 @@ function ProfilePageContent() {
                 {new Date(profile.created_at).toLocaleDateString()}
               </dd>
             </div>
+            {profile.membership_level && (
+              <div>
+                <dt className="text-sm text-zinc-500">Membership level</dt>
+                <dd className="mt-0.5">
+                  <span className="rounded bg-emerald-950/80 px-2 py-1 text-sm text-emerald-300">
+                    {MEMBERSHIP_LEVEL_LABELS[profile.membership_level as MembershipLevel] ??
+                      profile.membership_level}
+                  </span>
+                </dd>
+              </div>
+            )}
           </dl>
+
           <p className="mt-6 text-sm text-zinc-500">
             Role permissions:{" "}
             {profile.role === "super_admin" && "Can promote users to admin and remove admins."}
@@ -307,6 +342,111 @@ function ProfilePageContent() {
               </Link>
             </div>
           )}
+
+          <div className="mt-8 rounded-lg border border-rust-cyan/25 bg-rust-cyan/5 p-4">
+            <h2 className="mb-2 text-sm font-semibold text-zinc-100">Streamer interactions</h2>
+            <p className="mb-3 text-xs text-zinc-500">
+              Connect TikFinity to your Rust server: webhook URL, event rules, and Steam anchor for in-game actions.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Link
+                href="/streamer"
+                className="inline-flex items-center justify-center rounded-lg bg-rust-cyan px-4 py-2 text-sm font-medium text-zinc-950 hover:opacity-90"
+              >
+                Streamer setup →
+              </Link>
+              <Link
+                href="/streamer-interaction"
+                className="inline-flex items-center justify-center rounded-lg border border-zinc-600 bg-zinc-800/80 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800"
+              >
+                About streamer interaction →
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-8 border-t border-zinc-800 pt-6">
+            <h2 className="mb-3 text-lg font-semibold text-zinc-100">Steam</h2>
+            {searchParams.get("steam") === "linked" && (
+              <p className="mb-3 text-sm text-green-400">
+                Steam linked successfully — your account details appear below.
+              </p>
+            )}
+            {searchParams.get("steam") === "verify_failed" && (
+              <p className="mb-3 text-sm text-amber-400">
+                Steam could not verify the login. Try &quot;Link Steam account&quot; again.
+              </p>
+            )}
+            {searchParams.get("steam") === "link_failed" && (
+              <p className="mb-3 text-sm text-amber-400">
+                {(() => {
+                  const r = searchParams.get("reason");
+                  if (!r) return "Could not save Steam link.";
+                  try {
+                    return decodeURIComponent(r);
+                  } catch {
+                    return r;
+                  }
+                })()}
+              </p>
+            )}
+            {profile.steam ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                {profile.steam.avatarUrl ? (
+                  <img
+                    src={profile.steam.avatarUrl}
+                    alt=""
+                    width={64}
+                    height={64}
+                    className="h-16 w-16 shrink-0 rounded border border-zinc-600"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded border border-zinc-600 bg-zinc-800 text-2xl text-zinc-500">
+                    S
+                  </div>
+                )}
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-sm font-medium text-zinc-100">
+                    {profile.steam.personaName ?? "Steam account"}
+                  </p>
+                  <p className="font-mono text-xs text-zinc-500">
+                    {profile.steam.steamId}
+                  </p>
+                  {profile.steam.linkedAt && (
+                    <p className="text-xs text-zinc-500">
+                      Linked {new Date(profile.steam.linkedAt).toLocaleString()}
+                    </p>
+                  )}
+                  <a
+                    href={profile.steam.profileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-sm text-rust-cyan hover:underline"
+                  >
+                    View Steam profile ↗
+                  </a>
+                  {!profile.steam.personaName && (
+                    <p className="text-xs text-zinc-600">
+                      Set{" "}
+                      <code className="rounded bg-zinc-800 px-1">STEAM_WEB_API_KEY</code> on the server to load your
+                      Steam name and avatar here.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="mb-2 text-sm text-zinc-500">
+                  Link your Steam account so RustMaxx can tie in-game actions to your Steam ID (TikFinity / patrol anchor).
+                </p>
+                <a
+                  href="/api/auth/steam"
+                  className="inline-block rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-700"
+                >
+                  Link Steam account
+                </a>
+              </div>
+            )}
+          </div>
 
           <div className="mt-8 border-t border-zinc-800 pt-6">
             <h2 className="mb-3 text-lg font-semibold text-zinc-100">Twitch</h2>
@@ -362,12 +502,17 @@ function ProfilePageContent() {
                     </ul>
                   </div>
                 )}
-                <Link
-                  href="/streamer-interaction"
-                  className="inline-block text-sm text-rust-cyan hover:underline"
-                >
-                  Streamer interaction & events →
-                </Link>
+                <p className="text-xs text-zinc-500">
+                  Rust + TikFinity webhooks: use{" "}
+                  <Link href="/streamer" className="text-rust-cyan hover:underline">
+                    Streamer setup
+                  </Link>
+                  . Overview:{" "}
+                  <Link href="/streamer-interaction" className="text-rust-cyan hover:underline">
+                    Streamer interaction
+                  </Link>
+                  .
+                </p>
                 <TwitchLinkServerBlock
                   onLinked={() => {
                     fetch("/api/twitch/setup-status")
