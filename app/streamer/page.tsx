@@ -20,6 +20,32 @@ function persistWebhookSecret(publicId: string | undefined, secret: string) {
   }
 }
 
+function readWebhookSecretFromStorage(publicId: string | undefined): string | null {
+  if (typeof window === "undefined" || !publicId) return null;
+  try {
+    const raw = sessionStorage.getItem(STREAMER_WH_SECRET_STORAGE);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { publicId?: string; secret?: string };
+    if (parsed.publicId === publicId && typeof parsed.secret === "string" && parsed.secret) {
+      return parsed.secret;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** Full hook URL for TikFinity: token + rule name as `action` (empty-body safe). */
+function fullRuleWebhookUrl(
+  webhookBase: string | null,
+  secret: string | null,
+  ruleEventName: string
+): string | null {
+  const name = ruleEventName.trim();
+  if (!webhookBase || !secret || !name) return null;
+  return `${webhookBase}?token=${encodeURIComponent(secret)}&action=${encodeURIComponent(name)}`;
+}
+
 type State = {
   user: {
     email: string;
@@ -63,6 +89,7 @@ export default function StreamerDashboardPage() {
   const [serverId, setServerId] = useState("");
   const [secretShown, setSecretShown] = useState<string | null>(null);
   const [urlCopied, setUrlCopied] = useState(false);
+  const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
   const [ruleName, setRuleName] = useState("");
   const [ruleAction, setRuleAction] = useState("");
   const [npcTemplate, setNpcTemplate] = useState("");
@@ -185,6 +212,17 @@ export default function StreamerDashboardPage() {
     }
   }
 
+  async function copyRuleWebhookUrl(fullUrl: string, ruleId: string) {
+    setErr("");
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setCopiedRuleId(ruleId);
+      window.setTimeout(() => setCopiedRuleId(null), 2000);
+    } catch {
+      setErr("Could not copy to clipboard");
+    }
+  }
+
   async function addRule(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
@@ -299,6 +337,9 @@ export default function StreamerDashboardPage() {
     fullTikfinityUrl && exampleRuleForUrl
       ? `${fullTikfinityUrl}&action=${encodeURIComponent(exampleRuleForUrl)}`
       : null;
+
+  const hookSecretForRules =
+    secretShown ?? (hook?.publicId ? readWebhookSecretFromStorage(hook.publicId) : null);
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl p-6">
@@ -483,7 +524,9 @@ export default function StreamerDashboardPage() {
         </h2>
         <p className="mb-4 text-xs text-zinc-500">
           When TikFinity sends an event name (e.g. in <code>action</code> or chat fields) matching a rule, that server
-          action runs — same as Admin → Streamer interactions.
+          action runs — same as Admin → Streamer interactions. Use <strong className="font-medium text-zinc-300">Copy
+          webhook</strong> on a rule to paste the full URL (token + <code className="rounded bg-zinc-800 px-1">action</code>
+          ) into TikFinity when it sends an empty body.
         </p>
 
         <div className="mb-6 rounded-lg border border-zinc-700/80 bg-zinc-950/40 p-4">
@@ -564,24 +607,42 @@ export default function StreamerDashboardPage() {
           </div>
         </form>
         <ul className="space-y-2">
-          {rules.map((r) => (
-            <li
-              key={r.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm"
-            >
-              <span>
-                <code className="text-emerald-300">{r.name}</code> →{" "}
-                <code className="text-zinc-300">{r.server_action}</code>
-              </span>
-              <button
-                type="button"
-                onClick={() => deleteRule(r.id)}
-                className="text-xs text-red-400 hover:underline"
+          {rules.map((r) => {
+            const ruleUrl = fullRuleWebhookUrl(hook?.webhookUrl ?? null, hookSecretForRules, r.name);
+            return (
+              <li
+                key={r.id}
+                className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
               >
-                Remove
-              </button>
-            </li>
-          ))}
+                <span>
+                  <code className="text-emerald-300">{r.name}</code> →{" "}
+                  <code className="text-zinc-300">{r.server_action}</code>
+                </span>
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
+                  {ruleUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => void copyRuleWebhookUrl(ruleUrl, r.id)}
+                      className="rounded-md border border-emerald-800/70 bg-emerald-950/40 px-2.5 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-900/50"
+                    >
+                      {copiedRuleId === r.id ? "Copied" : "Copy webhook"}
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-zinc-600" title="Save webhook or open Game server above to reveal token">
+                      Webhook needs token
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => deleteRule(r.id)}
+                    className="text-xs text-red-400 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </li>
+            );
+          })}
           {rules.length === 0 ? (
             <li className="text-sm text-zinc-500">No rules yet.</li>
           ) : null}
