@@ -1,7 +1,22 @@
 const STEPS = [
-  { step: 1, title: "Link Your Stream", description: "Secure OAuth connection to Twitch (TikTok & Kick planned)." },
-  { step: 2, title: "Map Rewards", description: "Choose what happens for bits, channel points, subs, and custom triggers." },
-  { step: 3, title: "Watch It Trigger Live", description: "RustMaxx executes on the server instantly and logs everything." },
+  {
+    step: 1,
+    title: "Account + Steam",
+    description:
+      "Log in to RustMaxx and set your Steam64 on Profile so patrol anchors and in-game actions resolve to you.",
+  },
+  {
+    step: 2,
+    title: "Map TikFinity → server",
+    description:
+      "In Admin → Streamer interactions, copy webhook URLs and connection rules. In TikFinity, add Actions (Trigger WebHook) that POST to those URLs.",
+  },
+  {
+    step: 3,
+    title: "Go live on TikTok",
+    description:
+      "When gifts or goals fire, TikFinity hits RustMaxx; RCON/plugin runs the mapped action and the run is logged.",
+  },
 ];
 
 export function HowItWorksSteps() {

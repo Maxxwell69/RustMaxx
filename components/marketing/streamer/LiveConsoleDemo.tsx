@@ -3,13 +3,13 @@
 import { useState, useEffect } from "react";
 
 const LINES = [
-  { time: "14:32:01", msg: "[Twitch] viewer_alpha redeemed Spawn Wolves", type: "event" },
+  { time: "14:32:01", msg: "[TikFinity] gift Rose → action wolf (viewer: %nickname%)", type: "event" },
   { time: "14:32:01", msg: "> spawn wolf 3", type: "cmd" },
   { time: "14:32:02", msg: "Spawned 3 wolf at (1234, 56, 789)", type: "out" },
-  { time: "14:32:15", msg: "[Twitch] bits: 500 from streamer_fan → Supply Drop", type: "event" },
+  { time: "14:32:15", msg: "[TikFinity] goal complete → Supply Drop", type: "event" },
   { time: "14:32:15", msg: "> supply.drop", type: "cmd" },
   { time: "14:32:16", msg: "Supply drop initiated.", type: "out" },
-  { time: "14:32:28", msg: "[Cooldown] Spawn Wolves ready in 42s", type: "info" },
+  { time: "14:32:28", msg: "[Cooldown] wolf action ready in 42s", type: "info" },
 ];
 
 const CYCLE_MS = 4000;

@@ -1,9 +1,9 @@
 const ITEMS = [
-  "OAuth streamer authentication",
+  "Streamer authentication + entitlements",
+  "TikFinity HTTPS webhooks → RustMaxx API",
   "Railway backend execution engine",
   "Oxide/uMod plugin integration",
-  "Secure polling architecture",
-  "Real-time event streaming",
+  "Cooldowns, crew registry, audit logs",
 ];
 
 export function TechStrip() {

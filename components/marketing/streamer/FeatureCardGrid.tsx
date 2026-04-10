@@ -1,10 +1,28 @@
 const FEATURES = [
-  { title: "Live Reward Engine", bullets: ["Real-time Twitch EventSub integration", "Channel points → in-game actions", "Bits/subs → reward triggers", "Custom viewer commands", "Instant execution via plugin/service"] },
+  {
+    title: "TikFinity → Rust pipeline",
+    bullets: [
+      "HTTPS webhooks from TikFinity Trigger WebHook to RustMaxx",
+      "Gift names, goals, and custom connection events → mapped actions",
+      "TikTok viewer fields (nickname, userId) for NPC labels and crew checks",
+      "Per-action URLs and Admin connection tables",
+      "RCON / uMod execution on the target server",
+    ],
+  },
   { title: "Smart Cooldown Control", bullets: ["Global cooldowns", "Per-user limits", "Per-reward timers", "Max triggers per minute", "Emergency pause"] },
   { title: "Anti-Abuse Protection", bullets: ["Rate limiting", "Reward caps", "Permission-based actions", "Admin overrides", "Full audit logging"] },
   { title: "Dynamic Event Actions", bullets: ["Give items", "Spawn supply drops", "Spawn animals/NPCs", "Spawn minicopters", "Start raid events", "Server announcements", "Run custom console commands"] },
-  { title: "Stream Analytics", bullets: ["Event history log", "Top viewer interactions", "Reward usage tracking", "Engagement metrics", "Revenue trigger mapping"] },
-  { title: "Multi-Server Support", bullets: ["One streamer → multiple servers", "Server-specific reward maps", "Network-wide broadcasts"] },
+  {
+    title: "Stream analytics",
+    bullets: [
+      "Event history log",
+      "Viewer-tied trigger history",
+      "Reward usage tracking",
+      "Engagement metrics",
+      "Gift / goal mapping visibility",
+    ],
+  },
+  { title: "Multi-Server Support", bullets: ["One streamer → multiple servers", "Server-specific TikFinity maps", "Network-wide broadcasts"] },
 ];
 
 export function FeatureCardGrid() {

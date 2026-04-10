@@ -1,11 +1,11 @@
 const STORIES = [
   {
     scenario: 1,
-    text: "Viewer donates 500 bits → 3 wolves spawn near streamer → chat explodes → clip goes viral.",
+    text: "TikTok gift hits TikFinity → webhook fires → wolves spawn near your patrol anchor → chat and clips react.",
   },
   {
     scenario: 2,
-    text: "Chat redeems 10,000 points → helicopter event starts → streamer forced into combat.",
+    text: "Stream goal completes → TikFinity triggers mapped action → helicopter event starts → you fight or flee live.",
   },
 ];
 

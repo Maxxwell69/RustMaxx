@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "RustMaxx Streamer Interaction – Viewer Rewards to In-Game Actions",
+  title: "RustMaxx Streamer Interaction – TikTok Live & TikFinity to Rust",
   description:
-    "Connect Twitch to your Rust server. Map viewer rewards, bits, and channel points to live in-game events. Cooldowns, anti-abuse, and full audit. TikTok & Kick planned.",
+    "Connect TikTok Live to your Rust server via TikFinity webhooks: gifts, goals, and custom triggers to in-game actions. Cooldowns, crew rules, patrol anchors, and full audit.",
   openGraph: {
-    title: "RustMaxx Streamer Interaction – Viewer Rewards to In-Game Actions",
+    title: "RustMaxx Streamer Interaction – TikTok Live & TikFinity to Rust",
     description:
-      "Connect Twitch to your Rust server. Map viewer rewards to live in-game events. Controlled chaos, cooldowns, anti-abuse.",
+      "Map TikFinity events to live Rust server actions. Controlled chaos, cooldowns, anti-abuse, Steam anchor for spawns.",
     type: "website",
   },
 };
@@ -18,7 +18,7 @@ const jsonLd = {
   name: "RustMaxx Streamer Interaction",
   applicationCategory: "GameApplication",
   description:
-    "Stream-to-Rust interaction: connect Twitch, map viewer rewards to in-game events, with cooldowns and anti-abuse.",
+    "Stream-to-Rust interaction for TikTok Live: TikFinity webhooks, viewer-tied rewards, in-game events, cooldowns and anti-abuse.",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
 };
 

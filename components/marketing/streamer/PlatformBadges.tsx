@@ -7,10 +7,10 @@ export function PlatformBadges() {
         </h2>
         <div className="mt-8 flex flex-wrap justify-center gap-4">
           <span className="rounded-lg border border-rust-green bg-rust-green/10 px-4 py-2 text-sm font-medium text-rust-green">
-            Twitch (EventSub)
+            TikTok Live
           </span>
-          <span className="rounded-lg border border-rust-border bg-rust-surface px-4 py-2 text-sm font-medium text-zinc-500">
-            TikTok Live (planned)
+          <span className="rounded-lg border border-rust-green bg-rust-green/10 px-4 py-2 text-sm font-medium text-rust-green">
+            TikFinity webhooks
           </span>
           <span className="rounded-lg border border-rust-border bg-rust-surface px-4 py-2 text-sm font-medium text-zinc-500">
             Kick (planned)

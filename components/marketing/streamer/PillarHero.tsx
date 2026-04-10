@@ -15,16 +15,17 @@ export function PillarHero() {
           Your Rust Stream. Now Controlled by Your Audience.
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-zinc-400">
-          Connect Twitch. Map viewer rewards. Trigger live in-game events. Protected by cooldowns
-          and anti-abuse controls.
+          Built for <strong className="font-medium text-zinc-300">TikTok Live</strong> first: use{" "}
+          <strong className="font-medium text-zinc-300">TikFinity</strong> webhooks to map gifts, goals, and custom
+          triggers to your Rust server. Cooldowns and anti-abuse keep it fair.
         </p>
         <div className="mt-10 flex flex-wrap justify-center gap-4">
           <Link
             href="/profile"
             className="rounded-lg bg-rust-cyan px-5 py-3 text-base font-medium text-rust-panel shadow-rust-glow transition-opacity hover:opacity-90 hover:shadow-rust-glow-lg focus:outline-none focus:ring-2 focus:ring-rust-cyan focus:ring-offset-2 focus:ring-offset-rust-panel"
-            aria-label="Go to profile to connect Twitch"
+            aria-label="Go to profile to configure TikFinity and streamer settings"
           >
-            Connect Your Channel
+            Open profile &amp; TikFinity setup
           </Link>
           <a
             href="#demo"

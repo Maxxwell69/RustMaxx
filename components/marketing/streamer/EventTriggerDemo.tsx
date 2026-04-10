@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 
 const EVENTS = [
-  { label: "ViewerRedeem: Spawn Wolves", source: "channel_points" },
-  { label: "Bits: Supply Drop", source: "bits" },
-  { label: "Sub: Helicopter Event", source: "sub" },
+  { label: "TikFinity gift → RustChaos: wolves", source: "gift" },
+  { label: "Goal met → Supply drop", source: "goal" },
+  { label: "Connection maxxinvaders → Roaming NPC", source: "connection" },
 ];
 
 const ROTATE_MS = 3500;

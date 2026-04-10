@@ -11,6 +11,7 @@ import { TechStrip } from "@/components/marketing/streamer/TechStrip";
 import { FinalCTA } from "@/components/marketing/streamer/FinalCTA";
 import { LiveConsoleDemo } from "@/components/marketing/streamer/LiveConsoleDemo";
 import { EventTriggerDemo } from "@/components/marketing/streamer/EventTriggerDemo";
+import { TikFinityDetails } from "@/components/marketing/streamer/TikFinityDetails";
 
 export default function StreamerInteractionPage() {
   return (
@@ -22,6 +23,8 @@ export default function StreamerInteractionPage() {
           <StreamerConnectCTA />
 
           <HowItWorksSteps />
+
+          <TikFinityDetails />
 
           <section
             id="demo"

@@ -19,24 +19,31 @@ export function StreamerConnectCTA() {
     >
       <div className="mx-auto max-w-3xl">
         <h2 id="streamer-connect-heading" className="text-center text-lg font-semibold text-zinc-100 sm:text-xl">
-          Connect Twitch in 2 steps
+          Set up TikTok + TikFinity
         </h2>
         <p className="mt-2 text-center text-sm text-zinc-400">
           {loggedIn ? (
-            <>You&apos;re logged in. Go to your Profile and click <strong className="text-rust-cyan">Connect Twitch</strong> to link your channel.</>
+            <>
+              You&apos;re logged in. Open <strong className="text-rust-cyan">Profile</strong> for your Steam id and TikFinity
+              links, then use <strong className="text-rust-cyan">Admin → Streamer interactions</strong> to copy webhook URLs
+              into TikFinity Actions.
+            </>
           ) : (
-            <>Create an account or log in, then open your Profile and click <strong className="text-rust-cyan">Connect Twitch</strong>.</>
+            <>
+              Create an account or log in, add your Steam id on Profile, then wire TikFinity Trigger WebHooks to the URLs
+              from Admin → Streamer interactions.
+            </>
           )}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           {loggedIn ? (
             <Link
               href="/profile"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#9146ff] px-5 py-3 text-base font-medium text-white shadow-lg transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#9146ff] focus:ring-offset-2 focus:ring-offset-zinc-900"
-              aria-label="Go to profile to connect Twitch"
+              className="inline-flex items-center gap-2 rounded-lg bg-rust-cyan px-5 py-3 text-base font-medium text-rust-panel shadow-rust-glow transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-rust-cyan focus:ring-offset-2 focus:ring-offset-zinc-900"
+              aria-label="Go to profile for TikFinity and streamer settings"
             >
               <span aria-hidden>🔗</span>
-              Connect Twitch in Profile
+              Profile &amp; TikFinity
             </Link>
           ) : (
             <>
