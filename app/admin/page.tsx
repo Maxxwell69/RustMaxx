@@ -212,6 +212,12 @@ export default function SuperAdminDashboardPage() {
               TikFinity action maps →
             </Link>
             <Link
+              href="/admin/streamer-applications"
+              className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
+            >
+              Streamer applications →
+            </Link>
+            <Link
               href="/admin/streamer-actions"
               className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
             >

@@ -179,6 +179,12 @@ function ProfilePageContent() {
     chatSubscriptionActive: boolean;
   } | null>(null);
 
+  const [streamerApp, setStreamerApp] = useState<
+    | undefined
+    | null
+    | { status: string; admin_notes: string | null }
+  >(undefined);
+
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => {
@@ -199,6 +205,19 @@ function ProfilePageContent() {
     fetch("/api/twitch/status")
       .then((r) => (r.ok ? r.json() : { linked: false }))
       .then(setTwitch);
+  }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+    let cancelled = false;
+    fetch("/api/streamer-application")
+      .then((r) => (r.ok ? r.json() : { application: null }))
+      .then((d: { application: { status: string; admin_notes: string | null } | null }) => {
+        if (!cancelled) setStreamerApp(d.application ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [profile]);
 
   useEffect(() => {
@@ -332,6 +351,51 @@ function ProfilePageContent() {
               >
                 Manage users & roles →
               </Link>
+            </div>
+          )}
+
+          {streamerApp !== undefined && (
+            <div className="mt-8 rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
+              <h2 className="mb-2 text-sm font-semibold text-zinc-100">Streamer application</h2>
+              {streamerApp === null && (profile.role === "guest" || profile.role === "player") && (
+                <>
+                  <p className="text-xs text-zinc-500">
+                    Apply with your legal name, TikTok and other social links, and a short pitch so we can confirm you&apos;re
+                    a good fit for RustMaxx streamer tools.
+                  </p>
+                  <Link
+                    href="/streamer/register"
+                    className="mt-3 inline-flex rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-600"
+                  >
+                    Start streamer application →
+                  </Link>
+                </>
+              )}
+              {streamerApp === null && profile.role !== "guest" && profile.role !== "player" && (
+                <p className="text-xs text-zinc-500">No application on file (role already elevated).</p>
+              )}
+              {streamerApp !== null && (
+                <div className="space-y-2 text-xs">
+                  <p className="text-zinc-400">
+                    Status:{" "}
+                    <span className="font-medium text-zinc-200">
+                      {streamerApp.status === "pending" && "Pending review"}
+                      {streamerApp.status === "approved" && "Approved"}
+                      {streamerApp.status === "rejected" && "Not approved (you can update and resubmit)"}
+                    </span>
+                  </p>
+                  {streamerApp.status === "rejected" && streamerApp.admin_notes && (
+                    <p className="text-zinc-500">
+                      <span className="text-zinc-600">Note:</span> {streamerApp.admin_notes}
+                    </p>
+                  )}
+                  <Link href="/streamer/register" className="inline-block text-rust-cyan hover:underline">
+                    {streamerApp.status === "approved"
+                      ? "View submitted details"
+                      : "Open application form →"}
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 

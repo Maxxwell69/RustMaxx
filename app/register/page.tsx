@@ -124,6 +124,13 @@ function RegisterForm() {
             Sign in
           </Link>
         </p>
+        <p className="mt-3 text-center text-sm text-zinc-600">
+          Want streamer access (TikTok / TikFinity)? After you sign up, complete the{" "}
+          <Link href="/streamer/register" className="text-rust-cyan hover:underline">
+            streamer application
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );
