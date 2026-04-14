@@ -252,7 +252,7 @@ function CTASection() {
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-4">
           <Link
-            href="/login"
+            href="/register"
             className="rounded-lg bg-rust-cyan px-6 py-3 font-medium text-rust-panel shadow-rust-glow hover:opacity-90 hover:shadow-rust-glow-lg"
           >
             Get early access

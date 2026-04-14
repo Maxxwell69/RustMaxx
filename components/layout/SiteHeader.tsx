@@ -80,7 +80,7 @@ export function SiteHeader() {
                 Log in
               </Link>
               <Link
-                href="/early-access"
+                href="/register"
                 className="rounded bg-rust-cyan px-3 py-1.5 text-sm font-medium text-rust-panel shadow-rust-glow transition-opacity hover:opacity-90 hover:shadow-rust-glow-lg"
               >
                 Get early access
@@ -117,7 +117,7 @@ export function SiteHeader() {
               Log in
             </Link>
             <Link
-              href="/early-access"
+              href="/register"
               className="shrink-0 rounded bg-rust-cyan px-3 py-1.5 text-sm font-medium text-rust-panel"
             >
               Get early access
