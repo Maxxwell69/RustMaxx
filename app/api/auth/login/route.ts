@@ -28,7 +28,16 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  const user = await verifyCredentials(email, password);
+  let user;
+  try {
+    user = await verifyCredentials(email, password);
+  } catch (e) {
+    console.error("[auth/login] verifyCredentials failed:", e);
+    return NextResponse.json(
+      { error: "Server error. Check database connection and migrations." },
+      { status: 500 }
+    );
+  }
   if (!user) {
     return NextResponse.json(
       { error: "Invalid email or password" },

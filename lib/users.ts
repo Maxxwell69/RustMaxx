@@ -41,20 +41,74 @@ const USER_SELECT = `id, email, password_hash, role, display_name,
     signup_interested_server_owner, signup_interested_streamer,
     created_at, updated_at`;
 
-export async function findUserByEmail(email: string): Promise<UserRow | null> {
-  const { rows } = await query<UserRow>(
-    `SELECT ${USER_SELECT} FROM users WHERE lower(email) = lower($1)`,
-    [email.trim()]
-  );
+/** Same row shape before migration 023 (signup intent columns). */
+const USER_SELECT_LEGACY = `id, email, password_hash, role, display_name,
+    steam_id, steam_linked_at, stripe_customer_id, stripe_subscription_id, subscription_status,
+    membership_level,
+    created_at, updated_at`;
+
+function isPgUndefinedColumnError(e: unknown): boolean {
+  if (e === null || typeof e !== "object") return false;
+  const err = e as { code?: string; message?: string };
+  if (err.code === "42703") return true;
+  if (
+    typeof err.message === "string" &&
+    err.message.includes("signup_interested")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function mapRowToUserRow(row: Record<string, unknown>): UserRow {
+  const base = row as unknown as UserRow;
+  return {
+    ...base,
+    signup_interested_server_owner: row.signup_interested_server_owner === true,
+    signup_interested_streamer: row.signup_interested_streamer === true,
+  };
+}
+
+/**
+ * Runs a query that returns full user rows. If DB is missing signup-intent columns (migration 023),
+ * retries with USER_SELECT_LEGACY and defaults those flags to false.
+ */
+async function queryReturningUserRows(
+  sql: string,
+  params?: unknown[]
+): Promise<UserRow[]> {
+  try {
+    const { rows } = await query<UserRow>(sql, params);
+    return rows;
+  } catch (e) {
+    if (!isPgUndefinedColumnError(e)) throw e;
+    const legacySql = sql.split(USER_SELECT).join(USER_SELECT_LEGACY);
+    try {
+      const { rows } = await query<Record<string, unknown>>(legacySql, params);
+      return rows.map(mapRowToUserRow);
+    } catch {
+      throw e;
+    }
+  }
+}
+
+async function queryOneUserRow(
+  sql: string,
+  params?: unknown[]
+): Promise<UserRow | null> {
+  const rows = await queryReturningUserRows(sql, params);
   return rows[0] ?? null;
 }
 
-export async function findUserById(id: string): Promise<UserRow | null> {
-  const { rows } = await query<UserRow>(
-    `SELECT ${USER_SELECT} FROM users WHERE id = $1`,
-    [id]
+export async function findUserByEmail(email: string): Promise<UserRow | null> {
+  return queryOneUserRow(
+    `SELECT ${USER_SELECT} FROM users WHERE lower(email) = lower($1)`,
+    [email.trim()]
   );
-  return rows[0] ?? null;
+}
+
+export async function findUserById(id: string): Promise<UserRow | null> {
+  return queryOneUserRow(`SELECT ${USER_SELECT} FROM users WHERE id = $1`, [id]);
 }
 
 export async function verifyCredentials(
@@ -77,15 +131,27 @@ export async function createUser(
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
   const so = signupIntent?.serverOwner === true;
   const st = signupIntent?.streamer === true;
-  const { rows } = await query<UserRow>(
-    `INSERT INTO users (email, password_hash, role, display_name, membership_level,
+  try {
+    const { rows } = await query<UserRow>(
+      `INSERT INTO users (email, password_hash, role, display_name, membership_level,
         signup_interested_server_owner, signup_interested_streamer)
      VALUES ($1, $2, $3, $4, 'standard', $5, $6)
      RETURNING ${USER_SELECT}`,
-    [email.trim().toLowerCase(), hash, role, displayName ?? null, so, st]
-  );
-  if (!rows[0]) throw new Error("Insert user failed");
-  return rows[0];
+      [email.trim().toLowerCase(), hash, role, displayName ?? null, so, st]
+    );
+    if (!rows[0]) throw new Error("Insert user failed");
+    return rows[0];
+  } catch (e) {
+    if (!isPgUndefinedColumnError(e)) throw e;
+    const { rows } = await query<Record<string, unknown>>(
+      `INSERT INTO users (email, password_hash, role, display_name, membership_level)
+     VALUES ($1, $2, $3, $4, 'standard')
+     RETURNING ${USER_SELECT_LEGACY}`,
+      [email.trim().toLowerCase(), hash, role, displayName ?? null]
+    );
+    if (!rows[0]) throw new Error("Insert user failed");
+    return mapRowToUserRow(rows[0]);
+  }
 }
 
 export async function userCount(): Promise<number> {
@@ -109,7 +175,7 @@ export function toProfile(row: UserRow): UserProfile {
 }
 
 export async function listUsers(): Promise<UserProfile[]> {
-  const { rows } = await query<UserRow>(
+  const rows = await queryReturningUserRows(
     `SELECT ${USER_SELECT} FROM users ORDER BY created_at ASC`
   );
   return rows.map(toProfile);
@@ -130,11 +196,10 @@ export async function updateUserRole(
   newRole: UserRole
 ): Promise<UserRow | null> {
   if (!ALLOWED_ROLES.includes(newRole)) return null;
-  const { rows } = await query<UserRow>(
+  return queryOneUserRow(
     `UPDATE users SET role = $1, updated_at = now() WHERE id = $2 RETURNING ${USER_SELECT}`,
     [newRole, userId]
   );
-  return rows[0] ?? null;
 }
 
 /** Set or clear Steam64 on the user (manual entry). Empty string clears. */
@@ -144,11 +209,11 @@ export async function setUserSteamId(
 ): Promise<{ ok: true } | { error: string }> {
   const trimmed = steamId.trim();
   if (trimmed === "") {
-    const { rows } = await query<UserRow>(
+    const row = await queryOneUserRow(
       `UPDATE users SET steam_id = NULL, steam_linked_at = NULL, updated_at = now() WHERE id = $1 RETURNING ${USER_SELECT}`,
       [userId]
     );
-    if (!rows[0]) return { error: "User not found" };
+    if (!row) return { error: "User not found" };
     return { ok: true };
   }
   if (!/^\d{17}$/.test(trimmed)) return { error: "Steam id must be 17 digits (Steam64)." };
@@ -157,12 +222,12 @@ export async function setUserSteamId(
     [trimmed, userId]
   );
   if (taken.length > 0) return { error: "This Steam account is already linked to another user." };
-  const { rows } = await query<UserRow>(
+  const row = await queryOneUserRow(
     `UPDATE users SET steam_id = $1, steam_linked_at = now(), updated_at = now() WHERE id = $2
      RETURNING ${USER_SELECT}`,
     [trimmed, userId]
   );
-  if (!rows[0]) return { error: "User not found" };
+  if (!row) return { error: "User not found" };
   return { ok: true };
 }
 
@@ -171,9 +236,8 @@ export async function updateUserMembershipLevel(
   level: MembershipLevel
 ): Promise<UserRow | null> {
   if (!MEMBERSHIP_LEVELS.includes(level)) return null;
-  const { rows } = await query<UserRow>(
+  return queryOneUserRow(
     `UPDATE users SET membership_level = $1, updated_at = now() WHERE id = $2 RETURNING ${USER_SELECT}`,
     [level, userId]
   );
-  return rows[0] ?? null;
 }
