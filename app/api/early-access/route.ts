@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { ghlSyncEarlyAccessLead, isGhlConfigured } from "@/lib/ghl";
 
 /**
- * Temporary early-access signup. Replace with GoHighLevel (or other CRM) integration later.
+ * Early-access signup: logs locally and syncs to GoHighLevel when env is set.
  */
 export async function POST(request: Request) {
   try {
@@ -14,9 +15,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    // TODO: send to GoHighLevel / CRM when ready
-    // For now just log and return success
-    console.info("[early-access]", { name, email, message });
+    console.info("[early-access]", { name, email, message: message ? "(has message)" : "" });
+
+    if (isGhlConfigured()) {
+      const ghl = await ghlSyncEarlyAccessLead({ email, name, message });
+      if (!ghl.ok) {
+        console.error("[early-access] GHL sync failed:", ghl.error, ghl.status ?? "");
+      } else {
+        console.info("[early-access] GHL contact ok", ghl.contactId ?? "");
+      }
+    }
 
     return NextResponse.json({ ok: true });
   } catch {
