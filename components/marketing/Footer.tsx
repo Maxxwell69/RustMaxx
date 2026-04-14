@@ -9,6 +9,7 @@ const FOOTER_LINKS = [
   { href: "/docs", label: "Docs" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
+  { href: "/streamer/register", label: "Streamer application" },
 ];
 
 export function Footer() {

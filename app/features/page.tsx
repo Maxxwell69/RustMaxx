@@ -33,9 +33,10 @@ const ADMIN_FEATURES = [
     available: false,
   },
   {
-    title: "Plugin management",
-    description: "View and manage Oxide/uMod plugins from the dashboard.",
-    bullets: ["Plugin list", "Load/unload roadmap"],
+    title: "Rust mod plugins (uMod/Oxide)",
+    description:
+      "First-class support for the standard Rust modding stack: Oxide/uMod plugins on your server, surfaced in RustMaxx.",
+    bullets: ["Plugin inventory & status", "Safe load/unload roadmap", "No proprietary server DLLs required"],
     available: false,
   },
 ];
@@ -66,9 +67,16 @@ const STREAM_FEATURES = [
     available: true,
   },
   {
-    title: "TikTok & Kick adapters",
-    description: "Planned support for TikTok Live and Kick.",
-    bullets: ["Planned", "Same reward model"],
+    title: "TikTok Live (TikFinity)",
+    description:
+      "Map TikTok Live gifts, likes, shares, and goals to in-game actions. TikFinity sends webhooks to RustMaxx; you define event→action rules and RCON.",
+    bullets: ["Per-streamer webhook URLs", "Gift & social event mapping", "Cooldowns tied to your rules"],
+    available: true,
+  },
+  {
+    title: "Kick adapter",
+    description: "Planned support for Kick live events with the same reward model as Twitch/TikTok.",
+    bullets: ["On the roadmap", "Same mapping ideas"],
     available: false,
   },
 ];
@@ -139,7 +147,7 @@ export default function FeaturesPage() {
         <section className="mx-auto mt-16 max-w-4xl" id="stream">
           <h2 className="text-xl font-semibold text-zinc-100">Streamer–Viewer Interaction</h2>
           <p className="mt-1 text-sm text-zinc-400">
-            Twitch supported first. TikTok and Kick planned. Rewards, cooldowns, anti-abuse.
+            Twitch EventSub and TikTok Live via TikFinity webhooks. Kick planned. Rewards, cooldowns, anti-abuse.
           </p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             {STREAM_FEATURES.map((f) => (

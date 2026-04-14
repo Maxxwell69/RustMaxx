@@ -9,8 +9,6 @@ import { useEffect, useState } from "react";
 
 const NAV_LINKS = [
   { href: "/servers", label: "Dashboard" },
-  /** TikFinity webhook URL, Steam link, server pick, event→action rules. */
-  { href: "/streamer", label: "Streamer setup" },
   { href: "/", label: "Home" },
   { href: "/server-list", label: "Server list" },
   { href: "/streamer-interaction", label: "Streamer Interaction" },
