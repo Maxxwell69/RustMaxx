@@ -25,7 +25,13 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-  let body: { email?: string; password?: string; display_name?: string };
+  let body: {
+    email?: string;
+    password?: string;
+    display_name?: string;
+    interested_server_owner?: unknown;
+    interested_streamer?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -35,6 +41,8 @@ export async function POST(request: NextRequest) {
   const password = typeof body.password === "string" ? body.password : "";
   const displayName =
     typeof body.display_name === "string" ? body.display_name.trim() || null : null;
+  const interestedServerOwner = body.interested_server_owner === true;
+  const interestedStreamer = body.interested_streamer === true;
   if (!email || !password) {
     return NextResponse.json(
       { error: "Email and password are required" },
@@ -62,7 +70,10 @@ export async function POST(request: NextRequest) {
   }
   const count = await userCount();
   const initialRole: UserRole = count === 0 ? "super_admin" : "guest";
-  const user = await createUser(email, password, initialRole, displayName);
+  const user = await createUser(email, password, initialRole, displayName, {
+    serverOwner: interestedServerOwner,
+    streamer: interestedStreamer,
+  });
   await audit(user.id, "register", { email: user.email }).catch(() => {});
   const cookie = createSessionCookieForUser(user.id, user.email, user.role);
   const res = NextResponse.json({

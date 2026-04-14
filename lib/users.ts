@@ -18,6 +18,8 @@ export type UserRow = {
   stripe_subscription_id: string | null;
   subscription_status: string;
   membership_level: MembershipLevel;
+  signup_interested_server_owner: boolean;
+  signup_interested_streamer: boolean;
   created_at: Date;
   updated_at: Date;
 };
@@ -28,12 +30,15 @@ export type UserProfile = {
   role: UserRole;
   display_name: string | null;
   membership_level: MembershipLevel;
+  signup_interested_server_owner: boolean;
+  signup_interested_streamer: boolean;
   created_at: string;
 };
 
 const USER_SELECT = `id, email, password_hash, role, display_name,
     steam_id, steam_linked_at, stripe_customer_id, stripe_subscription_id, subscription_status,
     membership_level,
+    signup_interested_server_owner, signup_interested_streamer,
     created_at, updated_at`;
 
 export async function findUserByEmail(email: string): Promise<UserRow | null> {
@@ -66,14 +71,18 @@ export async function createUser(
   email: string,
   password: string,
   role: UserRole = "guest",
-  displayName?: string | null
+  displayName?: string | null,
+  signupIntent?: { serverOwner?: boolean; streamer?: boolean }
 ): Promise<UserRow> {
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
+  const so = signupIntent?.serverOwner === true;
+  const st = signupIntent?.streamer === true;
   const { rows } = await query<UserRow>(
-    `INSERT INTO users (email, password_hash, role, display_name, membership_level)
-     VALUES ($1, $2, $3, $4, 'standard')
+    `INSERT INTO users (email, password_hash, role, display_name, membership_level,
+        signup_interested_server_owner, signup_interested_streamer)
+     VALUES ($1, $2, $3, $4, 'standard', $5, $6)
      RETURNING ${USER_SELECT}`,
-    [email.trim().toLowerCase(), hash, role, displayName ?? null]
+    [email.trim().toLowerCase(), hash, role, displayName ?? null, so, st]
   );
   if (!rows[0]) throw new Error("Insert user failed");
   return rows[0];
@@ -93,6 +102,8 @@ export function toProfile(row: UserRow): UserProfile {
     role: row.role,
     display_name: row.display_name,
     membership_level: row.membership_level ?? "standard",
+    signup_interested_server_owner: row.signup_interested_server_owner ?? false,
+    signup_interested_streamer: row.signup_interested_streamer ?? false,
     created_at: row.created_at.toISOString(),
   };
 }

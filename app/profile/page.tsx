@@ -16,6 +16,8 @@ type Profile = {
   display_name: string | null;
   created_at: string;
   membership_level?: string;
+  signup_interested_server_owner?: boolean;
+  signup_interested_streamer?: boolean;
   steam?: {
     steamId: string;
     personaName: string | null;
@@ -287,8 +289,92 @@ function ProfilePageContent() {
   if (!profile) {
     return null;
   }
+
+  const wantsOwner = profile.signup_interested_server_owner === true;
+  const wantsStreamer = profile.signup_interested_streamer === true;
+  const showSignupOnboarding = wantsOwner || wantsStreamer;
+  const canApplyStreamer =
+    profile.role === "guest" || profile.role === "player";
+  const streamerPitchAtTop =
+    showSignupOnboarding &&
+    canApplyStreamer &&
+    streamerApp === null &&
+    (wantsStreamer || wantsOwner);
+
   return (
     <div className="mx-auto max-w-2xl p-6">
+        {showSignupOnboarding && (
+          <div className="mb-6 rounded-xl border-2 border-rust-cyan/40 bg-gradient-to-b from-rust-cyan/15 to-zinc-900/80 p-5 shadow-lg ring-1 ring-rust-cyan/20">
+            <h2 className="text-lg font-semibold text-zinc-100">Welcome — finish your setup</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              {wantsOwner && wantsStreamer && (
+                <>
+                  You chose <strong className="text-zinc-300">server owner</strong> and{" "}
+                  <strong className="text-zinc-300">streamer</strong>. Open the dashboard for your servers, then complete
+                  the streamer application for TikTok / TikFinity tooling.
+                </>
+              )}
+              {wantsOwner && !wantsStreamer && (
+                <>
+                  You chose <strong className="text-zinc-300">Rust server owner</strong>. Head to the dashboard to add
+                  servers. TikTok / streamer integrations use the streamer application — we surface it here so you
+                  don&apos;t miss it.
+                </>
+              )}
+              {!wantsOwner && wantsStreamer && (
+                <>
+                  You chose <strong className="text-zinc-300">streamer</strong>. Complete the streamer application below
+                  so we can approve TikFinity hooks and stream tools for your account.
+                </>
+              )}
+            </p>
+            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start">
+              {wantsOwner && (
+                <Link
+                  href="/servers"
+                  className="inline-flex shrink-0 items-center justify-center rounded-lg bg-rust-cyan px-4 py-2.5 text-sm font-semibold text-zinc-950 shadow-rust-glow hover:opacity-95"
+                >
+                  Open dashboard →
+                </Link>
+              )}
+              {streamerPitchAtTop && (
+                <div className="min-w-0 flex-1 rounded-lg border border-zinc-600/80 bg-zinc-900/60 p-4">
+                  <h3 className="text-sm font-semibold text-zinc-100">Streamer application</h3>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Apply with your legal name, TikTok and other social links, and a short pitch so we can confirm
+                    you&apos;re a good fit for RustMaxx streamer tools.
+                  </p>
+                  <Link
+                    href="/streamer/register"
+                    className="mt-3 inline-flex rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white"
+                  >
+                    Start streamer application →
+                  </Link>
+                </div>
+              )}
+            </div>
+            {streamerApp !== null && streamerApp !== undefined && canApplyStreamer && (
+              <p className="mt-4 text-xs text-zinc-400">
+                Streamer application:{" "}
+                <span className="font-medium text-zinc-200">
+                  {streamerApp.status === "pending" && "Pending review"}
+                  {streamerApp.status === "approved" && "Approved"}
+                  {streamerApp.status === "rejected" && "Not approved (you can update and resubmit)"}
+                </span>
+                .{" "}
+                <Link href="/streamer/register" className="text-rust-cyan hover:underline">
+                  Open application →
+                </Link>
+              </p>
+            )}
+            {!canApplyStreamer && (wantsStreamer || wantsOwner) && (
+              <p className="mt-4 text-xs text-zinc-500">
+                Your role already has elevated access; use the sections below for Twitch, Steam, and streamer tools.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-6">
           <h1 className="mb-6 text-2xl font-bold text-zinc-100">Your profile</h1>
           <dl className="space-y-4">
@@ -354,7 +440,7 @@ function ProfilePageContent() {
             </div>
           )}
 
-          {streamerApp !== undefined && (
+          {streamerApp !== undefined && !streamerPitchAtTop && (
             <div className="mt-8 rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
               <h2 className="mb-2 text-sm font-semibold text-zinc-100">Streamer application</h2>
               {streamerApp === null && (profile.role === "guest" || profile.role === "player") && (
