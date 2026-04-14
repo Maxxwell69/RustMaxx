@@ -145,7 +145,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
+    <div className="mx-auto max-w-6xl p-6">
       <div className="mb-6 flex items-center gap-4">
         <Link href="/servers" className="text-rust-cyan hover:underline">
           ← Dashboard
@@ -164,8 +164,8 @@ export default function AdminUsersPage() {
       {loading ? (
         <p className="text-zinc-500">Loading…</p>
       ) : (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-          <table className="w-full text-left text-sm">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-800/50">
                 <th className="px-4 py-3 font-medium text-zinc-300">Email</th>
