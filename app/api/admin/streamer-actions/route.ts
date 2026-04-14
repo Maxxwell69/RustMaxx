@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCanManageAdmins } from "@/lib/api-auth";
 import { query } from "@/lib/db";
 import { isBaseStreamerAction } from "@/lib/streamer-action-policy";
+import {
+  labelForStreamerCatalogKey,
+  mergeStreamerCatalogWithCodebase,
+} from "@/lib/streamer-platform-catalog-admin";
 
 /** Super admin: platform catalog of streamer actions (toggle availability). */
 export async function GET(request: NextRequest) {
@@ -15,7 +19,7 @@ export async function GET(request: NextRequest) {
     `SELECT action_key, is_active, label FROM streamer_platform_action_catalog ORDER BY action_key ASC`
   );
   return NextResponse.json({
-    catalog: rows.filter((r) => isBaseStreamerAction(r.action_key)),
+    catalog: mergeStreamerCatalogWithCodebase(rows),
   });
 }
 
@@ -35,9 +39,14 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.isActive !== "boolean") {
     return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
   }
+  const label = labelForStreamerCatalogKey(actionKey);
   await query(
-    `UPDATE streamer_platform_action_catalog SET is_active = $1, updated_at = now() WHERE action_key = $2`,
-    [body.isActive, actionKey]
+    `INSERT INTO streamer_platform_action_catalog (action_key, is_active, label, updated_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (action_key) DO UPDATE SET
+       is_active = EXCLUDED.is_active,
+       updated_at = now()`,
+    [actionKey, body.isActive, label]
   );
   return NextResponse.json({ ok: true });
 }
