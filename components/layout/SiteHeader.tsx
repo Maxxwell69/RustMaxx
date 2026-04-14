@@ -15,7 +15,6 @@ const NAV_LINKS = [
   { href: "/server-list", label: "Server list" },
   { href: "/streamer-interaction", label: "Streamer Interaction" },
   { href: "/features", label: "Features" },
-  { href: "/pricing", label: "Pricing" },
 ];
 
 export function SiteHeader() {
