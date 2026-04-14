@@ -182,7 +182,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "wolf", "bear", "tiger", "panther", "shark", "pig", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -250,6 +250,20 @@ namespace Oxide.Plugins
         private const string BearPrefab = "assets/rust.ai/agents/bear/bear.prefab";
         private const string BoarPrefab = "assets/rust.ai/agents/boar/boar.prefab";
         private const string CargoPlanePrefab = "assets/prefabs/npc/cargo plane/cargo_plane.prefab";
+
+        /// <summary>Chicken gift spawn — try common Facepunch paths per server build.</summary>
+        private static readonly string[] ChickenPrefabCandidates =
+        {
+            "assets/rust.ai/agents/chicken/chicken.prefab",
+            "assets/bundled/prefabs/autospawn/animals/chicken/chicken.prefab"
+        };
+
+        /// <summary>Heavy / oil-rig style scientist with flamethrower; fall back to heavy if path missing.</summary>
+        private static readonly string[] FlameScientistPrefabCandidates =
+        {
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy_flame.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab"
+        };
 
         /// <summary>Candidate prefabs for tiger chaos / random pool — override first via TigerPrefabPath in config.</summary>
         private static readonly string[] TigerPrefabCandidates =
@@ -433,7 +447,6 @@ namespace Oxide.Plugins
                     else
                     {
                         BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
-                        GiveScrapToPlayer(target, 10);
                         ScheduleDelayedSingleSpawn("scientist", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -447,6 +460,25 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "scientistflame":
+                    if (target == null)
+                        PrintWarning($"{LogPrefix} Flame scientist skipped: streamer not online. Set StreamerName in config (current: '{_config?.StreamerName ?? ""}').");
+                    else
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}! (flame scientist)"));
+                        ScheduleDelayedSingleSpawn("scientistflame", target.userID, () =>
+                        {
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            Vector3 pos = GetSingleSpawnPosition(current);
+                            if (pos != Vector3.zero && TrySpawnSingleScientistFromCandidates(current, pos, FlameScientistPrefabCandidates))
+                                Puts($"{LogPrefix} Spawned 1 flame scientist near {current.displayName}");
+                            else
+                                PrintWarning($"{LogPrefix} Flame scientist spawn failed (prefab paths).");
+                        });
+                    }
+                    break;
+
                 case "wolf":
                     if (target != null)
                     {
@@ -455,7 +487,6 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnSoloWildAnimal(current, WolfPrefab, "wolf"))
                                 Puts($"{LogPrefix} Spawned 1 wolf near {current.displayName}");
                             else
@@ -472,7 +503,6 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnSoloWildAnimal(current, BearPrefab, "bear"))
                                 Puts($"{LogPrefix} Spawned 1 bear near {current.displayName}");
                             else
@@ -489,7 +519,6 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnTigerOneNearStreamer(current))
                                 Puts($"{LogPrefix} Spawned 1 tiger near {current.displayName}");
                             else
@@ -509,7 +538,6 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnPantherOneNearStreamer(current))
                                 Puts($"{LogPrefix} Spawned 1 panther near {current.displayName}");
                             else
@@ -620,7 +648,6 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GiveScrapToPlayer(current, 10);
                             Vector3 sharkPos = GetSingleSpawnPosition(current);
                             if (TrySpawnSharkGiftWithLeash(current, sharkPos, _config?.SharkPrefabPath))
                                 Puts($"{LogPrefix} Spawned 1 shark near {current.displayName}");
@@ -638,12 +665,36 @@ namespace Oxide.Plugins
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
-                            GiveScrapToPlayer(current, 10);
                             if (TrySpawnSoloWildAnimal(current, BoarPrefab, "pig"))
                                 Puts($"{LogPrefix} Spawned 1 pig (boar) near {current.displayName}");
                             else
                                 PrintWarning($"{LogPrefix} Pig spawn failed (CreateEntity).");
                         });
+                    }
+                    break;
+
+                case "chicken":
+                    if (target != null)
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        ScheduleDelayedSingleSpawn("chicken", target.userID, () =>
+                        {
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            if (TrySpawnChickenNearStreamer(current))
+                                Puts($"{LogPrefix} Spawned 1 chicken near {current.displayName}");
+                            else
+                                PrintWarning($"{LogPrefix} Chicken spawn failed (prefab paths).");
+                        });
+                    }
+                    break;
+
+                case "pistolammo50":
+                    if (target != null)
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}! (+50 pistol ammo)"));
+                        GiveItemWithLog(target, 50, "ammo.pistol", "TikTok webhook pistolammo50");
+                        Puts($"{LogPrefix} Gave 50 pistol ammo to {target.displayName} (from {viewerName}).");
                     }
                     break;
 
@@ -1111,6 +1162,7 @@ namespace Oxide.Plugins
             return action == "smoke" ||
                    action == "fireworks" ||
                    action == "scientist" ||
+                   action == "scientistflame" ||
                    action == "wolf" ||
                    action == "bear" ||
                    action == "tiger" ||
@@ -1119,6 +1171,7 @@ namespace Oxide.Plugins
                    action == "fullheal" ||
                    action == "shark" ||
                    action == "pig" ||
+                   action == "chicken" ||
                    action == "supply" ||
                    action == "likes" ||
                    action == "chaos" ||
@@ -1131,7 +1184,8 @@ namespace Oxide.Plugins
                    action == "chaoswaverandom" ||
                    action == "revivechaos" ||
                    action == "chaosheli" ||
-                   action == "bunny1";
+                   action == "bunny1" ||
+                   action == "pistolammo50";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -1425,6 +1479,7 @@ namespace Oxide.Plugins
             if (x.Contains("tiger")) return "Tiger";
             if (x.Contains("panther")) return "Panther";
             if (x.Contains("/bear") || x.Contains("bear.")) return "Bear";
+            if (x.Contains("chicken")) return "Chicken";
             if (x.Contains("bradley_heavy") || x.Contains("scientistnpc_heavy")) return "Heavy scientist";
             if (x.Contains("oilrig")) return "Oil rig scientist";
             if (x.Contains("roam")) return "Roam scientist";
@@ -2025,10 +2080,16 @@ namespace Oxide.Plugins
         /// <summary>Single scientist gift: spawn, then register/provoke so it actively hunts and fights like other tracked enemies.</summary>
         private bool TrySpawnSingleScientist(BasePlayer streamer, Vector3 position)
         {
-            if (streamer == null || !streamer.IsValid()) return false;
+            return TrySpawnSingleScientistFromCandidates(streamer, position, SingleScientistPrefabCandidates);
+        }
+
+        /// <summary>Spawn one scientist from an ordered prefab list (first path that CreateEntity accepts).</summary>
+        private bool TrySpawnSingleScientistFromCandidates(BasePlayer streamer, Vector3 position, string[] candidates)
+        {
+            if (streamer == null || !streamer.IsValid() || candidates == null || candidates.Length == 0) return false;
             position = SnapLandNpcSpawnToGround(position);
             BaseEntity entity = null;
-            foreach (var path in SingleScientistPrefabCandidates)
+            foreach (var path in candidates)
             {
                 if (string.IsNullOrWhiteSpace(path)) continue;
                 entity = GameManager.server.CreateEntity(path, position, Quaternion.identity, true);
@@ -2048,6 +2109,18 @@ namespace Oxide.Plugins
                 TryProvokeChaosWaveEnemy(e, s);
             });
             return true;
+        }
+
+        private bool TrySpawnChickenNearStreamer(BasePlayer streamer)
+        {
+            if (streamer == null || !streamer.IsValid()) return false;
+            foreach (var path in ChickenPrefabCandidates)
+            {
+                if (string.IsNullOrWhiteSpace(path)) continue;
+                if (TrySpawnSoloWildAnimal(streamer, path, "chicken"))
+                    return true;
+            }
+            return false;
         }
 
         private bool TryGetChaosWaveStreamerPosition(out Vector3 pos)

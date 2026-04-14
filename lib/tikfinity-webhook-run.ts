@@ -51,6 +51,19 @@ export type TikfinityWebhookRunContext = {
 const TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID =
   process.env.TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID?.trim() ?? undefined;
 
+/** RustChaos solo spawns: max 10 scrap from webhook; if TikFinity sends 0 coins, still grant 10 (matches previous built-in tip). */
+const RUSTCHAOS_TEN_SCRAP_SPAWN_ACTIONS = new Set<string>([
+  "scientist",
+  "scientistflame",
+  "wolf",
+  "bear",
+  "tiger",
+  "panther",
+  "shark",
+  "pig",
+  "chicken",
+]);
+
 const CREW_RNPC_TEMPLATE_KEY = process.env.CREW_RNPC_TEMPLATE_KEY?.trim() ?? null;
 const NPCMAXX_REQUIRE_CREW_REGISTRY =
   process.env.NPCMAXX_REQUIRE_CREW_REGISTRY === "true" ||
@@ -471,7 +484,10 @@ export async function runTikfinityWebhook(
     typeof rawValue === "number" && Number.isFinite(rawValue)
       ? Math.trunc(rawValue)
       : Number.parseInt(String(rawValue), 10);
-  const giftValue = Math.min(10000, Math.max(0, Number.isFinite(rawNum) ? rawNum : 0));
+  let giftValue = Math.min(10000, Math.max(0, Number.isFinite(rawNum) ? rawNum : 0));
+  if (RUSTCHAOS_TEN_SCRAP_SPAWN_ACTIONS.has(action)) {
+    giftValue = giftValue > 0 ? Math.min(giftValue, 10) : 10;
+  }
   const messageArg =
     connectionFromAdmin?.message?.trim() != null && connectionFromAdmin.message.trim() !== ""
       ? sanitizeArg(connectionFromAdmin.message.trim(), 128)
