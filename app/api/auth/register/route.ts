@@ -8,6 +8,7 @@ import {
   toProfile,
 } from "@/lib/users";
 import type { UserRole } from "@/lib/permissions";
+import { ghlSyncSignupContact, isGhlConfigured } from "@/lib/ghl";
 
 // Simple email regex for validation
 function isValidEmail(s: string): boolean {
@@ -75,6 +76,24 @@ export async function POST(request: NextRequest) {
     streamer: interestedStreamer,
   });
   await audit(user.id, "register", { email: user.email }).catch(() => {});
+
+  if (isGhlConfigured()) {
+    void ghlSyncSignupContact({
+      email: user.email,
+      displayName: displayName,
+      interestedServerOwner: interestedServerOwner,
+      interestedStreamer: interestedStreamer,
+    })
+      .then((ghl) => {
+        if (!ghl.ok) {
+          console.error("[auth/register] GHL signup sync failed:", ghl.error, ghl.status ?? "");
+        } else {
+          console.info("[auth/register] GHL contact ok", ghl.contactId ?? "");
+        }
+      })
+      .catch((e) => console.error("[auth/register] GHL signup sync threw:", e));
+  }
+
   const cookie = createSessionCookieForUser(user.id, user.email, user.role);
   const res = NextResponse.json({
     ok: true,

@@ -73,24 +73,33 @@ export type GhlSyncResult =
   | { ok: true; contactId?: string }
   | { ok: false; error: string; status?: number };
 
+type GhlContactCreateInput = {
+  email: string;
+  firstName: string;
+  lastName?: string;
+  tags: string[];
+  note?: string | null;
+};
+
 /**
- * Creates a contact in GHL and optionally adds a note with the early-access message.
+ * Creates a contact in GHL and optionally adds a note.
  */
-export async function ghlSyncEarlyAccessLead(input: GhlEarlyAccessPayload): Promise<GhlSyncResult> {
+async function ghlCreateContactWithOptionalNote(
+  input: GhlContactCreateInput
+): Promise<GhlSyncResult> {
   if (!isGhlConfigured()) {
     return { ok: false, error: "GHL not configured (missing token or location id)" };
   }
   const locationId = ghlLocationId()!;
-  const { firstName, lastName } = splitName(input.name);
   const email = input.email.trim().toLowerCase();
 
   const body: Record<string, unknown> = {
     locationId,
     email,
-    firstName,
-    tags: ["rustmaxx", "early-access"],
+    firstName: input.firstName,
+    tags: input.tags,
   };
-  if (lastName) body.lastName = lastName;
+  if (input.lastName) body.lastName = input.lastName;
 
   let res: Response;
   try {
@@ -120,7 +129,7 @@ export async function ghlSyncEarlyAccessLead(input: GhlEarlyAccessPayload): Prom
   const d = data as { contact?: { id?: string }; id?: string };
   const contactId = d.contact?.id ?? d.id;
 
-  const note = input.message?.trim();
+  const note = input.note?.trim();
   if (note && contactId) {
     try {
       const noteRes = await ghlFetch(`/contacts/${contactId}/notes`, {
@@ -136,4 +145,52 @@ export async function ghlSyncEarlyAccessLead(input: GhlEarlyAccessPayload): Prom
   }
 
   return { ok: true, contactId };
+}
+
+/**
+ * Creates a contact in GHL and optionally adds a note with the early-access message.
+ */
+export async function ghlSyncEarlyAccessLead(input: GhlEarlyAccessPayload): Promise<GhlSyncResult> {
+  const { firstName, lastName } = splitName(input.name);
+  return ghlCreateContactWithOptionalNote({
+    email: input.email,
+    firstName,
+    lastName: lastName || undefined,
+    tags: ["rustmaxx", "early-access"],
+    note: input.message || null,
+  });
+}
+
+export type GhlSignupPayload = {
+  email: string;
+  displayName: string | null;
+  interestedServerOwner: boolean;
+  interestedStreamer: boolean;
+};
+
+/**
+ * Creates or updates CRM context for a new RustMaxx account (same email as login).
+ * Tags: rustmaxx, signup; optional server-owner / streamer for workflows in GHL.
+ */
+export async function ghlSyncSignupContact(input: GhlSignupPayload): Promise<GhlSyncResult> {
+  const nameSource = (input.displayName ?? "").trim() || input.email.split("@")[0] || "User";
+  const { firstName, lastName } = splitName(nameSource);
+  const tags = ["rustmaxx", "signup"];
+  if (input.interestedServerOwner) tags.push("server-owner");
+  if (input.interestedStreamer) tags.push("streamer");
+
+  const lines = [
+    "Source: RustMaxx sign up",
+    `Server owner interest: ${input.interestedServerOwner ? "yes" : "no"}`,
+    `Streamer interest: ${input.interestedStreamer ? "yes" : "no"}`,
+  ];
+  const note = lines.join("\n");
+
+  return ghlCreateContactWithOptionalNote({
+    email: input.email,
+    firstName,
+    lastName: lastName || undefined,
+    tags,
+    note,
+  });
 }
