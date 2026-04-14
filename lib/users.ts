@@ -181,6 +181,20 @@ export async function listUsers(): Promise<UserProfile[]> {
   return rows.map(toProfile);
 }
 
+export async function countUsersWithRole(role: UserRole): Promise<number> {
+  const { rows } = await query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM users WHERE role = $1::user_role`,
+    [role]
+  );
+  return parseInt(rows[0]?.count ?? "0", 10);
+}
+
+/** Permanently removes the user row. FK CASCADE may delete owned servers and related data. */
+export async function deleteUserById(userId: string): Promise<boolean> {
+  const { rowCount } = await query("DELETE FROM users WHERE id = $1", [userId]);
+  return (rowCount ?? 0) > 0;
+}
+
 const ALLOWED_ROLES: UserRole[] = [
   "guest",
   "player",

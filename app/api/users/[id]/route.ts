@@ -5,6 +5,8 @@ import {
   findUserById,
   updateUserMembershipLevel,
   toProfile,
+  countUsersWithRole,
+  deleteUserById,
 } from "@/lib/users";
 import { audit } from "@/lib/audit";
 import type { UserRole } from "@/lib/permissions";
@@ -95,4 +97,49 @@ export async function PATCH(
   const fresh = await findUserById(userId);
   if (!fresh) return NextResponse.json({ error: "User not found" }, { status: 404 });
   return NextResponse.json(toProfile(fresh));
+}
+
+/** Permanently delete a user (super_admin only). */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const authErr = await requireCanManageAdmins(request);
+  if (authErr) return authErr;
+  const session = getSessionFromRequest(request)!;
+  const { id: targetUserId } = await params;
+
+  const target = await findUserById(targetUserId);
+  if (!target) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  if (targetUserId === session.userId) {
+    return NextResponse.json(
+      { error: "You cannot delete your own account." },
+      { status: 400 }
+    );
+  }
+
+  if (target.role === "super_admin") {
+    const n = await countUsersWithRole("super_admin");
+    if (n <= 1) {
+      return NextResponse.json(
+        { error: "Cannot delete the only remaining super_admin." },
+        { status: 400 }
+      );
+    }
+  }
+
+  const deleted = await deleteUserById(targetUserId);
+  if (!deleted) {
+    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
+  }
+
+  await audit(session.userId, "user.delete", {
+    targetUserId,
+    email: target.email,
+  }).catch(() => {});
+
+  return NextResponse.json({ ok: true });
 }

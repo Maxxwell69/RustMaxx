@@ -21,9 +21,17 @@ const ROLES = ["guest", "player", "streamer", "support", "moderator", "admin", "
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updating, setUpdating] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me: { id?: string } | null) => setCurrentUserId(me?.id ?? null))
+      .catch(() => setCurrentUserId(null));
+  }, []);
 
   useEffect(() => {
     fetch("/api/users")
@@ -109,6 +117,33 @@ export default function AdminUsersPage() {
       .finally(() => setUpdating(null));
   }
 
+  function deleteUser(u: User) {
+    if (u.id === currentUserId) {
+      setError("You cannot delete your own account.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Permanently delete ${u.email}?\n\nThis cannot be undone. Database rules may also remove servers they own and other linked data (CASCADE).`
+      )
+    ) {
+      return;
+    }
+    setUpdating(u.id);
+    fetch(`/api/users/${u.id}`, { method: "DELETE" })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, ...d })))
+      .then((data) => {
+        if (data.error) {
+          setError(data.error);
+          return;
+        }
+        setError("");
+        setUsers((prev) => prev.filter((x) => x.id !== u.id));
+      })
+      .catch(() => setError("Delete failed"))
+      .finally(() => setUpdating(null));
+  }
+
   return (
     <div className="mx-auto max-w-3xl p-6">
       <div className="mb-6 flex items-center gap-4">
@@ -120,7 +155,8 @@ export default function AdminUsersPage() {
       <p className="mb-4 text-sm text-zinc-500">
         Only super_admin can access this page. Change a user&apos;s <strong className="text-zinc-400">role</strong>{" "}
         (permissions) and their <strong className="text-zinc-400">membership level</strong> (Standard / Pro / Elite)
-        for perks and future limits. Remove admin by setting role to guest.
+        for perks and future limits. Remove admin by setting role to guest. Use <strong className="text-zinc-400">Delete</strong>{" "}
+        to remove an account entirely (you cannot delete yourself or the last super_admin).
       </p>
       {error && (
         <p className="mb-4 text-sm text-red-400">{error}</p>
@@ -137,6 +173,7 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3 font-medium text-zinc-300">Level</th>
                 <th className="px-4 py-3 font-medium text-zinc-300">Change role</th>
                 <th className="px-4 py-3 font-medium text-zinc-300">Change level</th>
+                <th className="px-4 py-3 font-medium text-zinc-300">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -192,6 +229,21 @@ export default function AdminUsersPage() {
                         </option>
                       ))}
                     </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => deleteUser(u)}
+                      disabled={updating === u.id || u.id === currentUserId}
+                      className="rounded border border-red-900/60 bg-red-950/40 px-2 py-1 text-xs font-medium text-red-300 hover:bg-red-900/50 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={
+                        u.id === currentUserId
+                          ? "You cannot delete your own account"
+                          : "Permanently delete this user"
+                      }
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
