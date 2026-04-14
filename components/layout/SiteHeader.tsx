@@ -32,6 +32,8 @@ export function SiteHeader() {
 
   const isDashboard = pathname === "/servers" || pathname?.startsWith("/servers/");
 
+  const navLinks = loggedIn ? NAV_LINKS.filter((l) => l.href !== "/") : NAV_LINKS;
+
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/80">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-1.5 sm:gap-4 sm:px-6">
@@ -49,7 +51,7 @@ export function SiteHeader() {
           className="hidden min-w-0 flex-1 flex-wrap items-center justify-center gap-2 sm:gap-4 md:flex"
           aria-label="Site navigation"
         >
-          {NAV_LINKS.map(({ href, label }) => (
+          {navLinks.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
@@ -95,7 +97,7 @@ export function SiteHeader() {
         className="flex flex-wrap items-center gap-2 border-t border-zinc-800 px-3 py-2 md:hidden"
         aria-label="Mobile navigation"
       >
-        {NAV_LINKS.map(({ href, label }) => (
+        {navLinks.map(({ href, label }) => (
           <Link
             key={href}
             href={href}
