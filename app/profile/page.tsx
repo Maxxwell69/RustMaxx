@@ -214,6 +214,9 @@ function ProfilePageContent() {
     showServers: false,
     socials: {} as Record<string, string>,
   });
+  const [displayNameDraft, setDisplayNameDraft] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaveMsg, setProfileSaveMsg] = useState<string | null>(null);
   const [dirSaveMsg, setDirSaveMsg] = useState<string | null>(null);
   const [dirSaving, setDirSaving] = useState(false);
 
@@ -231,6 +234,11 @@ function ProfilePageContent() {
       })
       .finally(() => setLoading(false));
   }, [router]);
+
+  useEffect(() => {
+    if (!profile) return;
+    setDisplayNameDraft(profile.display_name ?? "");
+  }, [profile?.id, profile?.display_name]);
 
   useEffect(() => {
     if (!profile) return;
@@ -309,6 +317,31 @@ function ProfilePageContent() {
         setRefreshSubs("err");
         setRefreshSubsMsg("Network error");
       });
+  }
+
+  async function saveProfileBasics() {
+    if (!profile) return;
+    setProfileSaving(true);
+    setProfileSaveMsg(null);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ display_name: displayNameDraft.trim() || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setProfileSaveMsg(typeof data.error === "string" ? data.error : "Could not save");
+        return;
+      }
+      setProfile(data as Profile);
+      setProfileSaveMsg("Saved.");
+    } catch {
+      setProfileSaveMsg("Network error");
+    } finally {
+      setProfileSaving(false);
+    }
   }
 
   async function saveDirectorySettings() {
@@ -492,11 +525,41 @@ function ProfilePageContent() {
             <div>
               <dt className="text-sm text-zinc-500">Email</dt>
               <dd className="mt-0.5 font-medium text-zinc-100">{profile.email}</dd>
+              <p className="mt-1 text-xs text-zinc-600">Email sign-in address cannot be changed here yet.</p>
             </div>
             <div>
               <dt className="text-sm text-zinc-500">Display name</dt>
-              <dd className="mt-0.5 font-medium text-zinc-100">
-                {profile.display_name || "—"}
+              <dd className="mt-0.5 space-y-2">
+                <input
+                  type="text"
+                  value={displayNameDraft}
+                  onChange={(e) => setDisplayNameDraft(e.target.value)}
+                  disabled={profileSaving}
+                  maxLength={120}
+                  placeholder="How you want to appear in RustMaxx"
+                  className="w-full max-w-md rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-100 placeholder-zinc-600 disabled:opacity-50"
+                />
+                <p className="text-xs text-zinc-600">
+                  Used in the app and as a fallback on your public streamer page. Leave empty to show no name (your
+                  stream application name still applies where relevant).
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void saveProfileBasics()}
+                    disabled={profileSaving}
+                    className="rounded bg-zinc-700 px-3 py-1.5 text-sm font-medium text-zinc-100 hover:bg-zinc-600 disabled:opacity-50"
+                  >
+                    {profileSaving ? "Saving…" : "Save profile"}
+                  </button>
+                  {profileSaveMsg ? (
+                    <span
+                      className={`text-sm ${profileSaveMsg === "Saved." ? "text-emerald-400/90" : "text-amber-400/90"}`}
+                    >
+                      {profileSaveMsg}
+                    </span>
+                  ) : null}
+                </div>
               </dd>
             </div>
             <div>

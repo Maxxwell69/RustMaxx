@@ -302,6 +302,33 @@ export async function updateUserLastLogin(userId: string): Promise<void> {
   await query(`UPDATE users SET last_login_at = now(), updated_at = now() WHERE id = $1`, [userId]);
 }
 
+const DISPLAY_NAME_MAX = 120;
+
+/** Updates the signed-in user’s display label (dashboard, directory fallbacks). Empty or null clears it. */
+export async function updateUserDisplayName(
+  userId: string,
+  raw: unknown
+): Promise<{ ok: true; user: UserRow } | { ok: false; error: string }> {
+  let value: string | null;
+  if (raw === null) {
+    value = null;
+  } else if (typeof raw === "string") {
+    const t = raw.trim();
+    value = t.length === 0 ? null : t;
+  } else {
+    return { ok: false, error: "display_name must be a string or null" };
+  }
+  if (value !== null && value.length > DISPLAY_NAME_MAX) {
+    return { ok: false, error: `Display name is too long (max ${DISPLAY_NAME_MAX} characters).` };
+  }
+  const row = await queryOneUserRow(
+    `UPDATE users SET display_name = $1, updated_at = now() WHERE id = $2 RETURNING ${USER_SELECT}`,
+    [value, userId]
+  );
+  if (!row) return { ok: false, error: "User not found" };
+  return { ok: true, user: row };
+}
+
 export type StreamerDirectoryPatch = {
   streamer_directory_visible?: boolean;
   streamer_directory_avatar_url?: string | null;
