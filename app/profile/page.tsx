@@ -10,8 +10,26 @@ import {
 import { SteamIdForm } from "@/components/profile/SteamIdForm";
 import type { AuthMePayload } from "@/lib/auth-me-payload";
 import { LogoUpload } from "@/app/servers/logo-upload";
+import {
+  DIRECTORY_SOCIAL_KEYS,
+  DIRECTORY_SOCIAL_LABELS,
+  type DirectorySocialKey,
+} from "@/lib/streamer-directory-socials";
 
 type Profile = AuthMePayload;
+
+type StreamerApplicationRecord = {
+  status: string;
+  admin_notes: string | null;
+  tiktok_url?: string | null;
+  twitch_url?: string | null;
+  kick_url?: string | null;
+  youtube_url?: string | null;
+  twitter_url?: string | null;
+  instagram_url?: string | null;
+  discord_username?: string | null;
+  other_socials?: string | null;
+};
 
 type TwitchStatus = {
   linked: boolean;
@@ -22,6 +40,26 @@ type TwitchStatus = {
 
 function formatRole(role: string): string {
   return role.replace(/_/g, " ");
+}
+
+function socialDraftFromAuthPayload(s: Record<string, string> | undefined): Record<string, string> {
+  const src = s ?? {};
+  const out: Record<string, string> = {};
+  for (const k of DIRECTORY_SOCIAL_KEYS) {
+    out[k] = src[k] ?? "";
+  }
+  return out;
+}
+
+function applicationSocialHint(
+  app: StreamerApplicationRecord | null | undefined,
+  key: DirectorySocialKey
+): string | null {
+  if (!app) return null;
+  const v = app[key];
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t || null;
 }
 
 type ServerOption = { id: string; name: string };
@@ -167,13 +205,15 @@ function ProfilePageContent() {
     chatSubscriptionActive: boolean;
   } | null>(null);
 
-  const [streamerApp, setStreamerApp] = useState<
-    | undefined
-    | null
-    | { status: string; admin_notes: string | null }
-  >(undefined);
+  const [streamerApp, setStreamerApp] = useState<undefined | null | StreamerApplicationRecord>(undefined);
 
-  const [dirDraft, setDirDraft] = useState({ visible: false, bio: "", avatar: "" });
+  const [dirDraft, setDirDraft] = useState({
+    visible: false,
+    bio: "",
+    avatar: "",
+    showServers: false,
+    socials: {} as Record<string, string>,
+  });
   const [dirSaveMsg, setDirSaveMsg] = useState<string | null>(null);
   const [dirSaving, setDirSaving] = useState(false);
 
@@ -205,12 +245,16 @@ function ProfilePageContent() {
       visible: Boolean(profile.streamer_directory_visible),
       bio: profile.streamer_directory_bio ?? "",
       avatar: profile.streamer_directory_avatar_url ?? "",
+      showServers: Boolean(profile.streamer_directory_show_servers),
+      socials: socialDraftFromAuthPayload(profile.streamer_directory_socials),
     });
   }, [
     profile?.id,
     profile?.streamer_directory_visible,
     profile?.streamer_directory_bio,
     profile?.streamer_directory_avatar_url,
+    profile?.streamer_directory_show_servers,
+    profile?.streamer_directory_socials,
   ]);
 
   useEffect(() => {
@@ -218,7 +262,7 @@ function ProfilePageContent() {
     let cancelled = false;
     fetch("/api/streamer-application")
       .then((r) => (r.ok ? r.json() : { application: null }))
-      .then((d: { application: { status: string; admin_notes: string | null } | null }) => {
+      .then((d: { application: StreamerApplicationRecord | null }) => {
         if (!cancelled) setStreamerApp(d.application ?? null);
       });
     return () => {
@@ -286,6 +330,10 @@ function ProfilePageContent() {
           streamer_directory_visible: dirDraft.visible,
           streamer_directory_bio: dirDraft.bio.trim() || null,
           streamer_directory_avatar_url: dirDraft.avatar.trim() || null,
+          streamer_directory_show_servers: dirDraft.showServers,
+          streamer_directory_socials: Object.fromEntries(
+            DIRECTORY_SOCIAL_KEYS.map((k) => [k, dirDraft.socials[k] ?? ""])
+          ) as Record<string, string>,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -300,14 +348,21 @@ function ProfilePageContent() {
               streamer_directory_visible: Boolean(data.streamer_directory_visible),
               streamer_directory_avatar_url: data.streamer_directory_avatar_url ?? null,
               streamer_directory_bio: data.streamer_directory_bio ?? null,
+              streamer_directory_socials: socialDraftFromAuthPayload(
+                data.streamer_directory_socials as Record<string, string> | undefined
+              ),
+              streamer_directory_show_servers: Boolean(data.streamer_directory_show_servers),
             }
           : prev
       );
-      setDirDraft({
+      setDirDraft((d) => ({
+        ...d,
         visible: Boolean(data.streamer_directory_visible),
         bio: data.streamer_directory_bio ?? "",
         avatar: data.streamer_directory_avatar_url ?? "",
-      });
+        showServers: Boolean(data.streamer_directory_show_servers),
+        socials: socialDraftFromAuthPayload(data.streamer_directory_socials as Record<string, string> | undefined),
+      }));
       setDirSaveMsg("Saved.");
     } catch {
       setDirSaveMsg("Network error");
@@ -577,7 +632,8 @@ function ProfilePageContent() {
               <Link href="/streamers" className="text-rust-cyan hover:underline">
                 RustMaxx streamers
               </Link>{" "}
-              directory. Avatar and bio here are separate from your Steam card above.
+              directory. Social links merge with your approved streamer application: anything you leave empty here still
+              uses the application value on your public page. Avatar and bio are separate from your Steam card above.
             </p>
             {streamerApp === undefined ? (
               <p className="text-xs text-zinc-500">Loading application status…</p>
@@ -622,6 +678,77 @@ function ProfilePageContent() {
                     className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 disabled:opacity-50"
                     placeholder="Short intro for visitors…"
                   />
+                </div>
+                <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-300">
+                  <input
+                    type="checkbox"
+                    className="mt-1 rounded border-zinc-600"
+                    checked={dirDraft.showServers}
+                    onChange={(e) => setDirDraft((d) => ({ ...d, showServers: e.target.checked }))}
+                    disabled={dirSaving}
+                  />
+                  <span>
+                    Show listed RustMaxx servers I have approved streamer access on
+                    <span className="mt-1 block text-xs text-zinc-500">
+                      Only servers that appear on the public server list are shown, so private servers stay off your
+                      page.
+                    </span>
+                  </span>
+                </label>
+                <div className="border-t border-zinc-700 pt-3">
+                  <p className="mb-2 text-xs font-medium text-zinc-400">Social links (public page)</p>
+                  <p className="mb-3 text-xs text-zinc-500">
+                    Override a link for visitors, or leave a field empty to keep using your streamer application value
+                    (shown in small text when present).
+                  </p>
+                  <div className="space-y-3">
+                    {DIRECTORY_SOCIAL_KEYS.map((key) => {
+                      const hint = applicationSocialHint(streamerApp, key);
+                      const isTextarea = key === "other_socials";
+                      const isDiscord = key === "discord_username";
+                      return (
+                        <div key={key}>
+                          <label className="mb-0.5 block text-xs font-medium text-zinc-500">
+                            {DIRECTORY_SOCIAL_LABELS[key]}
+                          </label>
+                          {isTextarea ? (
+                            <textarea
+                              rows={2}
+                              value={dirDraft.socials[key] ?? ""}
+                              onChange={(e) =>
+                                setDirDraft((d) => ({
+                                  ...d,
+                                  socials: { ...d.socials, [key]: e.target.value },
+                                }))
+                              }
+                              disabled={dirSaving}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 disabled:opacity-50"
+                              placeholder="Extra links or notes (plain text)…"
+                            />
+                          ) : (
+                            <input
+                              type={isDiscord ? "text" : "url"}
+                              value={dirDraft.socials[key] ?? ""}
+                              onChange={(e) =>
+                                setDirDraft((d) => ({
+                                  ...d,
+                                  socials: { ...d.socials, [key]: e.target.value },
+                                }))
+                              }
+                              disabled={dirSaving}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 disabled:opacity-50"
+                              placeholder="https://… (leave empty to use application)"
+                            />
+                          )}
+                          {hint ? (
+                            <p className="mt-0.5 text-[11px] text-zinc-600">
+                              From application: <span className="break-all text-zinc-500">{hint}</span>
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <button

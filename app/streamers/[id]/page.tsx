@@ -5,6 +5,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
 
+type PublicSocial = {
+  key: string;
+  label: string;
+  type: "link" | "text";
+  value: string;
+};
+
+type PublicServer = { id: string; name: string };
+
 type PublicProfile = {
   id: string;
   display_name: string | null;
@@ -14,6 +23,9 @@ type PublicProfile = {
   directory_visible: boolean;
   application_approved: boolean;
   is_self: boolean;
+  socials: PublicSocial[];
+  servers: PublicServer[];
+  show_servers_on_profile: boolean;
 };
 
 export default function StreamerPublicProfilePage() {
@@ -105,6 +117,41 @@ export default function StreamerPublicProfilePage() {
                   ) : null}
                 </div>
               </div>
+
+              {profile.socials.length > 0 ? (
+                <div className="mt-8 border-t border-zinc-800 pt-6">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Links</h2>
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {profile.socials.map((s) => (
+                      <li key={s.key} className={s.key === "other_socials" ? "w-full basis-full" : ""}>
+                        {s.type === "link" ? (
+                          <a
+                            href={s.value}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex rounded-full border border-zinc-600 bg-zinc-800/80 px-3 py-1 text-sm text-rust-cyan hover:border-rust-cyan/50 hover:bg-zinc-800"
+                          >
+                            {s.label}
+                          </a>
+                        ) : s.key === "other_socials" ? (
+                          <div className="w-full rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-300">
+                            <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">{s.label}</span>
+                            <p className="mt-1 whitespace-pre-wrap text-zinc-300">{s.value}</p>
+                          </div>
+                        ) : (
+                          <span className="inline-flex max-w-full rounded-full border border-zinc-700 bg-zinc-800/60 px-3 py-1 text-sm text-zinc-300">
+                            <span className="shrink-0 text-zinc-500">{s.label}:</span>
+                            <span className="ml-1 min-w-0 truncate" title={s.value}>
+                              {s.value}
+                            </span>
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               {profile.bio ? (
                 <div className="mt-8 border-t border-zinc-800 pt-6">
                   <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">About</h2>
@@ -113,6 +160,36 @@ export default function StreamerPublicProfilePage() {
               ) : (
                 <p className="mt-8 text-sm text-zinc-500">No public bio yet.</p>
               )}
+
+              {profile.show_servers_on_profile && profile.servers.length > 0 ? (
+                <div className="mt-8 border-t border-zinc-800 pt-6">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Servers on RustMaxx</h2>
+                  <ul className="mt-3 space-y-2">
+                    {profile.servers.map((s) => (
+                      <li key={s.id}>
+                        <Link
+                          href={`/server-list/${s.id}`}
+                          className="text-sm text-rust-cyan hover:underline"
+                        >
+                          {s.name}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : profile.is_self && profile.show_servers_on_profile && profile.servers.length === 0 ? (
+                <div className="mt-8 border-t border-zinc-800 pt-6">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Servers on RustMaxx</h2>
+                  <p className="mt-2 text-sm text-zinc-500">
+                    You enabled this section, but you have no listed servers with approved streamer access yet. Get
+                    approved on a server that appears on the{" "}
+                    <Link href="/server-list" className="text-rust-cyan hover:underline">
+                      server list
+                    </Link>
+                    .
+                  </p>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
 import { hasApprovedRustmaxxStreamerApplication } from "@/lib/streamer-applications";
+import { coerceDirectorySocialsFromDb } from "@/lib/streamer-directory-socials";
 import { findUserById, updateStreamerDirectoryFields } from "@/lib/users";
 
 /** Update public directory visibility, avatar URL, and bio (own profile only). */
@@ -22,6 +23,8 @@ export async function PATCH(request: NextRequest) {
     streamer_directory_visible?: boolean;
     streamer_directory_avatar_url?: string | null;
     streamer_directory_bio?: string | null;
+    streamer_directory_socials?: Record<string, string> | null;
+    streamer_directory_show_servers?: boolean;
   } = {};
 
   if (body.streamer_directory_visible !== undefined) {
@@ -45,6 +48,21 @@ export async function PATCH(request: NextRequest) {
       patch.streamer_directory_bio = body.streamer_directory_bio;
     } else {
       return NextResponse.json({ error: "streamer_directory_bio must be string or null" }, { status: 400 });
+    }
+  }
+  if (body.streamer_directory_show_servers !== undefined) {
+    patch.streamer_directory_show_servers = Boolean(body.streamer_directory_show_servers);
+  }
+  if (body.streamer_directory_socials !== undefined) {
+    if (body.streamer_directory_socials === null) {
+      patch.streamer_directory_socials = null;
+    } else if (typeof body.streamer_directory_socials === "object" && !Array.isArray(body.streamer_directory_socials)) {
+      patch.streamer_directory_socials = body.streamer_directory_socials as Record<string, string>;
+    } else {
+      return NextResponse.json(
+        { error: "streamer_directory_socials must be an object or null" },
+        { status: 400 }
+      );
     }
   }
 
@@ -71,5 +89,7 @@ export async function PATCH(request: NextRequest) {
     streamer_directory_visible: result.user.streamer_directory_visible,
     streamer_directory_avatar_url: result.user.streamer_directory_avatar_url,
     streamer_directory_bio: result.user.streamer_directory_bio,
+    streamer_directory_socials: coerceDirectorySocialsFromDb(result.user.streamer_directory_socials),
+    streamer_directory_show_servers: result.user.streamer_directory_show_servers === true,
   });
 }

@@ -33,6 +33,9 @@ export async function GET(
       directory_visible: row.directory_visible,
       application_approved: row.application_approved,
       is_self: isSelf,
+      socials: row.socials,
+      servers: row.servers,
+      show_servers_on_profile: row.directory_show_servers,
     },
   });
 }

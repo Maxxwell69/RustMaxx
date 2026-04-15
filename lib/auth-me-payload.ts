@@ -1,5 +1,6 @@
 import { toProfile, type UserRow, type UserProfile } from "./users";
 import { fetchSteamPlayerSummary } from "./steam-web-api";
+import { coerceDirectorySocialsFromDb } from "./streamer-directory-socials";
 
 export type AuthMeSteam = {
   steamId: string;
@@ -15,6 +16,8 @@ export type AuthMePayload = UserProfile & {
   streamer_directory_visible: boolean;
   streamer_directory_avatar_url: string | null;
   streamer_directory_bio: string | null;
+  streamer_directory_socials: Record<string, string>;
+  streamer_directory_show_servers: boolean;
 };
 
 export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> {
@@ -56,5 +59,7 @@ export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> 
     streamer_directory_visible: user.streamer_directory_visible === true,
     streamer_directory_avatar_url: user.streamer_directory_avatar_url ?? null,
     streamer_directory_bio: user.streamer_directory_bio ?? null,
+    streamer_directory_socials: coerceDirectorySocialsFromDb(user.streamer_directory_socials),
+    streamer_directory_show_servers: user.streamer_directory_show_servers === true,
   };
 }

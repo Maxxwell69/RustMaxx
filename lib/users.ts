@@ -4,6 +4,7 @@ import type { UserRole } from "./permissions";
 import type { MembershipLevel } from "./membership-level";
 import { MEMBERSHIP_LEVELS } from "./membership-level";
 import { isOurHostedUploadPublicPath } from "./upload-files";
+import { coerceDirectorySocialsFromDb, parseDirectorySocialOverrides } from "./streamer-directory-socials";
 
 const SALT_ROUNDS = 10;
 
@@ -40,6 +41,8 @@ export type UserRow = {
   streamer_directory_visible?: boolean;
   streamer_directory_avatar_url?: string | null;
   streamer_directory_bio?: string | null;
+  streamer_directory_socials?: Record<string, string> | null;
+  streamer_directory_show_servers?: boolean;
   created_at: Date;
   updated_at: Date;
 };
@@ -60,6 +63,7 @@ const USER_SELECT = `id, email, password_hash, role, display_name,
     membership_level,
     signup_interested_server_owner, signup_interested_streamer,
     last_login_at, streamer_directory_visible, streamer_directory_avatar_url, streamer_directory_bio,
+    streamer_directory_socials, streamer_directory_show_servers,
     created_at, updated_at`;
 
 /** Same row shape before migration 023 (signup intent columns). */
@@ -102,6 +106,8 @@ function mapRowToUserRow(row: Record<string, unknown>): UserRow {
         : null,
     streamer_directory_bio:
       typeof row.streamer_directory_bio === "string" ? row.streamer_directory_bio : null,
+    streamer_directory_socials: coerceDirectorySocialsFromDb(row.streamer_directory_socials),
+    streamer_directory_show_servers: row.streamer_directory_show_servers === true,
   };
 }
 
@@ -300,6 +306,8 @@ export type StreamerDirectoryPatch = {
   streamer_directory_visible?: boolean;
   streamer_directory_avatar_url?: string | null;
   streamer_directory_bio?: string | null;
+  streamer_directory_socials?: Record<string, string> | null;
+  streamer_directory_show_servers?: boolean;
 };
 
 /** Updates public directory fields for the current user (validated). */
@@ -349,6 +357,23 @@ export async function updateStreamerDirectoryFields(
         : patch.streamer_directory_bio.trim().slice(0, 2000) || null;
     updates.push(`streamer_directory_bio = $${idx++}`);
     values.push(bio);
+  }
+  if (patch.streamer_directory_socials !== undefined) {
+    if (patch.streamer_directory_socials === null) {
+      updates.push(`streamer_directory_socials = '{}'::jsonb`);
+    } else {
+      const parsed = parseDirectorySocialOverrides(patch.streamer_directory_socials);
+      if (!parsed.ok) return { ok: false, error: parsed.error };
+      updates.push(`streamer_directory_socials = $${idx++}::jsonb`);
+      values.push(JSON.stringify(parsed.value));
+    }
+  }
+  if (patch.streamer_directory_show_servers !== undefined) {
+    if (typeof patch.streamer_directory_show_servers !== "boolean") {
+      return { ok: false, error: "streamer_directory_show_servers must be a boolean" };
+    }
+    updates.push(`streamer_directory_show_servers = $${idx++}`);
+    values.push(patch.streamer_directory_show_servers);
   }
 
   if (updates.length === 0) {
