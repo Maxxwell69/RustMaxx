@@ -318,6 +318,7 @@ export function rowsToBillingTiersApiPayload(rows: PricingPackageRow[]): Billing
 export function rowsToPricingPageCards(rows: PricingPackageRow[]): {
   server: PricingPageTierCard[];
   streamer: PricingPageTierCard[];
+  combo: PricingPageTierCard[];
 } {
   const toCard = (r: PricingPackageRow): PricingPageTierCard => ({
     id: r.tier_key,
