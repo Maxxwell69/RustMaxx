@@ -5409,6 +5409,27 @@ namespace Oxide.Plugins
             public bool CanBattleNpc(BaseCombatEntity npc) => true;
             public bool CanButcher(BaseCorpse corpse) => Data.Setup.MinerState.CanButcher(corpse);
             public bool CanLootedCorpse(BaseCorpse corpse) => Data.Setup.MinerState.CanLooted(corpse);
+
+            /// <summary>
+            /// MaxxInvaders bridge bots: gathered loot (not template kit items) drops at feet so a full main inventory
+            /// does not trigger <see cref="Suicide"/> when anchor storage is full or missing (see DroppedState).
+            /// </summary>
+            public void TryDropGatheredLootFromMainForBridgeOverflow()
+            {
+                if (inventory?.containerMain == null || Data?.Setup == null) return;
+                if (!Data.SpawnedFromMaxxInvadersBridge) return;
+                var list = Pool.Get<List<Item>>();
+                list.AddRange(inventory.containerMain.itemList);
+                foreach (var item in list)
+                {
+                    if (item == null || !item.IsValid() || item.amount <= 0) continue;
+                    if (Data.Setup.ContainsItem(item)) continue;
+                    item.Drop(inventory.containerMain.dropPosition, inventory.containerMain.dropVelocity);
+                }
+
+                Pool.FreeUnmanaged(ref list);
+            }
+
             public void DropItemsFromFullContainer(Vector3 position)
             {
                 IItemContainerEntity containerEntity = null;
@@ -5419,6 +5440,12 @@ namespace Oxide.Plugins
                 {
                     if (!TryGetContainer(position, out containerEntity))
                     {
+                        if (Data.SpawnedFromMaxxInvadersBridge)
+                        {
+                            TryDropGatheredLootFromMainForBridgeOverflow();
+                            if (!inventory.containerMain.IsFull()) return;
+                        }
+
                         Suicide();
                         return;
                     }
@@ -5429,6 +5456,12 @@ namespace Oxide.Plugins
                     if (!Data.CustomMemory.AddDroppedContainer(containerEntity as BaseCombatEntity, timerKill))
                     {
                         (containerEntity as BaseEntity)?.Kill();
+                        if (Data.SpawnedFromMaxxInvadersBridge)
+                        {
+                            TryDropGatheredLootFromMainForBridgeOverflow();
+                            if (!inventory.containerMain.IsFull()) return;
+                        }
+
                         Suicide();
                         return;
                     }
@@ -5448,7 +5481,16 @@ namespace Oxide.Plugins
                 if (!anchorDeposit && containerEntity is StashContainer stash && Data.Setup.FullState.Stash.CanHideStash)
                     stash.SetHidden(true);
                 Pool.FreeUnmanaged(ref items);
-                if (inventory.containerMain.IsFull()) Suicide();
+                if (inventory.containerMain.IsFull())
+                {
+                    if (Data.SpawnedFromMaxxInvadersBridge)
+                    {
+                        TryDropGatheredLootFromMainForBridgeOverflow();
+                        if (!inventory.containerMain.IsFull()) return;
+                    }
+
+                    Suicide();
+                }
             }
             public bool CanDroppedContainer() => CanStash() || CanBox();
             private bool CanStash() => Data.Setup.FullState.Stash.Enable
@@ -8432,6 +8474,12 @@ namespace Oxide.Plugins
                     }
                     else
                     {
+                        if (owner.Data?.SpawnedFromMaxxInvadersBridge == true)
+                        {
+                            owner.TryDropGatheredLootFromMainForBridgeOverflow();
+                            if (!owner.inventory.containerMain.IsFull()) yield break;
+                        }
+
                         owner.Suicide();
                     }
                 }
@@ -8506,6 +8554,12 @@ namespace Oxide.Plugins
                     }
                     else
                     {
+                        if (owner.Data?.SpawnedFromMaxxInvadersBridge == true)
+                        {
+                            owner.TryDropGatheredLootFromMainForBridgeOverflow();
+                            if (!owner.inventory.containerMain.IsFull()) yield break;
+                        }
+
                         owner.Suicide();
                     }
                 }
