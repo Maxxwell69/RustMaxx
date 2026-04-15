@@ -13,6 +13,13 @@ type ConnectionRow = {
   last_error: string | null;
 };
 
+type AvailableServer = {
+  id: string;
+  name: string;
+  listing_name: string | null;
+  streamer_interactions_enabled: boolean;
+};
+
 type EventRow = {
   id: string;
   server_id: string;
@@ -32,16 +39,18 @@ type Totals = { events: number; value: number; processed: number; failed: number
 export default function StreamerTikTokLivePage() {
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [availableServers, setAvailableServers] = useState<AvailableServer[]>([]);
   const [totals, setTotals] = useState<Totals>({ events: 0, value: 0, processed: 0, failed: 0 });
   const [serverId, setServerId] = useState("");
   const [platformUsername, setPlatformUsername] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
   async function load() {
-    const [c, e, a] = await Promise.all([
+    const [c, e, a, s] = await Promise.all([
       fetch("/api/tiktok-live/connections", { credentials: "same-origin" }),
       fetch("/api/tiktok-live/events?limit=100", { credentials: "same-origin" }),
       fetch("/api/tiktok-live/analytics?days=30", { credentials: "same-origin" }),
+      fetch("/api/streamer/servers", { credentials: "same-origin" }),
     ]);
     if (c.ok) {
       const j = await c.json().catch(() => ({}));
@@ -54,6 +63,14 @@ export default function StreamerTikTokLivePage() {
     if (a.ok) {
       const j = await a.json().catch(() => ({}));
       if (j.totals) setTotals(j.totals as Totals);
+    }
+    if (s.ok) {
+      const j = await s.json().catch(() => ({}));
+      const rows = Array.isArray(j.servers) ? (j.servers as AvailableServer[]) : [];
+      const enabled = rows.filter((x) => x.streamer_interactions_enabled);
+      enabled.sort((x, y) => (x.listing_name || x.name).localeCompare(y.listing_name || y.name));
+      setAvailableServers(enabled);
+      if (!serverId && enabled[0]?.id) setServerId(enabled[0].id);
     }
   }
 
@@ -106,16 +123,24 @@ export default function StreamerTikTokLivePage() {
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="text-lg text-zinc-100">Connect a TikTok channel</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Enter RustMaxx server id and TikTok username. Then run the direct connector worker with matching env vars.
+          Choose a server that has streamer interactions enabled and approved for your account, then add your TikTok username.
         </p>
         <form onSubmit={createConnection} className="mt-3 grid gap-3 sm:grid-cols-3">
-          <input
+          <select
             value={serverId}
             onChange={(e) => setServerId(e.target.value)}
-            placeholder="Server UUID"
             className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
             required
-          />
+          >
+            {availableServers.length === 0 ? (
+              <option value="">No approved servers available</option>
+            ) : null}
+            {availableServers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.listing_name || s.name}
+              </option>
+            ))}
+          </select>
           <input
             value={platformUsername}
             onChange={(e) => setPlatformUsername(e.target.value)}
@@ -127,6 +152,11 @@ export default function StreamerTikTokLivePage() {
             Save connection
           </button>
         </form>
+        {availableServers.length === 0 ? (
+          <p className="mt-2 text-xs text-amber-200/90">
+            No servers are available yet. Ask the server owner to enable Streamer interactions and approve your access.
+          </p>
+        ) : null}
         {msg ? <p className="mt-2 text-sm text-amber-200">{msg}</p> : null}
       </section>
 

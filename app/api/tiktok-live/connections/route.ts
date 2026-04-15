@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
 import { query } from "@/lib/db";
 import { tiktokDirectEnabled, isUuidLike } from "@/lib/tiktok-live";
+import { isStreamerAllowedForServerHooks } from "@/lib/streamer-server-allowlist";
 
 export async function GET(request: NextRequest) {
   if (!tiktokDirectEnabled()) {
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
   const platformUserId = typeof body.platformUserId === "string" ? body.platformUserId.trim() : null;
   if (!isUuidLike(serverId)) return NextResponse.json({ error: "Valid serverId is required" }, { status: 400 });
   if (!platformUsername) return NextResponse.json({ error: "platformUsername is required" }, { status: 400 });
-  const { rows: access } = await query<{ ok: number }>(
+  const { rows: ownerOrTeam } = await query<{ ok: number }>(
     `SELECT 1 AS ok
      FROM servers s
      LEFT JOIN server_users su ON su.server_id = s.id
@@ -49,7 +50,23 @@ export async function POST(request: NextRequest) {
      LIMIT 1`,
     [serverId, session.userId]
   );
-  if (!access[0]) return NextResponse.json({ error: "No access to this server" }, { status: 403 });
+  if (!ownerOrTeam[0]) {
+    const { rows: srv } = await query<{ streamer_interactions_enabled: boolean }>(
+      "SELECT streamer_interactions_enabled FROM servers WHERE id = $1::uuid LIMIT 1",
+      [serverId]
+    );
+    const enabled = srv[0]?.streamer_interactions_enabled === true;
+    const approved = enabled && (await isStreamerAllowedForServerHooks(serverId, session.userId));
+    if (!approved) {
+      return NextResponse.json(
+        {
+          error:
+            "No access to this server. You must be owner/team, or be approved on a server with Streamer interactions enabled.",
+        },
+        { status: 403 }
+      );
+    }
+  }
 
   const { rows } = await query<{ id: string }>(
     `INSERT INTO tiktok_live_connections
