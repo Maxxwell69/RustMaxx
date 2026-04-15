@@ -35,9 +35,14 @@ export async function verifyWebhookSecret(
 export async function getStreamerWebhookByPublicId(
   publicId: string
 ): Promise<StreamerWebhookRow | null> {
+  // Guard invalid path probes (e.g. "....md") to avoid Postgres UUID cast errors.
+  const trimmed = publicId.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+    return null;
+  }
   const { rows } = await query<StreamerWebhookRow>(
     "SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at FROM streamer_webhooks WHERE public_id = $1 LIMIT 1",
-    [publicId]
+    [trimmed]
   );
   return rows[0] ?? null;
 }
