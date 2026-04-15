@@ -87,7 +87,7 @@ export async function GET(_request: NextRequest) {
                 AND r.status = 'approved'
                 AND COALESCE(s.streamer_interactions_enabled, false) = false
             )
-         ORDER BY COALESCE(s.listing_name, s.name) ASC`,
+         ORDER BY s.listing_name ASC NULLS LAST, s.name ASC`,
         [user.id]
       );
       rows = res.rows;
@@ -104,7 +104,7 @@ export async function GET(_request: NextRequest) {
               WHERE su.server_id = s.id AND su.user_id = $1::uuid
             )
             OR s.streamer_interactions_enabled = true
-         ORDER BY COALESCE(s.listing_name, s.name) ASC`,
+         ORDER BY s.listing_name ASC NULLS LAST, s.name ASC`,
         [user.id]
       );
       rows = res.rows;
