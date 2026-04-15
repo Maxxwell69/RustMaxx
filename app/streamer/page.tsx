@@ -132,7 +132,12 @@ function getActionCategory(action: string): string {
     action === "statusdehydrated" ||
     action === "statushungry" ||
     action === "statusbleeding" ||
-    action === "statusdart"
+    action === "statusdart" ||
+    action === "statusgodmode" ||
+    action === "statusbullethell" ||
+    action === "statusflippers" ||
+    action === "statusflash" ||
+    action === "statushealthx3"
   ) {
     return "RustChaos - Status effects";
   }

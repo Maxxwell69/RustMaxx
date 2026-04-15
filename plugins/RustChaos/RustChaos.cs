@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.25")]
+    [Info("RustChaos", "RustMaxx", "1.15.27")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -97,7 +97,13 @@ namespace Oxide.Plugins
             public bool BlindOverlay;
             public string ViewerName;
             public string GiftName;
+            /// <summary>Used by statushealthx3 — restore max HP when the effect ends.</summary>
+            public float HealthX3OriginalMax = -1f;
+            /// <summary>Backup footwear item uid (flippers) to restore when status ends.</summary>
+            public ulong FlippersBackupItemUid;
         }
+
+        private readonly Dictionary<ulong, ulong> _flippersBackupItemByUser = new Dictionary<ulong, ulong>();
 
         private readonly List<StreamerTimedStatusRow> _streamerTimedStatuses = new List<StreamerTimedStatusRow>();
         private Timer _streamerStatusUiTimer;
@@ -122,6 +128,7 @@ namespace Oxide.Plugins
             _reviveChaosProtectUntil.Clear();
             DestroyStreamerStatusTicker();
             _streamerTimedStatuses.Clear();
+            _flippersBackupItemByUser.Clear();
             ClearStreamerStatusUiForAllPlayers();
         }
 
@@ -129,6 +136,7 @@ namespace Oxide.Plugins
         {
             if (player == null) return;
             _reviveChaosProtectUntil.Remove(player.userID);
+            _flippersBackupItemByUser.Remove(player.userID);
             if (IsConfiguredStreamer(player))
                 ClearStreamerTimedStatusesAndUi("streamer_disconnected", player);
         }
@@ -139,6 +147,21 @@ namespace Oxide.Plugins
             if (entity == null || info == null) return null;
             var bp = entity as BasePlayer;
             if (bp == null || bp.IsNpc || !bp.IsValid()) return null;
+            // Time God Mode — configured streamer takes no damage while effect is active.
+            if (IsConfiguredStreamer(bp) && HasActiveStreamerStatusKind("godmode"))
+            {
+                try
+                {
+                    info.damageTypes?.Clear();
+                }
+                catch
+                {
+                    // ignore
+                }
+
+                return true;
+            }
+
             ulong uid = bp.userID;
             if (!_reviveChaosProtectUntil.TryGetValue(uid, out float until)) return null;
             if (Time.realtimeSinceStartup > until)
@@ -165,6 +188,20 @@ namespace Oxide.Plugins
             var bp = ownerEntity as BasePlayer;
             if (bp == null || !bp.IsValid()) return;
             ulong uid = bp.userID;
+            // Flash — keep stamina high so the streamer can sprint continuously (feels like 2x mobility).
+            if (IsConfiguredStreamer(bp) && HasActiveStreamerStatusKind("flash"))
+            {
+                try
+                {
+                    if (instance.stamina != null)
+                        instance.stamina.value = instance.stamina.max;
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+
             if (!_reviveChaosProtectUntil.TryGetValue(uid, out float until)) return;
             if (Time.realtimeSinceStartup > until)
             {
@@ -202,7 +239,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50", "statuspoison", "statusdehydrated", "statushungry", "statusbleeding", "statusdart" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50", "statuspoison", "statusdehydrated", "statushungry", "statusbleeding", "statusdart", "statusgodmode", "statusbullethell", "statusflippers", "statusflash", "statushealthx3" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -754,6 +791,41 @@ namespace Oxide.Plugins
                     break;
                 }
 
+                case "statusgodmode":
+                {
+                    string err = TryApplyStreamerGodModeStatus(target, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
+                case "statusbullethell":
+                {
+                    string err = TryApplyStreamerBulletHellStatus(target, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
+                case "statusflippers":
+                {
+                    string err = TryApplyStreamerFlippersStatus(target, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
+                case "statusflash":
+                {
+                    string err = TryApplyStreamerFlashStatus(target, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
+                case "statushealthx3":
+                {
+                    string err = TryApplyStreamerHealthX3Status(target, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
                 case "supply":
                 case "likes":
                     if (target != null)
@@ -1246,7 +1318,12 @@ namespace Oxide.Plugins
                    action == "statusdehydrated" ||
                    action == "statushungry" ||
                    action == "statusbleeding" ||
-                   action == "statusdart";
+                   action == "statusdart" ||
+                   action == "statusgodmode" ||
+                   action == "statusbullethell" ||
+                   action == "statusflippers" ||
+                   action == "statusflash" ||
+                   action == "statushealthx3";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -2765,7 +2842,217 @@ namespace Oxide.Plugins
         private static bool IsStreamerStatusEffectAction(string action)
         {
             return action == "statuspoison" || action == "statusdehydrated" || action == "statushungry" ||
-                   action == "statusbleeding" || action == "statusdart";
+                   action == "statusbleeding" || action == "statusdart" || action == "statusgodmode" ||
+                   action == "statusbullethell" || action == "statusflippers" || action == "statusflash" ||
+                   action == "statushealthx3";
+        }
+
+        private bool HasActiveStreamerStatusKind(string kind)
+        {
+            if (string.IsNullOrEmpty(kind) || _streamerTimedStatuses == null || _streamerTimedStatuses.Count == 0)
+                return false;
+            float now = Time.realtimeSinceStartup;
+            foreach (var s in _streamerTimedStatuses)
+            {
+                if (s != null && s.Kind == kind && now < s.EndTime)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static void RefillStreamerHeldWeaponAmmo(BasePlayer p)
+        {
+            if (p == null || !p.IsConnected) return;
+            try
+            {
+                var held = p.GetHeldEntity() as BaseProjectile;
+                if (held == null || held.primaryMagazine == null) return;
+                held.primaryMagazine.contents = held.primaryMagazine.capacity;
+                held.SendNetworkUpdateImmediate();
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private string TryApplyStreamerGodModeStatus(BasePlayer target, string viewerName, string giftName,
+            Func<string, string> chatMsg, int scrapAmountArg)
+        {
+            if (target == null || !target.IsConnected || target.IsSleeping())
+                return "FAILED: Streamer must be awake online for TikTok status effects (HUD). Check RustChaos.json StreamerName matches their display name.";
+            int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
+            RegisterStreamerTimedStatus("godmode", durationSec, false, viewerName, giftName);
+            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: TIME GOD MODE ({durationSec}s) — no damage."));
+            Puts($"{LogPrefix} TikTok godmode on {target.displayName} for {durationSec}s (viewer {viewerName}).");
+            return null;
+        }
+
+        private string TryApplyStreamerBulletHellStatus(BasePlayer target, string viewerName, string giftName,
+            Func<string, string> chatMsg, int scrapAmountArg)
+        {
+            if (target == null || !target.IsConnected || target.IsSleeping())
+                return "FAILED: Streamer must be awake online for TikTok status effects. Check RustChaos.json StreamerName.";
+            int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
+            RegisterStreamerTimedStatus("bullethell", durationSec, false, viewerName, giftName);
+            RefillStreamerHeldWeaponAmmo(target);
+            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: BULLET HELL ({durationSec}s) — held weapon ammo refills."));
+            Puts($"{LogPrefix} TikTok bullethell on {target.displayName} for {durationSec}s.");
+            return null;
+        }
+
+        private string TryApplyStreamerFlashStatus(BasePlayer target, string viewerName, string giftName,
+            Func<string, string> chatMsg, int scrapAmountArg)
+        {
+            if (target == null || !target.IsConnected || target.IsSleeping())
+                return "FAILED: Streamer must be awake online for TikTok status effects. Check RustChaos.json StreamerName.";
+            int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
+            RegisterStreamerTimedStatus("flash", durationSec, false, viewerName, giftName);
+            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: FLASH ({durationSec}s) — sprint stamina stays topped."));
+            Puts($"{LogPrefix} TikTok flash on {target.displayName} for {durationSec}s.");
+            return null;
+        }
+
+        private string TryApplyStreamerHealthX3Status(BasePlayer target, string viewerName, string giftName,
+            Func<string, string> chatMsg, int scrapAmountArg)
+        {
+            if (target == null || !target.IsConnected || target.IsSleeping())
+                return "FAILED: Streamer must be awake online for TikTok status effects. Check RustChaos.json StreamerName.";
+            int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
+            float oldMax;
+            try
+            {
+                oldMax = target.MaxHealth();
+            }
+            catch
+            {
+                oldMax = 100f;
+            }
+
+            float oldHealth = target.health;
+            float newMax = oldMax * 3f;
+            try
+            {
+                target.InitializeHealth(newMax, Mathf.Min(newMax, oldHealth * 3f));
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} statushealthx3 InitializeHealth failed: {ex.Message}");
+                return "FAILED: Could not apply health multiplier (server build).";
+            }
+
+            RegisterStreamerTimedStatus("healthx3", durationSec, false, viewerName, giftName, oldMax);
+            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: HEALTH x3 ({durationSec}s) — max HP tripled."));
+            Puts($"{LogPrefix} TikTok healthx3 on {target.displayName} for {durationSec}s (was max {oldMax:0}).");
+            return null;
+        }
+
+        private string TryApplyStreamerFlippersStatus(BasePlayer target, string viewerName, string giftName,
+            Func<string, string> chatMsg, int scrapAmountArg)
+        {
+            if (target == null || !target.IsConnected || target.IsSleeping())
+                return "FAILED: Streamer must be awake online. Check RustChaos.json StreamerName.";
+            int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
+            const string finsShort = "diving.fins";
+            var wear = target.inventory?.containerWear;
+            var belt = target.inventory?.containerBelt;
+            if (wear == null || belt == null)
+                return "FAILED: inventory not ready.";
+            ulong backupUid = 0UL;
+            try
+            {
+                foreach (var it in wear.itemList.ToArray())
+                {
+                    if (it == null || it.info == null) continue;
+                    if (string.Equals(it.info.shortname, finsShort, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    var mod = it.info.GetComponentInChildren<ItemModWearable>();
+                    if (mod == null) continue;
+                    if (!it.MoveToContainer(belt))
+                        continue;
+                    backupUid = it.uid.Value;
+                    break;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            if (!TryCreateItemMoveToWear(target, finsShort, 1))
+            {
+                PrintWarning($"{LogPrefix} statusflippers: could not equip {finsShort} (item missing on this server?).");
+                return $"FAILED: Item '{finsShort}' not available — check item manifest.";
+            }
+
+            if (backupUid != 0UL)
+                _flippersBackupItemByUser[target.userID] = backupUid;
+            RegisterStreamerTimedStatus("flippers", durationSec, false, viewerName, giftName, 0f, backupUid);
+            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: FLIPPERS ({durationSec}s) — diving fins equipped."));
+            Puts($"{LogPrefix} TikTok flippers on {target.displayName} for {durationSec}s.");
+            return null;
+        }
+
+        private static Item FindItemByUid(BasePlayer p, ulong uid)
+        {
+            if (p?.inventory == null || uid == 0UL) return null;
+            try
+            {
+                foreach (var c in new[] { p.inventory.containerBelt, p.inventory.containerMain, p.inventory.containerWear })
+                {
+                    if (c == null) continue;
+                    foreach (var it in c.itemList)
+                    {
+                        if (it != null && it.uid.Value == uid)
+                            return it;
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return null;
+        }
+
+        private void RestoreFlippersFootwear(BasePlayer p, ulong backupUid)
+        {
+            if (p == null || !p.IsConnected) return;
+            var wear = p.inventory?.containerWear;
+            if (wear == null) return;
+            const string finsShort = "diving.fins";
+            try
+            {
+                foreach (var it in wear.itemList.ToArray())
+                {
+                    if (it?.info != null &&
+                        string.Equals(it.info.shortname, finsShort, StringComparison.OrdinalIgnoreCase))
+                    {
+                        it.RemoveFromContainer();
+                        it.Remove();
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            if (backupUid == 0UL) return;
+            var backup = FindItemByUid(p, backupUid);
+            if (backup != null)
+            {
+                try
+                {
+                    backup.MoveToContainer(wear);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
         }
 
         private bool IsConfiguredStreamer(BasePlayer player)
@@ -2800,20 +3087,16 @@ namespace Oxide.Plugins
 
         private void ClearStreamerTimedStatusesAndUi(string reason, BasePlayer restoreTarget = null)
         {
-            if (restoreTarget != null && restoreTarget.metabolism != null && _streamerTimedStatuses.Count > 0)
+            if (restoreTarget != null && restoreTarget.IsConnected && _streamerTimedStatuses.Count > 0)
             {
-                var kinds = new HashSet<string>();
-                foreach (var r in _streamerTimedStatuses)
-                {
-                    if (r?.Kind != null) kinds.Add(r.Kind);
-                }
-
-                foreach (var k in kinds)
-                    RestoreStreamerStatusMetabolism(restoreTarget, k);
+                foreach (var r in _streamerTimedStatuses.ToArray())
+                    RestoreStreamerTimedStatusRow(restoreTarget, r);
             }
 
             DestroyStreamerStatusTicker();
             _streamerTimedStatuses.Clear();
+            if (restoreTarget != null)
+                _flippersBackupItemByUser.Remove(restoreTarget.userID);
             ClearStreamerStatusUiForAllPlayers();
             if (!string.IsNullOrEmpty(reason))
                 Puts($"{LogPrefix} Cleared TikTok status effects ({reason}).");
@@ -2845,7 +3128,7 @@ namespace Oxide.Plugins
             {
                 var row = _streamerTimedStatuses[i];
                 if (row == null || now < row.EndTime) continue;
-                RestoreStreamerStatusMetabolism(streamer, row.Kind);
+                RestoreStreamerTimedStatusRow(streamer, row);
                 _streamerTimedStatuses.RemoveAt(i);
             }
 
@@ -2855,6 +3138,9 @@ namespace Oxide.Plugins
                 ClearStreamerStatusUiForAllPlayers();
                 return;
             }
+
+            if (HasActiveStreamerStatusKind("bullethell"))
+                RefillStreamerHeldWeaponAmmo(streamer);
 
             RebuildStreamerStatusHud(streamer);
         }
@@ -2868,6 +3154,11 @@ namespace Oxide.Plugins
                 case "hungry": return "STARVING";
                 case "bleeding": return "BLEEDING";
                 case "dart": return "TRANQ DART";
+                case "godmode": return "TIME GOD MODE";
+                case "bullethell": return "BULLET HELL";
+                case "flippers": return "FLIPPERS";
+                case "flash": return "FLASH";
+                case "healthx3": return "HEALTH x3";
                 default: return kind.ToUpperInvariant();
             }
         }
@@ -2945,7 +3236,7 @@ namespace Oxide.Plugins
         }
 
         private void RegisterStreamerTimedStatus(string kind, int durationSec, bool blindOverlay, string viewerName,
-            string giftName)
+            string giftName, float healthX3OriginalMax = -1f, ulong flippersBackupItemUid = 0UL)
         {
             float now = Time.realtimeSinceStartup;
             float end = now + Mathf.Clamp(durationSec, 1, 120);
@@ -2963,8 +3254,12 @@ namespace Oxide.Plugins
             {
                 existing.EndTime = Mathf.Max(existing.EndTime, end);
                 existing.BlindOverlay = blindOverlay || existing.BlindOverlay;
-                existing.ViewerName = viewerName ?? existing.ViewerName;
-                existing.GiftName = giftName ?? existing.GiftName;
+                if (!string.IsNullOrEmpty(viewerName)) existing.ViewerName = viewerName;
+                if (!string.IsNullOrEmpty(giftName)) existing.GiftName = giftName;
+                if (kind == "healthx3" && healthX3OriginalMax > 0f && existing.HealthX3OriginalMax <= 0f)
+                    existing.HealthX3OriginalMax = healthX3OriginalMax;
+                if (kind == "flippers" && flippersBackupItemUid != 0UL && existing.FlippersBackupItemUid == 0UL)
+                    existing.FlippersBackupItemUid = flippersBackupItemUid;
             }
             else
             {
@@ -2974,7 +3269,9 @@ namespace Oxide.Plugins
                     EndTime = end,
                     BlindOverlay = blindOverlay,
                     ViewerName = viewerName ?? "",
-                    GiftName = giftName ?? ""
+                    GiftName = giftName ?? "",
+                    HealthX3OriginalMax = kind == "healthx3" ? healthX3OriginalMax : -1f,
+                    FlippersBackupItemUid = kind == "flippers" ? flippersBackupItemUid : 0UL
                 });
             }
 
@@ -2982,6 +3279,46 @@ namespace Oxide.Plugins
             var p = GetStreamerPlayer();
             if (p != null && p.IsConnected && !p.IsSleeping())
                 RebuildStreamerStatusHud(p);
+        }
+
+        /// <summary>Undo HUD-only / special statuses when a row expires or is cleared (metabolism kinds use <see cref="RestoreStreamerStatusMetabolism"/>).</summary>
+        private void RestoreStreamerTimedStatusRow(BasePlayer p, StreamerTimedStatusRow row)
+        {
+            if (p == null || row == null) return;
+            switch (row.Kind)
+            {
+                case "healthx3":
+                    if (row.HealthX3OriginalMax > 0f)
+                    {
+                        try
+                        {
+                            float targetMax = row.HealthX3OriginalMax;
+                            float curMax = p.MaxHealth();
+                            float curH = p.health;
+                            float newH = curMax > 0.01f
+                                ? Mathf.Clamp(curH * (targetMax / curMax), 1f, targetMax)
+                                : Mathf.Min(curH, targetMax);
+                            p.InitializeHealth(targetMax, newH);
+                        }
+                        catch (Exception ex)
+                        {
+                            PrintWarning($"{LogPrefix} Restore healthx3: {ex.Message}");
+                        }
+                    }
+
+                    break;
+                case "flippers":
+                    RestoreFlippersFootwear(p, row.FlippersBackupItemUid);
+                    _flippersBackupItemByUser.Remove(p.userID);
+                    break;
+                case "godmode":
+                case "bullethell":
+                case "flash":
+                    break;
+                default:
+                    RestoreStreamerStatusMetabolism(p, row.Kind);
+                    break;
+            }
         }
 
         private void ApplyStreamerStatusMetabolism(BasePlayer p, string kind)

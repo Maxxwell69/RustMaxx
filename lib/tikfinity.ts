@@ -40,6 +40,11 @@ export const TIKTRIGGER_ACTIONS = [
   "statushungry",
   "statusbleeding",
   "statusdart",
+  "statusgodmode",
+  "statusbullethell",
+  "statusflippers",
+  "statusflash",
+  "statushealthx3",
   "bunny1npc",
   "gingynpc",
   "eggnpc",
@@ -107,6 +112,19 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Tranq: "statusdart",
   "Tranq dart": "statusdart",
   "!statusdart": "statusdart",
+  "Time God Mode": "statusgodmode",
+  timegodmode: "statusgodmode",
+  "!statusgodmode": "statusgodmode",
+  "Bullet Hell": "statusbullethell",
+  bullethell: "statusbullethell",
+  "!statusbullethell": "statusbullethell",
+  Flippers: "statusflippers",
+  "!statusflippers": "statusflippers",
+  Flash: "statusflash",
+  "!statusflash": "statusflash",
+  "Health x3": "statushealthx3",
+  healthx3: "statushealthx3",
+  "!statushealthx3": "statushealthx3",
   Puppy: "wolf",
   "Puppy Kisses": "wolf",
   Wolf: "wolf",
@@ -425,6 +443,36 @@ export const ACTION_META: Record<
     description:
       "Strong poison plus a dark full-screen blind overlay for the same timer. Lower-left countdown. Same duration rules as other status actions.",
     exampleGifts: ["Dart", "Tranq dart", "!statusdart"],
+  },
+  statusgodmode: {
+    label: "Streamer: Time God Mode",
+    description:
+      "Configured streamer takes no damage for the timed window (RustChaos clears incoming damage). Lower-left HUD. Same duration rules as other status actions.",
+    exampleGifts: ["Time God Mode", "!statusgodmode"],
+  },
+  statusbullethell: {
+    label: "Streamer: Bullet Hell",
+    description:
+      "Held weapon magazine refills for the timed window (tick refill while active). Lower-left HUD.",
+    exampleGifts: ["Bullet Hell", "!statusbullethell"],
+  },
+  statusflippers: {
+    label: "Streamer: Flippers",
+    description:
+      "Moves one footwear item to belt and equips diving fins for the timer, then restores footwear. Lower-left HUD.",
+    exampleGifts: ["Flippers", "!statusflippers"],
+  },
+  statusflash: {
+    label: "Streamer: Flash (sprint)",
+    description:
+      "Stamina stays topped so the streamer can sprint continuously (feels faster). Lower-left HUD.",
+    exampleGifts: ["Flash", "!statusflash"],
+  },
+  statushealthx3: {
+    label: "Streamer: Health x3",
+    description:
+      "Triples max HP for the timed window, then restores original max with health scaled proportionally. Lower-left HUD.",
+    exampleGifts: ["Health x3", "!statushealthx3"],
   },
   bunny1npc: {
     label: "Bunny viewer bot (spawn)",
@@ -809,6 +857,11 @@ export const RUSTCHAOS_STATUS_EFFECT_ACTION_KEYS = [
   "statushungry",
   "statusbleeding",
   "statusdart",
+  "statusgodmode",
+  "statusbullethell",
+  "statusflippers",
+  "statusflash",
+  "statushealthx3",
 ] as const;
 
 const RUSTCHAOS_STATUS_EFFECT_ACTION_SET = new Set<string>(
@@ -973,6 +1026,12 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   bleed: "statusbleeding",
   statusdart: "statusdart",
   tranq: "statusdart",
+  statusgodmode: "statusgodmode",
+  godmode: "statusgodmode",
+  statusbullethell: "statusbullethell",
+  statusflippers: "statusflippers",
+  statusflash: "statusflash",
+  statushealthx3: "statushealthx3",
 };
 
 /** TikFinity / Raw JSON sometimes uses different casing (`Action`, `Event`). */

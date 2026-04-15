@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.37")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.38")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -31,6 +31,8 @@ namespace Oxide.Plugins
         private const string PermAdmin = "maxxinvaders.admin";
         private const string PermUse = "maxxinvaders.use";
         private const string PermDebug = "maxxinvaders.debug";
+        /// <summary>Right INVADERS HUD, deposit box overlay, middle-mouse box assign — without full admin GUI.</summary>
+        private const string PermApprovedStreamer = "maxxinvaders.approvedstreamer";
 
         private const string LogPrefix = "[MaxxInvaders]";
         private const string DataFile = "MaxxInvaders/MaxxInvadersData";
@@ -91,6 +93,7 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermAdmin, this);
             permission.RegisterPermission(PermUse, this);
             permission.RegisterPermission(PermDebug, this);
+            permission.RegisterPermission(PermApprovedStreamer, this);
             Subscribe(nameof(OnEntityTakeDamage));
             Subscribe(nameof(OnPlayerDisconnected));
             Subscribe(nameof(OnPlayerInput));
@@ -1865,7 +1868,7 @@ namespace Oxide.Plugins
         {
             if (player == null || input == null) return;
             if (!input.WasJustPressed(BUTTON.FIRE_THIRD)) return;
-            if (!CanAdmin(player)) return;
+            if (!CanShowInvadersStreamerUi(player)) return;
             var now = Time.realtimeSinceStartup;
             if (_lastMiddleMouseDepositBoxAt.TryGetValue(player.userID, out var prev) &&
                 now - prev < MiddleMouseDepositBoxCooldownSeconds)
@@ -2859,9 +2862,9 @@ namespace Oxide.Plugins
         {
             var player = arg.Connection?.player as BasePlayer;
             if (player == null) return;
-            if (!CanAdmin(player))
+            if (!CanShowInvadersStreamerUi(player))
             {
-                player.ChatMessage("Requires maxxinvaders.admin.");
+                player.ChatMessage("Requires maxxinvaders.admin or maxxinvaders.approvedstreamer.");
                 return;
             }
 
@@ -2900,7 +2903,7 @@ namespace Oxide.Plugins
 
         private void ToggleInvadersHudPanelForPlayer(BasePlayer player)
         {
-            if (player == null || !CanAdmin(player)) return;
+            if (player == null || !CanShowInvadersStreamerUi(player)) return;
 
             if (_hudOverlayHiddenByUser.Contains(player.userID))
             {
@@ -3006,9 +3009,9 @@ namespace Oxide.Plugins
                     OpenGui(player, 0);
                     break;
                 case "hud":
-                    if (!CanAdmin(player))
+                    if (!CanShowInvadersStreamerUi(player))
                     {
-                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        player.ChatMessage("Requires maxxinvaders.admin or maxxinvaders.approvedstreamer.");
                         return;
                     }
 
@@ -3198,9 +3201,9 @@ namespace Oxide.Plugins
                     ApplyBridgeTaskSingle(player, taskR, args[2].Trim().ToLowerInvariant());
                     break;
                 case "box":
-                    if (!CanAdmin(player))
+                    if (!CanShowInvadersStreamerUi(player))
                     {
-                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        player.ChatMessage("Requires maxxinvaders.admin or maxxinvaders.approvedstreamer.");
                         return;
                     }
 
@@ -3234,9 +3237,9 @@ namespace Oxide.Plugins
                         player.ChatMessage("[MaxxInvaders] Third arg must be look, 0, or a numeric net ID.");
                     break;
                 case "boxall":
-                    if (!CanAdmin(player))
+                    if (!CanShowInvadersStreamerUi(player))
                     {
-                        player.ChatMessage("Requires maxxinvaders.admin.");
+                        player.ChatMessage("Requires maxxinvaders.admin or maxxinvaders.approvedstreamer.");
                         return;
                     }
 
@@ -3407,6 +3410,10 @@ namespace Oxide.Plugins
 
         private bool CanAdmin(BasePlayer p) =>
             p.IsAdmin || permission.UserHasPermission(p.UserIDString, PermAdmin);
+
+        /// <summary>INVADERS side panel, loot/deposit overlay, middle-mouse box — admins or streamers granted <see cref="PermApprovedStreamer"/>.</summary>
+        private bool CanShowInvadersStreamerUi(BasePlayer p) =>
+            p != null && (CanAdmin(p) || permission.UserHasPermission(p.UserIDString, PermApprovedStreamer));
 
         private bool CanUse(BasePlayer p) =>
             p.IsAdmin || permission.UserHasPermission(p.UserIDString, PermUse) ||
@@ -3694,7 +3701,7 @@ namespace Oxide.Plugins
 
                 _prevPlayerLootUiOpen[player.userID] = lootNowOpen;
 
-                if (!CanAdmin(player)) continue;
+                if (!CanShowInvadersStreamerUi(player)) continue;
 
                 if (_adminMainGuiOpen.Contains(player.userID))
                 {
