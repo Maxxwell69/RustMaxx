@@ -7,7 +7,7 @@ import {
   STREAMER_WEBHOOK_LIMITS,
 } from "@/lib/billing-tiers";
 
-export type PackageKind = "server" | "streamer";
+export type PackageKind = "server" | "streamer" | "combo";
 
 export type PricingPackageRow = {
   id: string;
@@ -30,6 +30,7 @@ export type PricingPageTierCard = {
   id: string;
   name: string;
   price: string;
+  priceUsd: number | null;
   period: string;
   note: string;
   features: string[];
@@ -56,6 +57,16 @@ export type BillingTiersApiPayload = {
       billingNote?: string;
       features: string[];
       webhookLimit: number;
+    }>;
+  };
+  combo: {
+    currency: "usd";
+    tiers: Array<{
+      id: string;
+      label: string;
+      priceUsd: number | null;
+      billingNote?: string;
+      features: string[];
     }>;
   };
 };
@@ -175,13 +186,31 @@ function defaultPackageRows(): PricingPackageRow[] {
       sort_order: 30,
       is_published: true,
     }),
+    mk({
+      package_kind: "combo",
+      tier_key: "bundle",
+      name: "Combo Bundle",
+      price_display: "$34.99",
+      price_usd: 34.99,
+      period_display: "/mo",
+      billing_note: "Server + streamer",
+      features: [
+        "Server Pro tier included",
+        "Streamer Plus tier included",
+        "One subscription for both sides",
+      ],
+      is_highlighted: true,
+      sort_order: 10,
+      is_published: true,
+    }),
   ];
 }
 
 function mapDbRow(r: Record<string, unknown>): PricingPackageRow {
   return {
     id: String(r.id),
-    package_kind: r.package_kind === "streamer" ? "streamer" : "server",
+    package_kind:
+      r.package_kind === "streamer" ? "streamer" : r.package_kind === "combo" ? "combo" : "server",
     tier_key: String(r.tier_key),
     name: String(r.name ?? ""),
     price_display: String(r.price_display ?? ""),
@@ -268,6 +297,21 @@ export function rowsToBillingTiersApiPayload(rows: PricingPackageRow[]): Billing
         };
       }),
     },
+    combo: {
+      currency: "usd",
+      tiers: rows
+        .filter((r) => r.package_kind === "combo")
+        .map((r) => {
+          const note = r.billing_note?.trim();
+          return {
+            id: r.tier_key,
+            label: r.name,
+            priceUsd: numUsd(r.price_usd),
+            ...(note ? { billingNote: note } : {}),
+            features: coerceFeatures(r.features),
+          };
+        }),
+    },
   };
 }
 
@@ -279,6 +323,7 @@ export function rowsToPricingPageCards(rows: PricingPackageRow[]): {
     id: r.tier_key,
     name: r.name,
     price: r.price_display,
+    priceUsd: numUsd(r.price_usd),
     period: r.period_display,
     note: r.billing_note?.trim() ?? "",
     features: coerceFeatures(r.features),
@@ -287,6 +332,7 @@ export function rowsToPricingPageCards(rows: PricingPackageRow[]): {
   return {
     server: rows.filter((r) => r.package_kind === "server").map(toCard),
     streamer: rows.filter((r) => r.package_kind === "streamer").map(toCard),
+    combo: rows.filter((r) => r.package_kind === "combo").map(toCard),
   };
 }
 
@@ -298,6 +344,7 @@ export async function getPublishedBillingTiersApiPayload(): Promise<BillingTiers
 export async function getPublishedPricingPageData(): Promise<{
   server: PricingPageTierCard[];
   streamer: PricingPageTierCard[];
+  combo: PricingPageTierCard[];
 }> {
   const rows = await loadPublishedPricingPackageRows();
   return rowsToPricingPageCards(rows);

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
+import { PricingSections } from "@/components/pricing/PricingSections";
 import { getPublishedPricingPageData } from "@/lib/pricing-packages";
 
 const FAQ = [
@@ -27,7 +28,7 @@ export const metadata = {
 export const revalidate = 0;
 
 export default async function PricingPage() {
-  const { server: serverTiers, streamer: streamerTiers } = await getPublishedPricingPageData();
+  const { server: serverTiers, streamer: streamerTiers, combo: comboTiers } = await getPublishedPricingPageData();
 
   return (
     <MarketingLayout>
@@ -38,67 +39,11 @@ export default async function PricingPage() {
             Choose a plan for each server you run, and a separate plan for your streamer account (webhook limits).
           </p>
 
-          <section className="mt-14">
-            <h2 className="text-lg font-semibold text-zinc-100">Server admins</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Billed per server in RustMaxx. Upgrade from your server&apos;s settings after you log in.
-            </p>
-            <div className="mt-6 grid gap-8 md:grid-cols-3">
-              {serverTiers.map((t) => (
-                <div
-                  key={t.id}
-                  className={`rounded-xl border bg-rust-surface p-6 ${
-                    t.highlighted ? "border-rust-cyan ring-1 ring-rust-cyan/20" : "border-rust-border"
-                  }`}
-                >
-                  <h3 className="text-lg font-semibold text-zinc-100">{t.name}</h3>
-                  {t.note ? <p className="mt-1 text-sm text-zinc-400">{t.note}</p> : null}
-                  <p className="mt-4 flex flex-wrap items-baseline gap-1">
-                    <span className="text-2xl font-bold text-zinc-100">{t.price}</span>
-                    {t.period ? <span className="text-zinc-500">{t.period}</span> : null}
-                  </p>
-                  <ul className="mt-6 space-y-3">
-                    {t.features.map((f) => (
-                      <li key={f} className="flex gap-2 text-sm text-zinc-400">
-                        <span className="text-rust-green">✓</span> {f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="mt-16 border-t border-rust-border pt-14">
-            <h2 className="text-lg font-semibold text-zinc-100">Streamers</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              One plan per RustMaxx account. Controls how many servers you can connect with TikFinity webhooks.
-            </p>
-            <div className="mt-6 grid gap-8 md:grid-cols-3">
-              {streamerTiers.map((t) => (
-                <div
-                  key={t.id}
-                  className={`rounded-xl border bg-rust-surface p-6 ${
-                    t.highlighted ? "border-rust-cyan ring-1 ring-rust-cyan/20" : "border-rust-border"
-                  }`}
-                >
-                  <h3 className="text-lg font-semibold text-zinc-100">{t.name}</h3>
-                  {t.note ? <p className="mt-1 text-sm text-zinc-400">{t.note}</p> : null}
-                  <p className="mt-4 flex flex-wrap items-baseline gap-1">
-                    <span className="text-2xl font-bold text-zinc-100">{t.price}</span>
-                    {t.period ? <span className="text-zinc-500">{t.period}</span> : null}
-                  </p>
-                  <ul className="mt-6 space-y-3">
-                    {t.features.map((f) => (
-                      <li key={f} className="flex gap-2 text-sm text-zinc-400">
-                        <span className="text-rust-green">✓</span> {f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </section>
+          <PricingSections
+            serverTiers={serverTiers}
+            streamerTiers={streamerTiers}
+            comboTiers={comboTiers}
+          />
 
           <div className="mt-10 flex flex-wrap justify-center gap-4">
             <Link

@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type PackageRow = {
   id: string;
-  package_kind: "server" | "streamer";
+  package_kind: "server" | "streamer" | "combo";
   tier_key: string;
   name: string;
   price_display: string;
@@ -81,6 +81,10 @@ export default function AdminPricingPackagesPage() {
   );
   const streamerPkgs = useMemo(
     () => packages.filter((p) => p.package_kind === "streamer"),
+    [packages]
+  );
+  const comboPkgs = useMemo(
+    () => packages.filter((p) => p.package_kind === "combo"),
     [packages]
   );
 
@@ -335,6 +339,11 @@ export default function AdminPricingPackagesPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-medium text-zinc-200">Streamers</h2>
         <div className="space-y-4">{streamerPkgs.map(renderEditor)}</div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-medium text-zinc-200">Combo packages</h2>
+        <div className="space-y-4">{comboPkgs.map(renderEditor)}</div>
       </section>
     </div>
   );
