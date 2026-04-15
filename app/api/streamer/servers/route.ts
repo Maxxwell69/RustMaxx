@@ -11,6 +11,13 @@ type ServerOption = {
   streamer_interactions_enabled: boolean;
 };
 
+function isPgMissingSchemaError(e: unknown): boolean {
+  if (e === null || typeof e !== "object") return false;
+  const err = e as { code?: string };
+  // 42P01: undefined_table, 42703: undefined_column
+  return err.code === "42P01" || err.code === "42703";
+}
+
 /**
  * Servers the streamer can see for TikFinity setup:
  * - Any server this user owns or is on the team for (owners enable Streamer interactions / billing here first).
@@ -42,47 +49,66 @@ export async function GET(_request: NextRequest) {
     );
     rows = res.rows;
   } else {
-    const res = await query<ServerOption>(
-      `SELECT DISTINCT s.id, s.name, s.listing_name, s.streamer_interactions_enabled
-       FROM servers s
-       WHERE s.owner_id = $1::uuid
-          OR EXISTS (
-            SELECT 1 FROM server_users su
-            WHERE su.server_id = s.id AND su.user_id = $1::uuid
-          )
-          OR (
-            s.streamer_interactions_enabled = true
-            AND (
-              (
-                COALESCE(s.streamer_join_requires_owner_approval, false) = false
-                AND (
-                  cardinality(COALESCE(s.streamer_allowed_user_ids, '{}')) = 0
-                  OR $1::uuid = ANY (COALESCE(s.streamer_allowed_user_ids, '{}'))
+    try {
+      const res = await query<ServerOption>(
+        `SELECT DISTINCT s.id, s.name, s.listing_name, s.streamer_interactions_enabled
+         FROM servers s
+         WHERE s.owner_id = $1::uuid
+            OR EXISTS (
+              SELECT 1 FROM server_users su
+              WHERE su.server_id = s.id AND su.user_id = $1::uuid
+            )
+            OR (
+              s.streamer_interactions_enabled = true
+              AND (
+                (
+                  COALESCE(s.streamer_join_requires_owner_approval, false) = false
+                  AND (
+                    cardinality(COALESCE(s.streamer_allowed_user_ids, '{}')) = 0
+                    OR $1::uuid = ANY (COALESCE(s.streamer_allowed_user_ids, '{}'))
+                  )
                 )
-              )
-              OR (
-                COALESCE(s.streamer_join_requires_owner_approval, false) = true
-                AND (
-                  $1::uuid = ANY (COALESCE(s.streamer_allowed_user_ids, '{}'))
-                  OR EXISTS (
-                    SELECT 1 FROM streamer_server_requests r
-                    WHERE r.server_id = s.id AND r.user_id = $1::uuid AND r.status = 'approved'
+                OR (
+                  COALESCE(s.streamer_join_requires_owner_approval, false) = true
+                  AND (
+                    $1::uuid = ANY (COALESCE(s.streamer_allowed_user_ids, '{}'))
+                    OR EXISTS (
+                      SELECT 1 FROM streamer_server_requests r
+                      WHERE r.server_id = s.id AND r.user_id = $1::uuid AND r.status = 'approved'
+                    )
                   )
                 )
               )
             )
-          )
-          OR EXISTS (
-            SELECT 1 FROM streamer_server_requests r
-            WHERE r.server_id = s.id
-              AND r.user_id = $1::uuid
-              AND r.status = 'approved'
-              AND COALESCE(s.streamer_interactions_enabled, false) = false
-          )
-       ORDER BY COALESCE(s.listing_name, s.name) ASC`,
-      [user.id]
-    );
-    rows = res.rows;
+            OR EXISTS (
+              SELECT 1 FROM streamer_server_requests r
+              WHERE r.server_id = s.id
+                AND r.user_id = $1::uuid
+                AND r.status = 'approved'
+                AND COALESCE(s.streamer_interactions_enabled, false) = false
+            )
+         ORDER BY COALESCE(s.listing_name, s.name) ASC`,
+        [user.id]
+      );
+      rows = res.rows;
+    } catch (e) {
+      if (!isPgMissingSchemaError(e)) throw e;
+      // Older DB without requester-gating migrations: return the legacy-safe subset
+      // instead of failing this endpoint with HTTP 500.
+      const res = await query<ServerOption>(
+        `SELECT DISTINCT s.id, s.name, s.listing_name, s.streamer_interactions_enabled
+         FROM servers s
+         WHERE s.owner_id = $1::uuid
+            OR EXISTS (
+              SELECT 1 FROM server_users su
+              WHERE su.server_id = s.id AND su.user_id = $1::uuid
+            )
+            OR s.streamer_interactions_enabled = true
+         ORDER BY COALESCE(s.listing_name, s.name) ASC`,
+        [user.id]
+      );
+      rows = res.rows;
+    }
   }
 
   return NextResponse.json({ servers: rows });
