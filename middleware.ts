@@ -17,6 +17,8 @@ const PUBLIC_PATHS = [
   "/contact",
   "/server-list",       // public list of opted-in Rust servers
   "/api/server-list",
+  "/streamers",         // public streamer directory + profiles (GET /api/streamers)
+  "/api/streamers",
   "/streamer-interaction",
   "/early-access",
   "/api/early-access",
