@@ -6,6 +6,27 @@ import { MEMBERSHIP_LEVELS } from "./membership-level";
 
 const SALT_ROUNDS = 10;
 
+/**
+ * Accepts full http(s) URLs or same-origin paths from POST /api/upload (`/uploads/<filename>`).
+ * Rejects path traversal and odd characters in relative paths.
+ */
+function isAllowedStreamerDirectoryAvatarUrl(t: string): boolean {
+  const trimmed = t.trim();
+  if (!trimmed || trimmed.length > 2048) return false;
+  if (trimmed.startsWith("/uploads/")) {
+    const name = trimmed.slice("/uploads/".length);
+    if (!name || name.includes("/") || name.includes("\\") || name.includes("..")) return false;
+    if (name.includes("?") || name.includes("#")) return false;
+    return /^[a-zA-Z0-9._-]+$/.test(name);
+  }
+  try {
+    const u = new URL(trimmed);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export type UserRow = {
   id: string;
   email: string;
@@ -310,13 +331,12 @@ export async function updateStreamerDirectoryFields(
     } else if (typeof raw === "string") {
       const t = raw.trim();
       if (t.length > 2048) return { ok: false, error: "Avatar URL is too long" };
-      try {
-        const u = new URL(t);
-        if (u.protocol !== "http:" && u.protocol !== "https:") {
-          return { ok: false, error: "Avatar URL must be http(s)" };
-        }
-      } catch {
-        return { ok: false, error: "Avatar URL is invalid" };
+      if (!isAllowedStreamerDirectoryAvatarUrl(t)) {
+        return {
+          ok: false,
+          error:
+            "Avatar URL must be https (or http) or a path from Upload image, for example /uploads/your-file.png.",
+        };
       }
       updates.push(`streamer_directory_avatar_url = $${idx++}`);
       values.push(t);
