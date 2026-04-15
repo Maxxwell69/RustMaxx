@@ -19,7 +19,6 @@ function serialize(row: Awaited<ReturnType<typeof getStreamerApplicationByUserId
   return {
     id: row.id,
     user_id: row.user_id,
-    legal_name: row.legal_name,
     preferred_stream_name: row.preferred_stream_name,
     tiktok_url: row.tiktok_url,
     twitch_url: row.twitch_url,

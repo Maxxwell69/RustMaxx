@@ -7,7 +7,6 @@ import { Logo } from "@/components/marketing/Logo";
 
 type ApplicationJson = {
   id: string;
-  legal_name: string;
   preferred_stream_name: string;
   tiktok_url: string | null;
   twitch_url: string | null;
@@ -27,7 +26,6 @@ type ApplicationJson = {
 };
 
 const empty = {
-  legal_name: "",
   preferred_stream_name: "",
   tiktok_url: "",
   twitch_url: "",
@@ -76,7 +74,6 @@ export default function StreamerRegisterPage() {
         setStatus(a.status);
         setRejectionNote(a.status === "rejected" ? a.admin_notes : null);
         setForm({
-          legal_name: a.legal_name,
           preferred_stream_name: a.preferred_stream_name,
           tiktok_url: a.tiktok_url ?? "",
           twitch_url: a.twitch_url ?? "",
@@ -114,7 +111,6 @@ export default function StreamerRegisterPage() {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          legal_name: form.legal_name,
           preferred_stream_name: form.preferred_stream_name,
           tiktok_url: form.tiktok_url || undefined,
           twitch_url: form.twitch_url || undefined,
@@ -202,20 +198,6 @@ export default function StreamerRegisterPage() {
         <form onSubmit={handleSubmit} className="mt-8 space-y-6">
           <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
             <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Identity</h2>
-            <div>
-              <label htmlFor="legal_name" className="mb-1 block text-sm text-zinc-400">
-                Full legal name <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="legal_name"
-                value={form.legal_name}
-                onChange={(e) => set("legal_name", e.target.value)}
-                disabled={readOnlyApproved}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100 disabled:opacity-60"
-                required
-                autoComplete="name"
-              />
-            </div>
             <div>
               <label htmlFor="preferred_stream_name" className="mb-1 block text-sm text-zinc-400">
                 Name / brand you use on stream <span className="text-red-400">*</span>

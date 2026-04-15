@@ -8,7 +8,6 @@ type Row = {
   user_id: string;
   applicant_email: string;
   applicant_display_name: string | null;
-  legal_name: string;
   preferred_stream_name: string;
   tiktok_url: string | null;
   twitch_url: string | null;
@@ -118,7 +117,7 @@ export default function AdminStreamerApplicationsPage() {
         <h1 className="text-2xl font-semibold text-zinc-100">Streamer applications</h1>
       </div>
       <p className="text-sm text-zinc-500">
-        Review legal name, social URLs, and fit. Approving sets the user&apos;s role to <strong className="text-zinc-400">streamer</strong> when they are
+        Review stream name, social URLs, and fit. Approving sets the user&apos;s role to <strong className="text-zinc-400">streamer</strong> when they are
         still guest or player.
       </p>
 
@@ -156,8 +155,7 @@ export default function AdminStreamerApplicationsPage() {
                     {r.applicant_display_name ? ` · ${r.applicant_display_name}` : ""}
                   </p>
                   <p className="mt-1 text-xs text-zinc-600">
-                    Legal: {r.legal_name} · Status: {r.status} · Updated{" "}
-                    {new Date(r.updated_at).toLocaleString()}
+                    Status: {r.status} · Updated {new Date(r.updated_at).toLocaleString()}
                   </p>
                 </div>
                 <button

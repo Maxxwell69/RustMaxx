@@ -11,7 +11,6 @@ function serializeList(
     user_id: row.user_id,
     applicant_email: row.applicant_email,
     applicant_display_name: row.applicant_display_name,
-    legal_name: row.legal_name,
     preferred_stream_name: row.preferred_stream_name,
     tiktok_url: row.tiktok_url,
     twitch_url: row.twitch_url,

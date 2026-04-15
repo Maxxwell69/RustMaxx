@@ -452,7 +452,7 @@ function ProfilePageContent() {
                 <div className="min-w-0 flex-1 rounded-lg border border-zinc-600/80 bg-zinc-900/60 p-4">
                   <h3 className="text-sm font-semibold text-zinc-100">Streamer application</h3>
                   <p className="mt-1 text-xs text-zinc-500">
-                    Apply with your legal name, TikTok and other social links, and a short pitch so we can confirm
+                    Apply with your stream name, TikTok and other social links, and a short pitch so we can confirm
                     you&apos;re a good fit for RustMaxx streamer tools.
                   </p>
                   <Link
@@ -565,7 +565,7 @@ function ProfilePageContent() {
               {streamerApp === null && (profile.role === "guest" || profile.role === "player") && (
                 <>
                   <p className="text-xs text-zinc-500">
-                    Apply with your legal name, TikTok and other social links, and a short pitch so we can confirm you&apos;re
+                    Apply with your stream name, TikTok and other social links, and a short pitch so we can confirm you&apos;re
                     a good fit for RustMaxx streamer tools.
                   </p>
                   <Link

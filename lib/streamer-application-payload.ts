@@ -34,8 +34,8 @@ function optionalText(v: unknown, max: number): string | null {
 }
 
 /**
- * Validates JSON body for streamer application. Requires identity + fit copy;
- * requires at least one discoverable social (URL or other_socials text).
+ * Validates JSON body for streamer application. Requires public stream name + fit copy;
+ * requires at least one discoverable social (URL or other_socials text). No government-name field.
  */
 export function parseStreamerApplicationPayload(
   body: unknown
@@ -45,14 +45,14 @@ export function parseStreamerApplicationPayload(
   }
   const b = body as Record<string, unknown>;
 
-  const legal_name = trimStr(b.legal_name, L.name);
   const preferred_stream_name = trimStr(b.preferred_stream_name, L.name);
   const content_summary = trimStr(b.content_summary, L.long);
   const why_rustmaxx = trimStr(b.why_rustmaxx, L.long);
 
-  if (legal_name.length < 2) return { ok: false, error: "Enter your full legal name." };
   if (preferred_stream_name.length < 2)
     return { ok: false, error: "Enter the name you use on stream." };
+  /** DB column kept for compatibility; we do not collect government name—mirror public stream name. */
+  const legal_name = preferred_stream_name;
   if (content_summary.length < 20)
     return { ok: false, error: "Describe what you stream (at least a few sentences)." };
   if (why_rustmaxx.length < 20)
