@@ -324,7 +324,8 @@ export async function runTikfinityWebhook(
   let connectionFromAdmin: TikfinityConnectionForWebhook | null = null;
   let tikfinityEventNameForLog: string | null = null;
   const fromBody = getRawActionNameFromPayload(body);
-  const rawConnectionName = (fromBody.trim() || queryActionRaw).trim();
+  // URL action/event should drive rule lookup when present (TikFinity test payloads can carry unrelated defaults).
+  const rawConnectionName = (queryActionRaw.trim() || fromBody.trim()).trim();
   if (rawConnectionName) {
     const conn = await ctx.resolveConnectionByEventName(rawConnectionName);
     if (conn) {
