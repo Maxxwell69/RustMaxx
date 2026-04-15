@@ -12,9 +12,11 @@ type ServerOption = {
 };
 
 /**
- * Servers the streamer can attach their webhook to:
- * - Any server that has already enabled streamer interactions (public pool), OR
- * - Any server this user owns or is on the team for (so owners see their server and can enable the toggle first).
+ * Servers the streamer can see for TikFinity setup:
+ * - Any server this user owns or is on the team for (owners enable Streamer interactions / billing here first).
+ * - Any server with streamer interactions on that passes allowlist / approval rules (public pool).
+ * - Any server where this user has an approved access request but TikFinity is not enabled yet (so they see
+ *   “waiting for owner” instead of an empty list).
  * Super admins see every server for support/testing.
  */
 export async function GET(_request: NextRequest) {
@@ -25,7 +27,7 @@ export async function GET(_request: NextRequest) {
   const user = await findUserById(session.userId);
   if (!user || !canAccessStreamerDashboard(user)) {
     return NextResponse.json(
-      { error: "Forbidden: streamer subscription required" },
+      { error: "Forbidden: streamer dashboard access required" },
       { status: 403 }
     );
   }
@@ -43,10 +45,10 @@ export async function GET(_request: NextRequest) {
     const res = await query<ServerOption>(
       `SELECT DISTINCT s.id, s.name, s.listing_name, s.streamer_interactions_enabled
        FROM servers s
-       WHERE s.owner_id = $1
+       WHERE s.owner_id = $1::uuid
           OR EXISTS (
             SELECT 1 FROM server_users su
-            WHERE su.server_id = s.id AND su.user_id = $1
+            WHERE su.server_id = s.id AND su.user_id = $1::uuid
           )
           OR (
             s.streamer_interactions_enabled = true
@@ -69,6 +71,13 @@ export async function GET(_request: NextRequest) {
                 )
               )
             )
+          )
+          OR EXISTS (
+            SELECT 1 FROM streamer_server_requests r
+            WHERE r.server_id = s.id
+              AND r.user_id = $1::uuid
+              AND r.status = 'approved'
+              AND COALESCE(s.streamer_interactions_enabled, false) = false
           )
        ORDER BY COALESCE(s.listing_name, s.name) ASC`,
       [user.id]

@@ -129,6 +129,7 @@ type ActionOpt = {
 export default function StreamerDashboardPage() {
   const [state, setState] = useState<State | null>(null);
   const [servers, setServers] = useState<ServerRow[]>([]);
+  const [serversLoadError, setServersLoadError] = useState<string | null>(null);
   const [actions, setActions] = useState<ActionOpt[]>([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -146,6 +147,7 @@ export default function StreamerDashboardPage() {
 
   const load = useCallback(async () => {
     setErr("");
+    setServersLoadError(null);
     const [sRes, srvRes, actRes] = await Promise.all([
       fetch("/api/streamer/state", { credentials: "same-origin" }),
       fetch("/api/streamer/servers", { credentials: "same-origin" }),
@@ -198,6 +200,12 @@ export default function StreamerDashboardPage() {
         return (a.listing_name || a.name).localeCompare(b.listing_name || b.name);
       });
       setServers(normalized);
+    } else {
+      const ej = await srvRes.json().catch(() => ({}));
+      setServersLoadError(
+        typeof ej.error === "string" ? ej.error : `Could not load servers (HTTP ${srvRes.status}).`
+      );
+      setServers([]);
     }
     if (actRes.ok) {
       const j = (await actRes.json().catch(() => ({}))) as Record<string, unknown>;
@@ -476,6 +484,8 @@ export default function StreamerDashboardPage() {
 
   const serverIdsWithHooks = new Set(hooks.map((h) => h.serverId));
   const serversAvailableToAdd = servers.filter((s) => !serverIdsWithHooks.has(s.id));
+  const serverForAdd = servers.find((s) => s.id === serverId);
+  const canSubmitWebhookAdd = Boolean(serverId && serverForAdd?.streamer_interactions_enabled);
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl p-6">
@@ -564,22 +574,30 @@ export default function StreamerDashboardPage() {
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Game servers &amp; webhooks</h2>
         <p className="mb-3 text-xs text-zinc-500">
           Add each RustMaxx server you want TikFinity to drive — you get a <strong className="text-zinc-400">separate URL</strong>{" "}
-          per server. Servers you own or are on the team for always appear in the add list; others appear once they enable{" "}
-          <strong className="text-zinc-400">Streamer interactions</strong>. If they use an allowlist, add your email there;
-          if they require owner approval, submit a request from the public{" "}
+          per server. Servers you own or are on the team for always appear here. Other servers appear when they turn on{" "}
+          <strong className="text-zinc-400">Streamer interactions</strong>, or when you have an{" "}
+          <strong className="text-zinc-400">approved</strong> access request (you may see the server listed before the owner
+          finishes setup). Use the public{" "}
           <Link href="/server-list" className="text-rust-cyan hover:underline">
             server list
           </Link>{" "}
-          after RustMaxx staff approves your streamer application.
+          to request access if the owner requires approval.
         </p>
-        {servers.length === 0 ? (
+        {serversLoadError ? (
+          <p className="mb-4 rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
+            {serversLoadError}
+          </p>
+        ) : null}
+        {!serversLoadError && servers.length === 0 ? (
           <p className="mb-4 rounded-lg border border-amber-800/60 bg-amber-950/30 p-3 text-sm text-amber-100/95">
             No servers are available yet. If this is your server, open{" "}
             <Link href="/servers" className="text-rust-cyan hover:underline">
               Servers
             </Link>
             , pick it, go to <strong className="text-zinc-100">Streamer interactions</strong>, and turn on{" "}
-            <em>Allow streamers to use this server for TikFinity webhooks</em>, then save and refresh this page.
+            <em>Allow streamers to use this server for TikFinity webhooks</em> (Pro plan may be required), then save and
+            refresh this page. If you requested access from the server list, wait for the owner to approve and enable
+            TikFinity — the server will show here once you are approved.
           </p>
         ) : null}
 
@@ -687,7 +705,9 @@ export default function StreamerDashboardPage() {
         {serversAvailableToAdd.length > 0 ? (
           <form onSubmit={saveWebhook} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1">
-              <label className="mb-1 block text-xs text-zinc-500">Add another server</label>
+              <label className="mb-1 block text-xs text-zinc-500">
+                {hooks.length > 0 ? "Add another server" : "Add a server"}
+              </label>
               <select
                 value={serverId}
                 onChange={(e) => setServerId(e.target.value)}
@@ -700,7 +720,9 @@ export default function StreamerDashboardPage() {
                   const ready = s.streamer_interactions_enabled;
                   return (
                     <option key={s.id} value={s.id}>
-                      {ready ? label : `${label} — turn on Streamer interactions first`}
+                      {ready
+                        ? label
+                        : `${label} — waiting for server owner to enable TikFinity / Streamer interactions`}
                     </option>
                   );
                 })}
@@ -708,12 +730,29 @@ export default function StreamerDashboardPage() {
             </div>
             <button
               type="submit"
-              className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white"
+              disabled={!canSubmitWebhookAdd}
+              title={
+                !serverId
+                  ? "Choose a server"
+                  : !serverForAdd?.streamer_interactions_enabled
+                    ? "The server owner must enable Streamer interactions (and server plan) before you can add a webhook."
+                    : undefined
+              }
+              className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               Add webhook
             </button>
           </form>
-        ) : servers.length > 0 && hooks.length > 0 ? (
+        ) : null}
+        {serversAvailableToAdd.length > 0 && serverId && !canSubmitWebhookAdd ? (
+          <p className="mb-4 text-xs text-amber-200/90">
+            TikFinity is not enabled on this server yet. The owner must turn on{" "}
+            <strong className="text-amber-100">Streamer interactions</strong> under{" "}
+            <strong className="text-amber-100">Server → Streamer interactions</strong> (and meet the server plan) before
+            you can add a webhook here.
+          </p>
+        ) : null}
+        {serversAvailableToAdd.length > 0 ? null : servers.length > 0 && hooks.length > 0 ? (
           <p className="text-xs text-zinc-500">Every available server already has a webhook. Remove one above to reassign.</p>
         ) : null}
       </section>
