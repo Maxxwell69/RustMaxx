@@ -23,12 +23,36 @@ type Mapping = {
   is_enabled: boolean;
 };
 
+type CatalogGift = { gift: string; suggestedAction: string };
+type CatalogAction = { action: string; label: string; description: string };
+
 export default function AdminTikTokLivePage() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [selectedBoard, setSelectedBoard] = useState<string>("");
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [newBoardName, setNewBoardName] = useState("");
+  const [catalogGifts, setCatalogGifts] = useState<CatalogGift[]>([]);
+  const [catalogActions, setCatalogActions] = useState<CatalogAction[]>([]);
+  const [eventType, setEventType] = useState("gift");
+  const [eventKey, setEventKey] = useState("");
+  const [serverAction, setServerAction] = useState("rose");
+  const [minValue, setMinValue] = useState("0");
+  const [priority, setPriority] = useState("10");
+
+  async function loadCatalog() {
+    const res = await fetch("/api/admin/tiktok-live/catalog", { credentials: "same-origin" });
+    const data = await res.json().catch(() => ({}));
+    const gifts = Array.isArray(data.gifts) ? (data.gifts as CatalogGift[]) : [];
+    const actions = Array.isArray(data.actions) ? (data.actions as CatalogAction[]) : [];
+    setCatalogGifts(gifts);
+    setCatalogActions(actions);
+    if (!eventKey && gifts[0]?.gift) setEventKey(gifts[0].gift);
+    if (actions.length > 0) {
+      const hasRose = actions.some((a) => a.action === "rose");
+      setServerAction(hasRose ? "rose" : actions[0].action);
+    }
+  }
 
   async function loadBoards() {
     const res = await fetch("/api/tiktok-live/boards?includeTemplates=1&includeServers=1", {
@@ -51,6 +75,7 @@ export default function AdminTikTokLivePage() {
 
   useEffect(() => {
     loadBoards().catch(() => {});
+    loadCatalog().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -80,19 +105,21 @@ export default function AdminTikTokLivePage() {
     await loadBoards();
   }
 
-  async function addBasicMapping() {
+  async function createMappingFromBuilder() {
     if (!selectedBoard) return;
     setMsg(null);
+    const min = Number.parseInt(minValue, 10);
+    const pri = Number.parseInt(priority, 10);
     const res = await fetch(`/api/tiktok-live/boards/${selectedBoard}/mappings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({
-        eventType: "gift",
-        eventKey: "Rose",
-        minValue: 0,
-        serverAction: "rose",
-        priority: 10,
+        eventType,
+        eventKey: eventKey.trim() || null,
+        minValue: Number.isFinite(min) ? Math.max(0, min) : 0,
+        serverAction,
+        priority: Number.isFinite(pri) ? pri : 10,
         isEnabled: true,
       }),
     });
@@ -101,8 +128,17 @@ export default function AdminTikTokLivePage() {
       setMsg(typeof data.error === "string" ? data.error : "Could not create mapping");
       return;
     }
-    setMsg("Sample mapping created.");
+    setMsg("Mapping created.");
     await loadMappings(selectedBoard);
+  }
+
+  function pickGift(gift: string) {
+    setEventType("gift");
+    setEventKey(gift);
+    const suggested = catalogGifts.find((g) => g.gift === gift)?.suggestedAction;
+    if (suggested && catalogActions.some((a) => a.action === suggested)) {
+      setServerAction(suggested);
+    }
   }
 
   return (
@@ -159,13 +195,79 @@ export default function AdminTikTokLivePage() {
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg text-zinc-100">Mappings ({mappings.length})</h2>
-          <button
-            onClick={() => void addBasicMapping()}
-            disabled={!selectedBoard}
-            className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 disabled:opacity-50"
-          >
-            Add sample mapping
-          </button>
+        </div>
+        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+          <p className="mb-2 text-sm text-zinc-400">Create mapping (gift/event → Rust action)</p>
+          <div className="grid gap-2 sm:grid-cols-5">
+            <select
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value)}
+              className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+            >
+              <option value="gift">gift</option>
+              <option value="like">like</option>
+              <option value="follow">follow</option>
+              <option value="share">share</option>
+              <option value="subscribe">subscribe</option>
+              <option value="chat">chat</option>
+              <option value="join">join</option>
+            </select>
+            <input
+              value={eventKey}
+              onChange={(e) => setEventKey(e.target.value)}
+              placeholder="Event/Gift key (e.g. Rose)"
+              className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 sm:col-span-2"
+            />
+            <select
+              value={serverAction}
+              onChange={(e) => setServerAction(e.target.value)}
+              className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 sm:col-span-2"
+            >
+              {catalogActions.map((a) => (
+                <option key={a.action} value={a.action}>
+                  {a.label} ({a.action})
+                </option>
+              ))}
+            </select>
+            <input
+              value={minValue}
+              onChange={(e) => setMinValue(e.target.value)}
+              placeholder="Min value"
+              className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+            />
+            <input
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              placeholder="Priority"
+              className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+            />
+            <button
+              onClick={() => void createMappingFromBuilder()}
+              disabled={!selectedBoard}
+              className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 disabled:opacity-50 sm:col-span-3"
+            >
+              Add mapping
+            </button>
+          </div>
+          <div className="mt-3">
+            <p className="mb-1 text-xs text-zinc-500">Gift quick-pick</p>
+            <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto rounded border border-zinc-800 bg-zinc-900/50 p-2">
+              {catalogGifts.slice(0, 120).map((g) => (
+                <button
+                  key={g.gift}
+                  type="button"
+                  onClick={() => pickGift(g.gift)}
+                  className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
+                  title={`Suggested action: ${g.suggestedAction}`}
+                >
+                  {g.gift}
+                </button>
+              ))}
+              {catalogGifts.length === 0 ? (
+                <span className="text-xs text-zinc-500">No gifts loaded.</span>
+              ) : null}
+            </div>
+          </div>
         </div>
         <div className="mt-2 overflow-x-auto">
           <table className="w-full text-left text-sm">
