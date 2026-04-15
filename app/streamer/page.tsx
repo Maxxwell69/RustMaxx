@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/marketing/Logo";
 import { SteamIdForm } from "@/components/profile/SteamIdForm";
@@ -126,6 +126,28 @@ type ActionOpt = {
   description: string;
 };
 
+function getActionCategory(action: string): string {
+  if (
+    action === "statuspoison" ||
+    action === "statusdehydrated" ||
+    action === "statushungry" ||
+    action === "statusbleeding" ||
+    action === "statusdart"
+  ) {
+    return "RustChaos - Status effects";
+  }
+  if (action === "npcmaxx") {
+    return "NPCMaxx";
+  }
+  if (action === "maxxinvaders") {
+    return "MaxxInvaders";
+  }
+  if (action === "follow" || action === "share" || action === "subscribe" || action === "sociallike") {
+    return "TikTok Social (no RCON)";
+  }
+  return "RustChaos - Gameplay actions";
+}
+
 export default function StreamerDashboardPage() {
   const [state, setState] = useState<State | null>(null);
   const [servers, setServers] = useState<ServerRow[]>([]);
@@ -144,6 +166,17 @@ export default function StreamerDashboardPage() {
   const [npcTemplate, setNpcTemplate] = useState("");
   const [ruleDurationSeconds, setRuleDurationSeconds] = useState("10");
   const [quickAdding, setQuickAdding] = useState<string | null>(null);
+
+  const groupedActions = useMemo(() => {
+    const groups = new Map<string, ActionOpt[]>();
+    for (const action of actions) {
+      const key = getActionCategory(action.action);
+      const current = groups.get(key) ?? [];
+      current.push(action);
+      groups.set(key, current);
+    }
+    return Array.from(groups.entries());
+  }, [actions]);
 
   const load = useCallback(async () => {
     setErr("");
@@ -802,9 +835,11 @@ export default function StreamerDashboardPage() {
         </h2>
         <p className="mb-4 text-xs text-zinc-500">
           Rules belong to <strong className="text-zinc-400">one server webhook</strong> at a time. Pick which server below,
-          then add rules or quick spawns. Use <strong className="font-medium text-zinc-300">Copy webhook</strong> on a rule
-          for a URL that sends the final <code className="rounded bg-zinc-800 px-1">server action</code> directly (most
-          reliable for empty-body TikFinity posts).
+          then add rules or quick spawns. <strong className="font-medium text-zinc-300">TikFinity event name</strong> is your
+          alias/label, while <strong className="font-medium text-zinc-300">Server action</strong> is the in-game action key.
+          Use <strong className="font-medium text-zinc-300">Copy webhook</strong> on a rule for a URL that sends the final{" "}
+          <code className="rounded bg-zinc-800 px-1">server action</code> directly (most reliable for empty-body TikFinity
+          posts).
         </p>
 
         <div className="mb-4">
@@ -860,7 +895,7 @@ export default function StreamerDashboardPage() {
 
         <form onSubmit={addRule} className="mb-6 grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">TikFinity event name</label>
+            <label className="mb-1 block text-xs text-zinc-500">TikFinity event name (alias)</label>
             <input
               value={ruleName}
               onChange={(e) => setRuleName(e.target.value)}
@@ -870,18 +905,23 @@ export default function StreamerDashboardPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Server action</label>
+            <label className="mb-1 block text-xs text-zinc-500">Server action (in-game)</label>
             <select
               value={ruleAction}
               onChange={(e) => setRuleAction(e.target.value)}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
             >
-              {actions.map((a) => (
-                <option key={a.action} value={a.action}>
-                  {a.label} ({a.action})
-                </option>
+              {groupedActions.map(([group, rows]) => (
+                <optgroup key={group} label={group}>
+                  {rows.map((a) => (
+                    <option key={a.action} value={a.action}>
+                      {a.label} ({a.action})
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
+            <p className="mt-1 text-[11px] text-zinc-600">Grouped by plugin/type for faster setup.</p>
           </div>
           {ruleAction === "npcmaxx" ? (
             <div className="sm:col-span-2">
