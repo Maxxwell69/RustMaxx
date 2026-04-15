@@ -51,8 +51,23 @@ export async function GET(_request: NextRequest) {
           OR (
             s.streamer_interactions_enabled = true
             AND (
-              cardinality(COALESCE(s.streamer_allowed_user_ids, '{}')) = 0
-              OR $1::uuid = ANY (COALESCE(s.streamer_allowed_user_ids, '{}'))
+              (
+                COALESCE(s.streamer_join_requires_owner_approval, false) = false
+                AND (
+                  cardinality(COALESCE(s.streamer_allowed_user_ids, '{}')) = 0
+                  OR $1::uuid = ANY (COALESCE(s.streamer_allowed_user_ids, '{}'))
+                )
+              )
+              OR (
+                COALESCE(s.streamer_join_requires_owner_approval, false) = true
+                AND (
+                  $1::uuid = ANY (COALESCE(s.streamer_allowed_user_ids, '{}'))
+                  OR EXISTS (
+                    SELECT 1 FROM streamer_server_requests r
+                    WHERE r.server_id = s.id AND r.user_id = $1::uuid AND r.status = 'approved'
+                  )
+                )
+              )
             )
           )
        ORDER BY COALESCE(s.listing_name, s.name) ASC`,

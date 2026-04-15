@@ -51,6 +51,16 @@ const SA_COLS = `sa.id, sa.user_id, sa.legal_name, sa.preferred_stream_name, sa.
   sa.stream_schedule, sa.content_summary, sa.why_rustmaxx, sa.status, sa.reviewed_by, sa.reviewed_at, sa.admin_notes,
   sa.created_at, sa.updated_at`;
 
+/** RustMaxx staff–approved streamer application (required before per-server requests). */
+export async function hasApprovedRustmaxxStreamerApplication(
+  userId: string,
+  globalRole: string | undefined
+): Promise<boolean> {
+  if (globalRole === "super_admin") return true;
+  const row = await getStreamerApplicationByUserId(userId);
+  return row?.status === "approved";
+}
+
 export async function getStreamerApplicationByUserId(
   userId: string
 ): Promise<StreamerApplicationRow | null> {

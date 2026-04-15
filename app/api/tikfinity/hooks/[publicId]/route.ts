@@ -122,9 +122,9 @@ async function handleHook(
       NextResponse.json(
         {
           ok: false,
-          error: "This streamer is not on the allowlist for this server.",
+          error: "This streamer is not allowed to use TikFinity on this server.",
           debug:
-            "The server owner must add your RustMaxx account under Servers → this server → Streamer interactions → Allowed streamers.",
+            "The owner may require approval (public server list request) or an allowlist entry under Servers → this server → Streamer interactions.",
         },
         { status: 403 }
       )

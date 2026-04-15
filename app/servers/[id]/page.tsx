@@ -42,6 +42,7 @@ export default function ServerDetailPage() {
     streamer_allowed_actions?: string[];
     streamer_allowed_item_shortnames?: string[];
     streamer_allowlist_users?: { id: string; email: string }[];
+    streamer_join_requires_owner_approval?: boolean;
   } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [listingForm, setListingForm] = useState({
@@ -80,6 +81,42 @@ export default function ServerDetailPage() {
   const [allowlistEmail, setAllowlistEmail] = useState("");
   const [allowlistBusy, setAllowlistBusy] = useState(false);
   const [allowlistErr, setAllowlistErr] = useState<string | null>(null);
+  const [streamerSetupSubTab, setStreamerSetupSubTab] = useState<"policy" | "access">("policy");
+  const [streamerRequireApproval, setStreamerRequireApproval] = useState(false);
+  const [streamerRequests, setStreamerRequests] = useState<{
+    pending: Array<{
+      id: string;
+      user_id: string;
+      applicant_email: string;
+      message: string | null;
+      status: string;
+      created_at: string;
+      updated_at: string;
+      reviewed_at: string | null;
+    }>;
+    approved: Array<{
+      id: string;
+      user_id: string;
+      applicant_email: string;
+      message: string | null;
+      status: string;
+      created_at: string;
+      updated_at: string;
+      reviewed_at: string | null;
+    }>;
+    rejected: Array<{
+      id: string;
+      user_id: string;
+      applicant_email: string;
+      message: string | null;
+      status: string;
+      created_at: string;
+      updated_at: string;
+      reviewed_at: string | null;
+    }>;
+  } | null>(null);
+  const [streamerRequestsLoading, setStreamerRequestsLoading] = useState(false);
+  const [streamerRequestBusyId, setStreamerRequestBusyId] = useState<string | null>(null);
   const [streamerSelectableItems, setStreamerSelectableItems] = useState<
     {
       shortname: string;
@@ -143,6 +180,9 @@ export default function ServerDetailPage() {
           setStreamerItemShortnames(
             Array.isArray(s.streamer_allowed_item_shortnames) ? s.streamer_allowed_item_shortnames : []
           );
+          if (typeof s.streamer_join_requires_owner_approval === "boolean") {
+            setStreamerRequireApproval(s.streamer_join_requires_owner_approval);
+          }
         }
       })
       .catch(() => setServer(null));
@@ -164,9 +204,33 @@ export default function ServerDetailPage() {
         if (Array.isArray(d.streamer_allowed_item_shortnames)) {
           setStreamerItemShortnames(d.streamer_allowed_item_shortnames);
         }
+        if (typeof d.streamer_join_requires_owner_approval === "boolean") {
+          setStreamerRequireApproval(d.streamer_join_requires_owner_approval);
+        }
       })
       .catch(() => {});
   }, [id]);
+
+  useEffect(() => {
+    if (setupTab !== "streamer" || streamerSetupSubTab !== "access") return;
+    if (!server || (server.myRole !== "owner" && server.myRole !== "admin")) return;
+    setStreamerRequestsLoading(true);
+    fetch(`/api/servers/${id}/streamer-requests`, { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && Array.isArray(d.pending) && Array.isArray(d.approved) && Array.isArray(d.rejected)) {
+          setStreamerRequests({
+            pending: d.pending,
+            approved: d.approved,
+            rejected: d.rejected,
+          });
+        } else {
+          setStreamerRequests({ pending: [], approved: [], rejected: [] });
+        }
+      })
+      .catch(() => setStreamerRequests({ pending: [], approved: [], rejected: [] }))
+      .finally(() => setStreamerRequestsLoading(false));
+  }, [id, setupTab, streamerSetupSubTab, server?.myRole]);
 
   // Load RustMaxx profiled players (inactive/active) for this server
   useEffect(() => {
@@ -465,6 +529,7 @@ export default function ServerDetailPage() {
           streamer_interactions_enabled: streamerEnabled,
           streamer_allowed_actions: streamerActions,
           streamer_allowed_item_shortnames: streamerItemShortnames,
+          streamer_join_requires_owner_approval: streamerRequireApproval,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -473,11 +538,40 @@ export default function ServerDetailPage() {
         return;
       }
       setServer((prev) => (prev ? { ...prev, ...data } : null));
+      if (typeof data.streamer_join_requires_owner_approval === "boolean") {
+        setStreamerRequireApproval(data.streamer_join_requires_owner_approval);
+      }
       setStreamerFeedback(
         "Saved. Streamers can only use checked actions and items you allow; MaxxInvaders / NPC roaming are not included."
       );
     } finally {
       setStreamerSaving(false);
+    }
+  }
+
+  async function decideStreamerRequest(requestId: string, decision: "approve" | "reject") {
+    setStreamerRequestBusyId(requestId);
+    try {
+      const res = await fetch(`/api/servers/${id}/streamer-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ requestId, decision }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStreamerFeedback(typeof data.error === "string" ? data.error : "Could not update request");
+        return;
+      }
+      if (data.pending && data.approved && data.rejected) {
+        setStreamerRequests({
+          pending: data.pending,
+          approved: data.approved,
+          rejected: data.rejected,
+        });
+      }
+    } finally {
+      setStreamerRequestBusyId(null);
     }
   }
 
@@ -984,6 +1078,32 @@ export default function ServerDetailPage() {
                   <strong className="text-zinc-400">Streamer interactions</strong>. Only RustChaos-style commands and TikTok
                   social announcements (no MaxxInvaders, Roaming NPC, or chaos-wave bundles).
                 </p>
+                <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-2">
+                  <button
+                    type="button"
+                    onClick={() => setStreamerSetupSubTab("policy")}
+                    className={`rounded px-3 py-1.5 text-xs font-medium ${
+                      streamerSetupSubTab === "policy"
+                        ? "bg-zinc-700 text-zinc-100"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    Actions &amp; allowlist
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStreamerSetupSubTab("access")}
+                    className={`rounded px-3 py-1.5 text-xs font-medium ${
+                      streamerSetupSubTab === "access"
+                        ? "bg-zinc-700 text-zinc-100"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    Access requests
+                  </button>
+                </div>
+                {streamerSetupSubTab === "policy" ? (
+                  <>
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
                   <input
                     type="checkbox"
@@ -993,13 +1113,41 @@ export default function ServerDetailPage() {
                   />
                   Allow streamers to use this server for TikFinity webhooks
                 </label>
+                <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={streamerRequireApproval}
+                    onChange={(e) => setStreamerRequireApproval(e.target.checked)}
+                    className="mt-1 rounded border-zinc-600"
+                  />
+                  <span>
+                    <span className="font-medium text-zinc-100">Require owner approval</span>
+                    <span className="mt-1 block text-xs font-normal text-zinc-500">
+                      When enabled, only streamers you add to the allowlist below <strong className="text-zinc-400">or</strong>{" "}
+                      people you approve under <strong className="text-zinc-400">Access requests</strong> (from the public{" "}
+                      <a href="/server-list" className="text-rust-cyan hover:underline" target="_blank" rel="noreferrer">
+                        server list
+                      </a>
+                      ) may use TikFinity on this server. They must already have a staff-approved RustMaxx streamer
+                      application.
+                    </span>
+                  </span>
+                </label>
                 <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                   <p className="mb-2 text-xs font-medium text-zinc-400">Allowed streamers (optional)</p>
-                  <p className="mb-2 text-xs text-zinc-500">
-                    Leave the list empty to let <strong className="text-zinc-400">any</strong> eligible streamer connect
-                    (same as before). Add RustMaxx account emails to <strong className="text-zinc-400">restrict</strong> who
-                    may create a webhook or receive TikFinity events on this server.
-                  </p>
+                  {streamerRequireApproval ? (
+                    <p className="mb-2 text-xs text-zinc-500">
+                      With <strong className="text-zinc-400">Require owner approval</strong> on, leave this empty to rely only
+                      on <strong className="text-zinc-400">Access requests</strong>, or add emails so those accounts are always
+                      allowed without a pending request.
+                    </p>
+                  ) : (
+                    <p className="mb-2 text-xs text-zinc-500">
+                      Leave the list empty to let <strong className="text-zinc-400">any</strong> eligible streamer connect.
+                      Add RustMaxx account emails to <strong className="text-zinc-400">restrict</strong> who may create a
+                      webhook or receive TikFinity events on this server.
+                    </p>
+                  )}
                   {allowlistErr ? (
                     <p className="mb-2 text-xs text-red-400">{allowlistErr}</p>
                   ) : null}
@@ -1186,6 +1334,92 @@ export default function ServerDetailPage() {
                 >
                   {streamerSaving ? "Saving…" : "Save streamer settings"}
                 </button>
+                  </>
+                ) : (
+                  <div className="space-y-4 text-sm text-zinc-300">
+                    <p className="text-xs text-zinc-500">
+                      Streamers with a staff-approved RustMaxx application can request access from the public server list
+                      when <strong className="text-zinc-400">Require owner approval</strong> is on under Actions &amp;
+                      allowlist. Approve or deny here; approved streamers can add their TikFinity webhook for this server.
+                    </p>
+                    {streamerRequestsLoading ? (
+                      <p className="text-xs text-zinc-500">Loading requests…</p>
+                    ) : streamerRequests ? (
+                      <>
+                        <div>
+                          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Pending</h3>
+                          {streamerRequests.pending.length === 0 ? (
+                            <p className="text-xs text-zinc-600">No pending requests.</p>
+                          ) : (
+                            <ul className="space-y-2">
+                              {streamerRequests.pending.map((r) => (
+                                <li
+                                  key={r.id}
+                                  className="flex flex-col gap-2 rounded border border-zinc-800 bg-zinc-950/50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                  <div>
+                                    <p className="font-medium text-zinc-200">{r.applicant_email}</p>
+                                    {r.message ? (
+                                      <p className="mt-1 text-xs text-zinc-500">&ldquo;{r.message}&rdquo;</p>
+                                    ) : null}
+                                  </div>
+                                  <div className="flex shrink-0 gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={streamerRequestBusyId !== null}
+                                      onClick={() => void decideStreamerRequest(r.id, "approve")}
+                                      className="rounded bg-emerald-800/80 px-2.5 py-1 text-xs font-medium text-emerald-100 hover:bg-emerald-700/80 disabled:opacity-50"
+                                    >
+                                      {streamerRequestBusyId === r.id ? "…" : "Approve"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={streamerRequestBusyId !== null}
+                                      onClick={() => void decideStreamerRequest(r.id, "reject")}
+                                      className="rounded border border-red-900/60 bg-red-950/40 px-2.5 py-1 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
+                                    >
+                                      {streamerRequestBusyId === r.id ? "…" : "Deny"}
+                                    </button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            Approved streamers
+                          </h3>
+                          {streamerRequests.approved.length === 0 ? (
+                            <p className="text-xs text-zinc-600">None yet.</p>
+                          ) : (
+                            <ul className="space-y-1 text-sm text-zinc-300">
+                              {streamerRequests.approved.map((r) => (
+                                <li key={r.id} className="rounded bg-zinc-900/50 px-2 py-1">
+                                  {r.applicant_email}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Rejected</h3>
+                          {streamerRequests.rejected.length === 0 ? (
+                            <p className="text-xs text-zinc-600">None.</p>
+                          ) : (
+                            <ul className="space-y-1 text-xs text-zinc-500">
+                              {streamerRequests.rejected.map((r) => (
+                                <li key={r.id}>{r.applicant_email}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-zinc-600">Could not load requests.</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -520,8 +520,12 @@ export default function StreamerDashboardPage() {
         <p className="mb-3 text-xs text-zinc-500">
           Add each RustMaxx server you want TikFinity to drive — you get a <strong className="text-zinc-400">separate URL</strong>{" "}
           per server. Servers you own or are on the team for always appear in the add list; others appear once they enable{" "}
-          <strong className="text-zinc-400">Streamer interactions</strong> and, if they use an allowlist, add your RustMaxx
-          account email there.
+          <strong className="text-zinc-400">Streamer interactions</strong>. If they use an allowlist, add your email there;
+          if they require owner approval, submit a request from the public{" "}
+          <Link href="/server-list" className="text-rust-cyan hover:underline">
+            server list
+          </Link>{" "}
+          after RustMaxx staff approves your streamer application.
         </p>
         {servers.length === 0 ? (
           <p className="mb-4 rounded-lg border border-amber-800/60 bg-amber-950/30 p-3 text-sm text-amber-100/95">

@@ -78,6 +78,8 @@ export async function PATCH(
     streamer_allowed_actions?: string[];
     /** Rust item shortnames streamers may reference; subset of platform streamer items. */
     streamer_allowed_item_shortnames?: string[];
+    /** When true, only allowlisted users or users with an approved server access request may use TikFinity webhooks. */
+    streamer_join_requires_owner_approval?: boolean;
   };
   try {
     body = await request.json();
@@ -188,6 +190,17 @@ export async function PATCH(
     values.push(parsed);
   }
 
+  if (body.streamer_join_requires_owner_approval !== undefined) {
+    if (typeof body.streamer_join_requires_owner_approval !== "boolean") {
+      return NextResponse.json(
+        { error: "streamer_join_requires_owner_approval must be a boolean" },
+        { status: 400 }
+      );
+    }
+    updates.push(`streamer_join_requires_owner_approval = $${idx++}`);
+    values.push(body.streamer_join_requires_owner_approval);
+  }
+
   if (body.tikfinity_anchor_steam_id !== undefined) {
     const raw = body.tikfinity_anchor_steam_id;
     if (raw === null || raw === "") {
@@ -219,7 +232,7 @@ export async function PATCH(
   if (rconCredentialsChanged) disconnect(serverId);
   values.push(serverId);
   const { rows } = await query<ServerRow>(
-    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id, streamer_interactions_enabled, streamer_allowed_actions, streamer_allowed_item_shortnames, streamer_allowed_user_ids`,
+    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id, streamer_interactions_enabled, streamer_allowed_actions, streamer_allowed_item_shortnames, streamer_allowed_user_ids, streamer_join_requires_owner_approval`,
     values
   );
   const auditFields = Object.keys(body).filter((k) => k !== "rcon_password");

@@ -25,8 +25,11 @@ export async function GET(
     streamer_interactions_enabled: boolean;
     streamer_allowed_actions: string[];
     streamer_allowed_item_shortnames: string[] | null;
+    streamer_join_requires_owner_approval: boolean;
   }>(
-    `SELECT streamer_interactions_enabled, streamer_allowed_actions, streamer_allowed_item_shortnames FROM servers WHERE id = $1`,
+    `SELECT streamer_interactions_enabled, streamer_allowed_actions, streamer_allowed_item_shortnames,
+            COALESCE(streamer_join_requires_owner_approval, false) AS streamer_join_requires_owner_approval
+     FROM servers WHERE id = $1`,
     [serverId]
   );
   const row = rows[0];
@@ -34,6 +37,7 @@ export async function GET(
   const selectableItems = await getSelectablePlatformStreamerItems();
   return NextResponse.json({
     streamer_interactions_enabled: row?.streamer_interactions_enabled ?? false,
+    streamer_join_requires_owner_approval: row?.streamer_join_requires_owner_approval ?? false,
     streamer_allowed_actions: Array.isArray(row?.streamer_allowed_actions)
       ? row.streamer_allowed_actions
       : [],

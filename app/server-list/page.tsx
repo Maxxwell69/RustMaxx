@@ -63,10 +63,11 @@ export default function ServerListPage() {
                 const location = s.location?.trim() || null;
                 const logoUrl = s.logo_url?.trim() || null;
                 return (
-                  <li
-                    key={s.id}
-                    className="rounded-lg border border-rust-border bg-rust-surface p-5"
-                  >
+                  <li key={s.id}>
+                    <Link
+                      href={`/server-list/${s.id}`}
+                      className="block rounded-lg border border-rust-border bg-rust-surface p-5 transition-colors hover:border-rust-cyan/40 hover:bg-rust-surface/90"
+                    >
                     <div className="flex flex-wrap items-start gap-4">
                       {logoUrl && (
                         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-rust-border bg-rust-panel">
@@ -102,8 +103,10 @@ export default function ServerListPage() {
                         {!connectAddress && (
                           <p className="mt-2 text-xs text-zinc-500">Connect info not provided</p>
                         )}
+                        <p className="mt-3 text-xs text-rust-cyan/90">Open details &amp; streamer access →</p>
                       </div>
                     </div>
+                    </Link>
                   </li>
                 );
               })}

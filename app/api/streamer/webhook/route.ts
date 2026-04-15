@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "This server’s owner has not added your account to the allowed streamers list. Ask them to open Servers → this server → Streamer interactions → Allowed streamers.",
+          "You are not allowed to use TikFinity on this server yet. If the owner requires approval, request access from the public server list page, or ask them to add you under Server → Streamer interactions (allowlist / access requests).",
       },
       { status: 403 }
     );

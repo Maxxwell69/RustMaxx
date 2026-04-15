@@ -48,6 +48,11 @@ export type ServerRow = {
   streamer_allowed_item_shortnames?: string[];
   /** When non-empty, only these user IDs may use streamer TikFinity webhooks for this server. */
   streamer_allowed_user_ids?: string[];
+  /**
+   * When true: webhook access requires an explicit allowlist entry or an approved
+   * `streamer_server_requests` row (see `lib/streamer-server-allowlist.ts`).
+   */
+  streamer_join_requires_owner_approval?: boolean;
 };
 
 export type PublicServerRow = {
