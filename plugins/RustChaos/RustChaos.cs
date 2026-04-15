@@ -255,6 +255,7 @@ namespace Oxide.Plugins
         private static readonly string[] ChickenPrefabCandidates =
         {
             "assets/rust.ai/agents/chicken/chicken.prefab",
+            "assets/rust.ai/animals/chicken.prefab",
             "assets/bundled/prefabs/autospawn/animals/chicken/chicken.prefab"
         };
 

@@ -848,22 +848,47 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   "stream-like": "sociallike",
 };
 
+/** TikFinity / Raw JSON sometimes uses different casing (`Action`, `Event`). */
+function getStringFieldCaseInsensitive(
+  o: Record<string, unknown>,
+  wantLower: string
+): string {
+  for (const k of Object.keys(o)) {
+    if (k.toLowerCase() !== wantLower) continue;
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+function getObjectFieldCaseInsensitive(
+  o: Record<string, unknown>,
+  wantLower: string
+): Record<string, unknown> | null {
+  for (const k of Object.keys(o)) {
+    if (k.toLowerCase() !== wantLower) continue;
+    const v = o[k];
+    if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+  }
+  return null;
+}
+
 /**
  * TikFinity often nests the custom event / action name under `data`, `event`, or `payload`, or puts
  * `event: { name: "wolf" }` — not only top-level `action` / `event` strings.
  */
 function readExplicitActionFromRecord(o: Record<string, unknown>): string {
   for (const k of ["action", "actionName", "eventName", "trigger"] as const) {
-    const v = o[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
+    const fromCi = getStringFieldCaseInsensitive(o, k);
+    if (fromCi) return fromCi;
   }
-  const ev = o.event;
-  if (typeof ev === "string" && ev.trim()) return ev.trim();
-  if (ev && typeof ev === "object" && !Array.isArray(ev)) {
-    const eo = ev as Record<string, unknown>;
+  const evStr = getStringFieldCaseInsensitive(o, "event");
+  if (evStr) return evStr;
+  const evObj = getObjectFieldCaseInsensitive(o, "event");
+  if (evObj) {
     for (const k of ["name", "action", "event", "eventName", "type"]) {
-      const v = eo[k];
-      if (typeof v === "string" && v.trim()) return v.trim();
+      const fromCi = getStringFieldCaseInsensitive(evObj, k);
+      if (fromCi) return fromCi;
     }
   }
   return "";
