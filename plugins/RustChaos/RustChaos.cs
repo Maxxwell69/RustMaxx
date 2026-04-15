@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.24")]
+    [Info("RustChaos", "RustMaxx", "1.15.25")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -87,6 +87,21 @@ namespace Oxide.Plugins
         private const float SingleSpawnDelaySeconds = 10f;
         private readonly Dictionary<ulong, float> _reviveChaosProtectUntil = new Dictionary<ulong, float>();
 
+        private const string StatusFxUiRoot = "RustChaos_StatusFx";
+        private const string StatusBlindRoot = "RustChaos_StatusBlind";
+
+        private sealed class StreamerTimedStatusRow
+        {
+            public string Kind;
+            public float EndTime;
+            public bool BlindOverlay;
+            public string ViewerName;
+            public string GiftName;
+        }
+
+        private readonly List<StreamerTimedStatusRow> _streamerTimedStatuses = new List<StreamerTimedStatusRow>();
+        private Timer _streamerStatusUiTimer;
+
         private void Init()
         {
             // Always on: chaos-wave kills + heli-chaos bonus crates (see OnEntityDeath).
@@ -105,12 +120,17 @@ namespace Oxide.Plugins
             _soloWildAnimalIds = null;
             _soloWildStreamerUserId = 0ul;
             _reviveChaosProtectUntil.Clear();
+            DestroyStreamerStatusTicker();
+            _streamerTimedStatuses.Clear();
+            ClearStreamerStatusUiForAllPlayers();
         }
 
         private void OnPlayerDisconnected(BasePlayer player, string reason)
         {
             if (player == null) return;
             _reviveChaosProtectUntil.Remove(player.userID);
+            if (IsConfiguredStreamer(player))
+                ClearStreamerTimedStatusesAndUi("streamer_disconnected", player);
         }
 
         /// <summary>Cancel Fall damage during post-revive window (residual impact velocity / late ApplyFallDamageFromVelocity after RecoverFromWounded).</summary>
@@ -182,7 +202,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50", "statuspoison", "statusdehydrated", "statushungry", "statusbleeding", "statusdart" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -336,7 +356,7 @@ namespace Oxide.Plugins
 
             if (!arg.HasArgs(3))
             {
-                arg.ReplyWith("Usage: rustchaos <action> <viewerName> <giftName> [scrapAmount] [customMessage]");
+                arg.ReplyWith("Usage: rustchaos <action> <viewerName> <giftName> [scrapOrDurationSec] [customMessage] — statuspoison/statusdehydrated/statushungry/statusbleeding/statusdart use arg4 as duration (default 10, max 120).");
                 return;
             }
 
@@ -699,6 +719,41 @@ namespace Oxide.Plugins
                     }
                     break;
 
+                case "statuspoison":
+                {
+                    string err = TryApplyStreamerStatusWebhook(target, "poison", false, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
+                case "statusdehydrated":
+                {
+                    string err = TryApplyStreamerStatusWebhook(target, "dehydrated", false, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
+                case "statushungry":
+                {
+                    string err = TryApplyStreamerStatusWebhook(target, "hungry", false, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
+                case "statusbleeding":
+                {
+                    string err = TryApplyStreamerStatusWebhook(target, "bleeding", false, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
+                case "statusdart":
+                {
+                    string err = TryApplyStreamerStatusWebhook(target, "dart", true, viewerName, giftName, ChatMsg, scrapAmount);
+                    if (err != null) return err;
+                    break;
+                }
+
                 case "supply":
                 case "likes":
                     if (target != null)
@@ -783,12 +838,12 @@ namespace Oxide.Plugins
                     break;
             }
 
-            if (scrapAmount > 0 && target != null)
+            if (!IsStreamerStatusEffectAction(action) && scrapAmount > 0 && target != null)
             {
                 GiveScrapToPlayer(target, scrapAmount);
                 Puts($"{LogPrefix} Gave {scrapAmount} scrap to streamer {target.displayName}");
             }
-            else if (scrapAmount > 0 && target == null)
+            else if (!IsStreamerStatusEffectAction(action) && scrapAmount > 0 && target == null)
             {
                 PrintWarning($"{LogPrefix} Streamer not online – scrap not given ({scrapAmount} would have been given).");
             }
@@ -1186,7 +1241,12 @@ namespace Oxide.Plugins
                    action == "revivechaos" ||
                    action == "chaosheli" ||
                    action == "bunny1" ||
-                   action == "pistolammo50";
+                   action == "pistolammo50" ||
+                   action == "statuspoison" ||
+                   action == "statusdehydrated" ||
+                   action == "statushungry" ||
+                   action == "statusbleeding" ||
+                   action == "statusdart";
         }
 
         private static Vector3 GetPositionNear(BasePlayer player)
@@ -2699,6 +2759,326 @@ namespace Oxide.Plugins
             float distance = UnityEngine.Random.Range(minRadius, maxRadius);
             return pos + offset * distance;
         }
+
+        #region Streamer TikTok status effects (metabolism + lower-left HUD)
+
+        private static bool IsStreamerStatusEffectAction(string action)
+        {
+            return action == "statuspoison" || action == "statusdehydrated" || action == "statushungry" ||
+                   action == "statusbleeding" || action == "statusdart";
+        }
+
+        private bool IsConfiguredStreamer(BasePlayer player)
+        {
+            if (player == null || string.IsNullOrWhiteSpace(_config?.StreamerName)) return false;
+            return string.Equals(player.displayName, _config.StreamerName.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void DestroyStreamerStatusTicker()
+        {
+            if (_streamerStatusUiTimer != null && !_streamerStatusUiTimer.Destroyed)
+                _streamerStatusUiTimer.Destroy();
+            _streamerStatusUiTimer = null;
+        }
+
+        private void ClearStreamerStatusUiForAllPlayers()
+        {
+            foreach (var p in BasePlayer.activePlayerList)
+            {
+                if (p == null || !p.IsConnected) continue;
+                try
+                {
+                    CuiHelper.DestroyUi(p, StatusFxUiRoot);
+                    CuiHelper.DestroyUi(p, StatusBlindRoot);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+        }
+
+        private void ClearStreamerTimedStatusesAndUi(string reason, BasePlayer restoreTarget = null)
+        {
+            if (restoreTarget != null && restoreTarget.metabolism != null && _streamerTimedStatuses.Count > 0)
+            {
+                var kinds = new HashSet<string>();
+                foreach (var r in _streamerTimedStatuses)
+                {
+                    if (r?.Kind != null) kinds.Add(r.Kind);
+                }
+
+                foreach (var k in kinds)
+                    RestoreStreamerStatusMetabolism(restoreTarget, k);
+            }
+
+            DestroyStreamerStatusTicker();
+            _streamerTimedStatuses.Clear();
+            ClearStreamerStatusUiForAllPlayers();
+            if (!string.IsNullOrEmpty(reason))
+                Puts($"{LogPrefix} Cleared TikTok status effects ({reason}).");
+        }
+
+        private void EnsureStreamerStatusTicker()
+        {
+            if (_streamerStatusUiTimer != null && !_streamerStatusUiTimer.Destroyed) return;
+            _streamerStatusUiTimer = timer.Every(0.5f, StreamerStatusUiTick);
+        }
+
+        private void StreamerStatusUiTick()
+        {
+            if (_streamerTimedStatuses == null || _streamerTimedStatuses.Count == 0)
+            {
+                DestroyStreamerStatusTicker();
+                return;
+            }
+
+            var streamer = GetStreamerPlayer();
+            if (streamer == null || !streamer.IsConnected || streamer.IsSleeping())
+            {
+                ClearStreamerTimedStatusesAndUi("streamer_offline");
+                return;
+            }
+
+            float now = Time.realtimeSinceStartup;
+            for (int i = _streamerTimedStatuses.Count - 1; i >= 0; i--)
+            {
+                var row = _streamerTimedStatuses[i];
+                if (row == null || now < row.EndTime) continue;
+                RestoreStreamerStatusMetabolism(streamer, row.Kind);
+                _streamerTimedStatuses.RemoveAt(i);
+            }
+
+            if (_streamerTimedStatuses.Count == 0)
+            {
+                DestroyStreamerStatusTicker();
+                ClearStreamerStatusUiForAllPlayers();
+                return;
+            }
+
+            RebuildStreamerStatusHud(streamer);
+        }
+
+        private static string StatusKindDisplay(string kind)
+        {
+            switch (kind)
+            {
+                case "poison": return "POISONED";
+                case "dehydrated": return "DEHYDRATED";
+                case "hungry": return "STARVING";
+                case "bleeding": return "BLEEDING";
+                case "dart": return "TRANQ DART";
+                default: return kind.ToUpperInvariant();
+            }
+        }
+
+        private void RebuildStreamerStatusHud(BasePlayer player)
+        {
+            if (player == null || !player.IsConnected) return;
+            float now = Time.realtimeSinceStartup;
+            try
+            {
+                CuiHelper.DestroyUi(player, StatusFxUiRoot);
+                CuiHelper.DestroyUi(player, StatusBlindRoot);
+            }
+            catch
+            {
+                // ignore
+            }
+
+            bool blind = false;
+            var lines = new List<string>();
+            foreach (var s in _streamerTimedStatuses)
+            {
+                if (s == null || now >= s.EndTime) continue;
+                if (s.BlindOverlay) blind = true;
+                int left = Mathf.Max(0, Mathf.CeilToInt(s.EndTime - now));
+                string who = string.IsNullOrEmpty(s.ViewerName) ? "Viewer" : s.ViewerName;
+                lines.Add($"{StatusKindDisplay(s.Kind)}  {left}s  ({who})");
+            }
+
+            if (lines.Count == 0) return;
+
+            if (blind)
+            {
+                try
+                {
+                    var blindC = new CuiElementContainer();
+                    blindC.Add(new CuiPanel
+                    {
+                        Image = { Color = "0.02 0.02 0.04 0.9" },
+                        RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" }
+                    }, "Overlay", StatusBlindRoot);
+                    CuiHelper.AddUi(player, blindC);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+
+            try
+            {
+                var c = new CuiElementContainer();
+                c.Add(new CuiPanel
+                {
+                    Image = { Color = "0.14 0.1 0.08 0.9" },
+                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.42 0.2" }
+                }, "Overlay", StatusFxUiRoot);
+                c.Add(new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = string.Join("\n", lines),
+                        FontSize = 12,
+                        Align = TextAnchor.LowerLeft,
+                        Color = "1 0.88 0.55 1"
+                    },
+                    RectTransform = { AnchorMin = "0.04 0.08", AnchorMax = "0.96 0.94" }
+                }, StatusFxUiRoot);
+                CuiHelper.AddUi(player, c);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} Status HUD CUI failed: {ex.Message}");
+            }
+        }
+
+        private void RegisterStreamerTimedStatus(string kind, int durationSec, bool blindOverlay, string viewerName,
+            string giftName)
+        {
+            float now = Time.realtimeSinceStartup;
+            float end = now + Mathf.Clamp(durationSec, 1, 120);
+            StreamerTimedStatusRow existing = null;
+            foreach (var r in _streamerTimedStatuses)
+            {
+                if (r != null && r.Kind == kind)
+                {
+                    existing = r;
+                    break;
+                }
+            }
+
+            if (existing != null)
+            {
+                existing.EndTime = Mathf.Max(existing.EndTime, end);
+                existing.BlindOverlay = blindOverlay || existing.BlindOverlay;
+                existing.ViewerName = viewerName ?? existing.ViewerName;
+                existing.GiftName = giftName ?? existing.GiftName;
+            }
+            else
+            {
+                _streamerTimedStatuses.Add(new StreamerTimedStatusRow
+                {
+                    Kind = kind,
+                    EndTime = end,
+                    BlindOverlay = blindOverlay,
+                    ViewerName = viewerName ?? "",
+                    GiftName = giftName ?? ""
+                });
+            }
+
+            EnsureStreamerStatusTicker();
+            var p = GetStreamerPlayer();
+            if (p != null && p.IsConnected && !p.IsSleeping())
+                RebuildStreamerStatusHud(p);
+        }
+
+        private void ApplyStreamerStatusMetabolism(BasePlayer p, string kind)
+        {
+            if (p?.metabolism == null) return;
+            var m = p.metabolism;
+            try
+            {
+                switch (kind)
+                {
+                    case "poison":
+                    case "dart":
+                        if (m.poison != null)
+                            m.poison.value = Mathf.Min(m.poison.max, Mathf.Max(m.poison.value, m.poison.max * 0.82f));
+                        break;
+                    case "dehydrated":
+                        if (m.hydration != null)
+                            m.hydration.value = Mathf.Min(m.hydration.value, Mathf.Max(5f, m.hydration.max * 0.06f));
+                        break;
+                    case "hungry":
+                        if (m.calories != null)
+                            m.calories.value = Mathf.Min(m.calories.value, Mathf.Max(10f, m.calories.max * 0.06f));
+                        break;
+                    case "bleeding":
+                        if (m.bleeding != null)
+                            m.bleeding.value = Mathf.Min(m.bleeding.max, Mathf.Max(m.bleeding.value, 38f));
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} ApplyStreamerStatusMetabolism({kind}): {ex.Message}");
+            }
+
+            try
+            {
+                p.metabolism.SendChangesToClient();
+            }
+            catch
+            {
+                // ignore (API differs by build)
+            }
+        }
+
+        private void RestoreStreamerStatusMetabolism(BasePlayer p, string kind)
+        {
+            if (p?.metabolism == null) return;
+            var m = p.metabolism;
+            try
+            {
+                switch (kind)
+                {
+                    case "poison":
+                    case "dart":
+                        if (m.poison != null) m.poison.value = 0f;
+                        break;
+                    case "dehydrated":
+                        if (m.hydration != null) m.hydration.value = m.hydration.max;
+                        break;
+                    case "hungry":
+                        if (m.calories != null) m.calories.value = m.calories.max;
+                        break;
+                    case "bleeding":
+                        TryClearBleedMetabolismAttributes(m);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} RestoreStreamerStatusMetabolism({kind}): {ex.Message}");
+            }
+
+            try
+            {
+                p.metabolism.SendChangesToClient();
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private string TryApplyStreamerStatusWebhook(BasePlayer target, string kind, bool blindOverlay,
+            string viewerName, string giftName, Func<string, string> chatMsg, int scrapAmountArg)
+        {
+            if (target == null || !target.IsConnected || target.IsSleeping())
+                return "FAILED: Streamer must be awake online for TikTok status effects (HUD + metabolism). Check RustChaos.json StreamerName matches their display name.";
+            int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
+            ApplyStreamerStatusMetabolism(target, kind);
+            RegisterStreamerTimedStatus(kind, durationSec, blindOverlay, viewerName, giftName);
+            string label = StatusKindDisplay(kind);
+            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: {label} ({durationSec}s)"));
+            Puts($"{LogPrefix} TikTok status '{kind}' on {target.displayName} for {durationSec}s (viewer {viewerName}).");
+            return null;
+        }
+
+        #endregion
 
         /// <summary>
         /// Returns the streamer (player whose display name matches config). Effects and NPCs spawn at/near this player.

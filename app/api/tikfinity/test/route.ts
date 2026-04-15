@@ -5,6 +5,8 @@ import type { ServerRow } from "@/lib/db";
 import {
   getActionForGift,
   getDefaultGiftValue,
+  isRustChaosStatusEffectAction,
+  parseRustChaosStatusDurationSeconds,
   TIKTRIGGER_ACTIONS,
   type TikTriggerAction,
 } from "@/lib/tikfinity";
@@ -18,14 +20,20 @@ function sanitizeArg(s: string, maxLen = 48): string {
 
 /**
  * POST: Simulate a TikFinity webhook (admin-only). Same flow as webhook but with a test payload.
- * Body: { giftName: string, viewerName?: string }
+ * Body: { giftName: string, viewerName?: string, amount?: number, duration?: number, seconds?: number }
  * Use this to test RCON and plugin without sending a real TikTok gift.
  */
 export async function POST(request: NextRequest) {
   const authErr = await requireCanManageServersFromDb(request);
   if (authErr) return authErr;
 
-  let body: { giftName?: string; viewerName?: string; amount?: number };
+  let body: {
+    giftName?: string;
+    viewerName?: string;
+    amount?: number;
+    duration?: number;
+    seconds?: number;
+  };
   try {
     body = await request.json();
   } catch {
@@ -82,7 +90,10 @@ export async function POST(request: NextRequest) {
         : getDefaultGiftValue(giftName);
     return Math.min(10000, Math.max(0, raw));
   })();
-  const command = `rustchaos ${action} ${viewerArg} ${giftArg} ${scrapAmount}`;
+  const fourthArg = isRustChaosStatusEffectAction(action)
+    ? parseRustChaosStatusDurationSeconds(request.nextUrl.searchParams, body, scrapAmount)
+    : scrapAmount;
+  const command = `rustchaos ${action} ${viewerArg} ${giftArg} ${fourthArg}`;
 
   const connected = await ensureConnection(
     server.id,
@@ -115,8 +126,19 @@ export async function POST(request: NextRequest) {
     action: action as TikTriggerAction,
     viewerName,
     giftName,
-    scrapAmount: scrapAmount > 0 ? scrapAmount : undefined,
+    scrapAmount: isRustChaosStatusEffectAction(action)
+      ? undefined
+      : scrapAmount > 0
+        ? scrapAmount
+        : undefined,
+    statusDurationSeconds: isRustChaosStatusEffectAction(action) ? fourthArg : undefined,
     command,
-    debug: "Trigger sent. Check the Rust server console or in-game for the effect." + (scrapAmount > 0 ? ` Streamer receives ${scrapAmount} scrap.` : ""),
+    debug:
+      "Trigger sent. Check the Rust server console or in-game for the effect." +
+      (isRustChaosStatusEffectAction(action)
+        ? ` Status effect duration ${fourthArg}s.`
+        : scrapAmount > 0
+          ? ` Streamer receives ${scrapAmount} scrap.`
+          : ""),
   });
 }

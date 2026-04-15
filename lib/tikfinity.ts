@@ -34,6 +34,12 @@ export const TIKTRIGGER_ACTIONS = [
   "chaosheli",
   "bunny1",
   "pistolammo50",
+  /** TikTok → streamer metabolism / HUD (4th RCON arg = duration seconds, default 10, max 120). */
+  "statuspoison",
+  "statusdehydrated",
+  "statushungry",
+  "statusbleeding",
+  "statusdart",
   "bunny1npc",
   "gingynpc",
   "eggnpc",
@@ -84,6 +90,23 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   PistolAmmo50: "pistolammo50",
   pistolammo50: "pistolammo50",
   "!pistolammo50": "pistolammo50",
+  Poisoned: "statuspoison",
+  poisoned: "statuspoison",
+  "!statuspoison": "statuspoison",
+  Dehydrated: "statusdehydrated",
+  dehydrated: "statusdehydrated",
+  "!statusdehydrated": "statusdehydrated",
+  Hungry: "statushungry",
+  hungry: "statushungry",
+  Starving: "statushungry",
+  "!statushungry": "statushungry",
+  Bleeding: "statusbleeding",
+  bleeding: "statusbleeding",
+  "!statusbleeding": "statusbleeding",
+  Dart: "statusdart",
+  Tranq: "statusdart",
+  "Tranq dart": "statusdart",
+  "!statusdart": "statusdart",
   Puppy: "wolf",
   "Puppy Kisses": "wolf",
   Wolf: "wolf",
@@ -197,6 +220,18 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   ReviveChaos: 150,
   "Heli Chaos": 250,
   HeliChaos: 250,
+  Poisoned: 0,
+  poisoned: 0,
+  Dehydrated: 0,
+  dehydrated: 0,
+  Hungry: 0,
+  hungry: 0,
+  Starving: 0,
+  Bleeding: 0,
+  bleeding: 0,
+  Dart: 0,
+  Tranq: 0,
+  "Tranq dart": 0,
 };
 
 /** Human-readable label and description for each action (for admin UI). */
@@ -360,6 +395,36 @@ export const ACTION_META: Record<
     label: "50 pistol ammo",
     description: "Gives the streamer 50 pistol bullets (`ammo.pistol`) in main inventory. Default coin/scrap mapping is 0; add scrap on the TikFinity connection if you want extra scrap.",
     exampleGifts: ["Pistol ammo", "PistolAmmo50"],
+  },
+  statuspoison: {
+    label: "Streamer: poisoned",
+    description:
+      "Strong poison on the configured streamer for a timed window (default 10s, max 120s). Lower-left HUD shows remaining seconds. Duration: 4th rustchaos token, TikTok coin value, or JSON/query duration, seconds, or timer.",
+    exampleGifts: ["Poisoned", "poisoned", "!statuspoison"],
+  },
+  statusdehydrated: {
+    label: "Streamer: dehydrated",
+    description:
+      "Low hydration (thirst) for the timed window, then restore. Lower-left HUD. Same duration rules as statuspoison.",
+    exampleGifts: ["Dehydrated", "!statusdehydrated"],
+  },
+  statushungry: {
+    label: "Streamer: starving / hungry",
+    description:
+      "Low calories (hunger) for the timed window, then restore. Lower-left HUD.",
+    exampleGifts: ["Hungry", "Starving", "!statushungry"],
+  },
+  statusbleeding: {
+    label: "Streamer: bleeding",
+    description:
+      "Bleeding metabolism for the timed window, then clear. Lower-left HUD.",
+    exampleGifts: ["Bleeding", "!statusbleeding"],
+  },
+  statusdart: {
+    label: "Streamer: tranq dart (poison + blind)",
+    description:
+      "Strong poison plus a dark full-screen blind overlay for the same timer. Lower-left countdown. Same duration rules as other status actions.",
+    exampleGifts: ["Dart", "Tranq dart", "!statusdart"],
   },
   bunny1npc: {
     label: "Bunny viewer bot (spawn)",
@@ -737,6 +802,58 @@ export function getDefaultGiftValue(giftName: string): number {
   return 0;
 }
 
+/** RustChaos streamer status / HUD actions (4th RCON token = duration seconds). */
+export const RUSTCHAOS_STATUS_EFFECT_ACTION_KEYS = [
+  "statuspoison",
+  "statusdehydrated",
+  "statushungry",
+  "statusbleeding",
+  "statusdart",
+] as const;
+
+const RUSTCHAOS_STATUS_EFFECT_ACTION_SET = new Set<string>(
+  RUSTCHAOS_STATUS_EFFECT_ACTION_KEYS
+);
+
+export function isRustChaosStatusEffectAction(action: string): boolean {
+  return RUSTCHAOS_STATUS_EFFECT_ACTION_SET.has(action);
+}
+
+/**
+ * Duration for status-effect RCON: query `duration` / `seconds` / `timer`, or JSON fields of the same names,
+ * else TikTok coin/scrap integer when &gt; 0, else **10** seconds (max **120**).
+ */
+export function parseRustChaosStatusDurationSeconds(
+  searchParams: URLSearchParams,
+  body: unknown,
+  giftNumericFallback: number
+): number {
+  for (const q of ["duration", "seconds", "timer"]) {
+    const raw = searchParams.get(q);
+    if (raw != null && raw.trim() !== "") {
+      const n = Math.trunc(Number(raw));
+      if (Number.isFinite(n) && n > 0) return Math.min(120, Math.max(1, n));
+    }
+  }
+  if (body && typeof body === "object") {
+    const o = body as Record<string, unknown>;
+    for (const k of ["duration", "seconds", "timer", "durationSeconds"] as const) {
+      const v = o[k];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        const n = Math.trunc(v);
+        if (n > 0) return Math.min(120, Math.max(1, n));
+      }
+      if (typeof v === "string" && v.trim()) {
+        const n = Math.trunc(Number(v));
+        if (Number.isFinite(n) && n > 0) return Math.min(120, Math.max(1, n));
+      }
+    }
+  }
+  if (giftNumericFallback > 0)
+    return Math.min(120, Math.max(1, Math.trunc(giftNumericFallback)));
+  return 10;
+}
+
 /** TikFinity chat / comment webhooks often put the command here (not in `action` / `event`). */
 const CHAT_MESSAGE_KEYS = [
   "message",
@@ -846,6 +963,16 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   sociallike: "sociallike",
   streamlike: "sociallike",
   "stream-like": "sociallike",
+  statuspoison: "statuspoison",
+  poison: "statuspoison",
+  statusdehydrated: "statusdehydrated",
+  thirst: "statusdehydrated",
+  statushungry: "statushungry",
+  hunger: "statushungry",
+  statusbleeding: "statusbleeding",
+  bleed: "statusbleeding",
+  statusdart: "statusdart",
+  tranq: "statusdart",
 };
 
 /** TikFinity / Raw JSON sometimes uses different casing (`Action`, `Event`). */

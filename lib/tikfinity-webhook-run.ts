@@ -14,6 +14,8 @@ import {
   parseTikfinityWebhookBody,
   type TikTriggerAction,
   isTikTokSocialOnlyAction,
+  isRustChaosStatusEffectAction,
+  parseRustChaosStatusDurationSeconds,
 } from "@/lib/tikfinity";
 import { parseNpcTemplateKey } from "@/lib/tikfinity-connections";
 import { ensureConnection, runAndWait } from "@/lib/rcon-manager";
@@ -488,6 +490,9 @@ export async function runTikfinityWebhook(
   if (RUSTCHAOS_TEN_SCRAP_SPAWN_ACTIONS.has(action)) {
     giftValue = giftValue > 0 ? Math.min(giftValue, 10) : 10;
   }
+  const rustChaosFourthArg = isRustChaosStatusEffectAction(action)
+    ? parseRustChaosStatusDurationSeconds(request.nextUrl.searchParams, body, giftValue)
+    : giftValue;
   const messageArg =
     connectionFromAdmin?.message?.trim() != null && connectionFromAdmin.message.trim() !== ""
       ? sanitizeArg(connectionFromAdmin.message.trim(), 128)
@@ -859,10 +864,12 @@ export async function runTikfinityWebhook(
 
   const command =
     messageArg != null
-      ? `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue} ${messageArg}`
-      : `rustchaos ${action} ${viewerArg} ${giftArg} ${giftValue}`;
+      ? `rustchaos ${action} ${viewerArg} ${giftArg} ${rustChaosFourthArg} ${messageArg}`
+      : `rustchaos ${action} ${viewerArg} ${giftArg} ${rustChaosFourthArg}`;
 
-  if (giftValue > 0) {
+  if (isRustChaosStatusEffectAction(action)) {
+    console.log("[tikfinity webhook] status duration (s):", rustChaosFourthArg, "action:", action);
+  } else if (giftValue > 0) {
     console.log("[tikfinity webhook] scrap:", giftValue, "fromConnection:", scrapFromConnection, "fromPayload:", fromPayload, "giftName:", payload.giftName);
   }
 
@@ -949,7 +956,14 @@ export async function runTikfinityWebhook(
         viewerName: payload.viewerName,
         giftName: payload.giftName,
         command,
-        scrapAmount: giftValue > 0 ? giftValue : undefined,
+        scrapAmount: isRustChaosStatusEffectAction(action)
+          ? undefined
+          : giftValue > 0
+            ? giftValue
+            : undefined,
+        statusDurationSeconds: isRustChaosStatusEffectAction(action)
+          ? rustChaosFourthArg
+          : undefined,
         rconResponse,
         debug:
           "Game server rejected the action. Read rconResponse; check RustChaos plugin version, StreamerName in RustChaos.json, and server console [RustChaos].",
@@ -964,7 +978,14 @@ export async function runTikfinityWebhook(
     action,
     serverId: server.id,
     command,
-    scrapAmount: giftValue ? giftValue : undefined,
+    scrapAmount: isRustChaosStatusEffectAction(action)
+      ? undefined
+      : giftValue
+        ? giftValue
+        : undefined,
+    statusDurationSeconds: isRustChaosStatusEffectAction(action)
+      ? rustChaosFourthArg
+      : undefined,
     rconResponse,
   }).catch(() => {});
 
@@ -982,7 +1003,14 @@ export async function runTikfinityWebhook(
       viewerName: payload.viewerName,
       giftName: payload.giftName,
       command,
-      scrapAmount: giftValue > 0 ? giftValue : undefined,
+      scrapAmount: isRustChaosStatusEffectAction(action)
+        ? undefined
+        : giftValue > 0
+          ? giftValue
+          : undefined,
+      statusDurationSeconds: isRustChaosStatusEffectAction(action)
+        ? rustChaosFourthArg
+        : undefined,
       rconResponse: rconResponse || undefined,
       debug:
         "RCON OK. If an expected effect or NPC did not appear, check streamer online + RustChaos.json StreamerName + server console [RustChaos].",
