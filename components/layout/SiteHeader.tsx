@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: "/servers", label: "Dashboard" },
   { href: "/", label: "Home" },
   { href: "/server-list", label: "Server list" },
+  { href: "/streamers", label: "Streamers" },
   { href: "/streamer-interaction", label: "Streamer Interaction" },
   { href: "/features", label: "Features" },
 ];
@@ -28,8 +29,15 @@ export function SiteHeader() {
   }, []);
 
   const isDashboard = pathname === "/servers" || pathname?.startsWith("/servers/");
+  const isStreamersSection = pathname === "/streamers" || pathname?.startsWith("/streamers/");
 
   const navLinks = loggedIn ? NAV_LINKS.filter((l) => l.href !== "/") : NAV_LINKS;
+
+  function navLinkActive(href: string): boolean {
+    if (href === "/servers") return isDashboard;
+    if (href === "/streamers") return isStreamersSection;
+    return pathname === href;
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/80">
@@ -53,7 +61,7 @@ export function SiteHeader() {
               key={href}
               href={href}
               className={`shrink-0 rounded px-2 py-1 text-sm transition-colors hover:opacity-100 ${
-                (href === "/servers" ? isDashboard : pathname === href)
+                navLinkActive(href)
                   ? "font-medium text-rust-cyan bg-rust-cyan/10"
                   : "text-rust-cyan opacity-90 hover:bg-zinc-800"
               }`}
@@ -99,7 +107,7 @@ export function SiteHeader() {
             key={href}
             href={href}
             className={`shrink-0 rounded px-3 py-1.5 text-sm ${
-              (href === "/servers" ? isDashboard : pathname === href)
+              navLinkActive(href)
                 ? "bg-rust-cyan/10 font-medium text-rust-cyan"
                 : "text-rust-cyan opacity-90 hover:opacity-100"
             }`}

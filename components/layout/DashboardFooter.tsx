@@ -46,6 +46,12 @@ export function DashboardFooter() {
               Public server list
             </Link>
             <Link
+              href="/streamers"
+              className="text-rust-cyan opacity-90 transition-colors hover:opacity-100"
+            >
+              Public streamers
+            </Link>
+            <Link
               href="/streamer-interaction"
               className="text-rust-cyan opacity-90 transition-colors hover:opacity-100"
             >
