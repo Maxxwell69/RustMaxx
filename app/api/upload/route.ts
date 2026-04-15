@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
+import { UPLOADS_DIR } from "@/lib/upload-files";
 
 const MAX_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -36,13 +37,13 @@ export async function POST(request: NextRequest) {
 
     const ext = EXT_MAP[type] || ".jpg";
     const name = `${randomUUID()}${ext}`;
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadsDir, { recursive: true });
-    const filePath = path.join(uploadsDir, name);
+    await mkdir(UPLOADS_DIR, { recursive: true });
+    const filePath = path.join(UPLOADS_DIR, name);
     const bytes = await file.arrayBuffer();
     await writeFile(filePath, Buffer.from(bytes));
 
-    const url = `/uploads/${name}`;
+    /** Route through the app so images work when static /public serving does not see new files. */
+    const url = `/api/uploads/${name}`;
     return NextResponse.json({ url });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

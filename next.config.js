@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async rewrites() {
+    return [
+      /** Legacy URLs in DB; GET is served by app/api/uploads/[filename] (not always reachable as static /public). */
+      { source: "/uploads/:filename", destination: "/api/uploads/:filename" },
+    ];
+  },
   async headers() {
     return [
       {

@@ -3,22 +3,17 @@ import bcrypt from "bcryptjs";
 import type { UserRole } from "./permissions";
 import type { MembershipLevel } from "./membership-level";
 import { MEMBERSHIP_LEVELS } from "./membership-level";
+import { isOurHostedUploadPublicPath } from "./upload-files";
 
 const SALT_ROUNDS = 10;
 
 /**
- * Accepts full http(s) URLs or same-origin paths from POST /api/upload (`/uploads/<filename>`).
- * Rejects path traversal and odd characters in relative paths.
+ * Accepts full http(s) URLs or same-origin paths from POST /api/upload (`/api/uploads/…` or legacy `/uploads/…`).
  */
 function isAllowedStreamerDirectoryAvatarUrl(t: string): boolean {
   const trimmed = t.trim();
   if (!trimmed || trimmed.length > 2048) return false;
-  if (trimmed.startsWith("/uploads/")) {
-    const name = trimmed.slice("/uploads/".length);
-    if (!name || name.includes("/") || name.includes("\\") || name.includes("..")) return false;
-    if (name.includes("?") || name.includes("#")) return false;
-    return /^[a-zA-Z0-9._-]+$/.test(name);
-  }
+  if (isOurHostedUploadPublicPath(trimmed)) return true;
   try {
     const u = new URL(trimmed);
     return u.protocol === "http:" || u.protocol === "https:";
@@ -335,7 +330,7 @@ export async function updateStreamerDirectoryFields(
         return {
           ok: false,
           error:
-            "Avatar URL must be https (or http) or a path from Upload image, for example /uploads/your-file.png.",
+            "Avatar URL must be https (or http) or a path from Upload image, for example /api/uploads/your-file.png.",
         };
       }
       updates.push(`streamer_directory_avatar_url = $${idx++}`);
