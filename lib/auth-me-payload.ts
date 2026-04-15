@@ -11,6 +11,10 @@ export type AuthMeSteam = {
 
 export type AuthMePayload = UserProfile & {
   steam: AuthMeSteam | null;
+  last_login_at: string | null;
+  streamer_directory_visible: boolean;
+  streamer_directory_avatar_url: string | null;
+  streamer_directory_bio: string | null;
 };
 
 export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> {
@@ -36,5 +40,21 @@ export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> 
     };
   }
 
-  return { ...base, steam };
+  const lastLogin =
+    user.last_login_at == null
+      ? null
+      : user.last_login_at instanceof Date
+        ? user.last_login_at.toISOString()
+        : typeof user.last_login_at === "string"
+          ? user.last_login_at
+          : null;
+
+  return {
+    ...base,
+    steam,
+    last_login_at: lastLogin,
+    streamer_directory_visible: user.streamer_directory_visible === true,
+    streamer_directory_avatar_url: user.streamer_directory_avatar_url ?? null,
+    streamer_directory_bio: user.streamer_directory_bio ?? null,
+  };
 }

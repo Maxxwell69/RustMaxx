@@ -21,6 +21,13 @@ type ProfiledPlayer = {
   active: boolean;
 };
 
+function formatStreamerLastLogin(iso: string | null | undefined): string {
+  if (iso == null || iso === "") return "Never recorded (password sign-in not tracked yet)";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString();
+}
+
 export default function ServerDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -83,41 +90,27 @@ export default function ServerDetailPage() {
   const [allowlistErr, setAllowlistErr] = useState<string | null>(null);
   const [streamerSetupSubTab, setStreamerSetupSubTab] = useState<"policy" | "access">("policy");
   const [streamerRequireApproval, setStreamerRequireApproval] = useState(false);
+  type StreamerAccessRequestRow = {
+    id: string;
+    user_id: string;
+    applicant_email: string;
+    applicant_last_login_at?: string | null;
+    message: string | null;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    reviewed_at: string | null;
+  };
   const [streamerRequests, setStreamerRequests] = useState<{
-    pending: Array<{
-      id: string;
-      user_id: string;
-      applicant_email: string;
-      message: string | null;
-      status: string;
-      created_at: string;
-      updated_at: string;
-      reviewed_at: string | null;
-    }>;
-    approved: Array<{
-      id: string;
-      user_id: string;
-      applicant_email: string;
-      message: string | null;
-      status: string;
-      created_at: string;
-      updated_at: string;
-      reviewed_at: string | null;
-    }>;
-    rejected: Array<{
-      id: string;
-      user_id: string;
-      applicant_email: string;
-      message: string | null;
-      status: string;
-      created_at: string;
-      updated_at: string;
-      reviewed_at: string | null;
-    }>;
+    pending: StreamerAccessRequestRow[];
+    approved: StreamerAccessRequestRow[];
+    rejected: StreamerAccessRequestRow[];
+    removed: StreamerAccessRequestRow[];
   } | null>(null);
   const [streamerRequestsLoading, setStreamerRequestsLoading] = useState(false);
   const [streamerRequestsError, setStreamerRequestsError] = useState<string | null>(null);
   const [streamerRequestBusyId, setStreamerRequestBusyId] = useState<string | null>(null);
+  const [streamerKickBusyUserId, setStreamerKickBusyUserId] = useState<string | null>(null);
   const [streamerSelectableItems, setStreamerSelectableItems] = useState<
     {
       shortname: string;
@@ -235,6 +228,7 @@ export default function ServerDetailPage() {
           pending: data.pending,
           approved: data.approved,
           rejected: data.rejected,
+          removed: Array.isArray(data.removed) ? data.removed : [],
         });
       } else {
         setStreamerRequests(null);
@@ -584,16 +578,56 @@ export default function ServerDetailPage() {
         setStreamerFeedback(typeof data.error === "string" ? data.error : "Could not update request");
         return;
       }
-      if (data.pending && data.approved && data.rejected) {
+      if (Array.isArray(data.pending) && Array.isArray(data.approved) && Array.isArray(data.rejected)) {
         setStreamerRequestsError(null);
         setStreamerRequests({
           pending: data.pending,
           approved: data.approved,
           rejected: data.rejected,
+          removed: Array.isArray(data.removed) ? data.removed : [],
         });
       }
     } finally {
       setStreamerRequestBusyId(null);
+    }
+  }
+
+  async function kickApprovedStreamer(userId: string) {
+    if (
+      !window.confirm(
+        "Remove this streamer from your server? Their TikFinity webhooks for this server will stop and they will need a new approval to connect again."
+      )
+    ) {
+      return;
+    }
+    setStreamerKickBusyUserId(userId);
+    setStreamerFeedback(null);
+    try {
+      const res = await fetch(`/api/servers/${id}/streamer-kick`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStreamerFeedback(typeof data.error === "string" ? data.error : "Could not remove streamer");
+        return;
+      }
+      if (Array.isArray(data.pending) && Array.isArray(data.approved) && Array.isArray(data.rejected)) {
+        setStreamerRequestsError(null);
+        setStreamerRequests({
+          pending: data.pending,
+          approved: data.approved,
+          rejected: data.rejected,
+          removed: Array.isArray(data.removed) ? data.removed : [],
+        });
+        setStreamerFeedback("Streamer removed from this server.");
+      }
+    } catch {
+      setStreamerFeedback("Network error while removing streamer.");
+    } finally {
+      setStreamerKickBusyUserId(null);
     }
   }
 
@@ -1438,10 +1472,60 @@ export default function ServerDetailPage() {
                           {streamerRequests.approved.length === 0 ? (
                             <p className="text-xs text-zinc-600">None yet.</p>
                           ) : (
-                            <ul className="space-y-1 text-sm text-zinc-300">
+                            <ul className="space-y-2">
                               {streamerRequests.approved.map((r) => (
-                                <li key={r.id} className="rounded bg-zinc-900/50 px-2 py-1">
+                                <li
+                                  key={r.id}
+                                  className="flex flex-col gap-2 rounded border border-zinc-800 bg-zinc-950/50 px-3 py-2 sm:flex-row sm:items-start sm:justify-between"
+                                >
+                                  <div className="min-w-0 space-y-1 text-sm text-zinc-300">
+                                    <p className="font-medium text-zinc-200">{r.applicant_email}</p>
+                                    <p className="text-xs text-zinc-500">
+                                      Last sign-in (password):{" "}
+                                      <span className="text-zinc-400">{formatStreamerLastLogin(r.applicant_last_login_at)}</span>
+                                    </p>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                                      <Link
+                                        href={`/streamers/${r.user_id}`}
+                                        className="text-rust-cyan hover:underline"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        RustMaxx profile ↗
+                                      </Link>
+                                    </div>
+                                  </div>
+                                  <div className="flex shrink-0 flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={streamerKickBusyUserId !== null}
+                                      onClick={() => void kickApprovedStreamer(r.user_id)}
+                                      className="rounded border border-red-900/60 bg-red-950/40 px-2.5 py-1 text-xs font-medium text-red-200 hover:bg-red-950/60 disabled:opacity-50"
+                                    >
+                                      {streamerKickBusyUserId === r.user_id ? "Removing…" : "Kick from server"}
+                                    </button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            Removed by owner
+                          </h3>
+                          {streamerRequests.removed.length === 0 ? (
+                            <p className="text-xs text-zinc-600">None.</p>
+                          ) : (
+                            <ul className="space-y-1 text-xs text-zinc-500">
+                              {streamerRequests.removed.map((r) => (
+                                <li key={r.id}>
                                   {r.applicant_email}
+                                  {r.reviewed_at ? (
+                                    <span className="ml-2 text-zinc-600">
+                                      · {new Date(r.reviewed_at).toLocaleString()}
+                                    </span>
+                                  ) : null}
                                 </li>
                               ))}
                             </ul>

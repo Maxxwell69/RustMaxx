@@ -5,18 +5,15 @@ import { audit } from "@/lib/audit";
 import {
   listStreamerServerRequestsWithEmails,
   resolveStreamerServerRequest,
+  serializeStreamerServerRequestForApi,
 } from "@/lib/streamer-server-requests";
 
-function serializeRequest(r: Awaited<ReturnType<typeof listStreamerServerRequestsWithEmails>>[number]) {
+function partitionRequests(rows: Awaited<ReturnType<typeof listStreamerServerRequestsWithEmails>>) {
   return {
-    id: r.id,
-    user_id: r.user_id,
-    applicant_email: r.applicant_email,
-    message: r.message,
-    status: r.status,
-    reviewed_at: r.reviewed_at instanceof Date ? r.reviewed_at.toISOString() : r.reviewed_at,
-    created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
-    updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at,
+    pending: rows.filter((r) => r.status === "pending").map(serializeStreamerServerRequestForApi),
+    approved: rows.filter((r) => r.status === "approved").map(serializeStreamerServerRequestForApi),
+    rejected: rows.filter((r) => r.status === "rejected").map(serializeStreamerServerRequestForApi),
+    removed: rows.filter((r) => r.status === "revoked").map(serializeStreamerServerRequestForApi),
   };
 }
 
@@ -37,10 +34,7 @@ export async function GET(
 
   try {
     const rows = await listStreamerServerRequestsWithEmails(serverId);
-    const pending = rows.filter((r) => r.status === "pending").map(serializeRequest);
-    const approved = rows.filter((r) => r.status === "approved").map(serializeRequest);
-    const rejected = rows.filter((r) => r.status === "rejected").map(serializeRequest);
-    return NextResponse.json({ pending, approved, rejected });
+    return NextResponse.json(partitionRequests(rows));
   } catch (e) {
     console.error("[streamer-requests] GET failed:", e);
     const msg = e instanceof Error ? e.message : String(e);
@@ -51,7 +45,7 @@ export async function GET(
     return NextResponse.json(
       {
         error: missingTable
-          ? "Database is missing streamer access tables. Run migration 027_streamer_server_requests.sql on this environment."
+          ? "Database is missing streamer access tables. Run migrations 027 and 028 on this environment."
           : "Could not load access requests.",
       },
       { status: 503 }
@@ -102,8 +96,5 @@ export async function POST(
   });
 
   const rows = await listStreamerServerRequestsWithEmails(serverId);
-  const pending = rows.filter((r) => r.status === "pending").map(serializeRequest);
-  const approved = rows.filter((r) => r.status === "approved").map(serializeRequest);
-  const rejected = rows.filter((r) => r.status === "rejected").map(serializeRequest);
-  return NextResponse.json({ ok: true, pending, approved, rejected });
+  return NextResponse.json({ ok: true, ...partitionRequests(rows) });
 }

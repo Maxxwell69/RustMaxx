@@ -20,6 +20,10 @@ export type UserRow = {
   membership_level: MembershipLevel;
   signup_interested_server_owner: boolean;
   signup_interested_streamer: boolean;
+  last_login_at?: Date | null;
+  streamer_directory_visible?: boolean;
+  streamer_directory_avatar_url?: string | null;
+  streamer_directory_bio?: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -39,6 +43,7 @@ const USER_SELECT = `id, email, password_hash, role, display_name,
     steam_id, steam_linked_at, stripe_customer_id, stripe_subscription_id, subscription_status,
     membership_level,
     signup_interested_server_owner, signup_interested_streamer,
+    last_login_at, streamer_directory_visible, streamer_directory_avatar_url, streamer_directory_bio,
     created_at, updated_at`;
 
 /** Same row shape before migration 023 (signup intent columns). */
@@ -66,6 +71,21 @@ function mapRowToUserRow(row: Record<string, unknown>): UserRow {
     ...base,
     signup_interested_server_owner: row.signup_interested_server_owner === true,
     signup_interested_streamer: row.signup_interested_streamer === true,
+    last_login_at:
+      row.last_login_at == null
+        ? null
+        : row.last_login_at instanceof Date
+          ? row.last_login_at
+          : typeof row.last_login_at === "string"
+            ? new Date(row.last_login_at)
+            : null,
+    streamer_directory_visible: Boolean(row.streamer_directory_visible),
+    streamer_directory_avatar_url:
+      typeof row.streamer_directory_avatar_url === "string"
+        ? row.streamer_directory_avatar_url
+        : null,
+    streamer_directory_bio:
+      typeof row.streamer_directory_bio === "string" ? row.streamer_directory_bio : null,
   };
 }
 
@@ -254,4 +274,78 @@ export async function updateUserMembershipLevel(
     `UPDATE users SET membership_level = $1, updated_at = now() WHERE id = $2 RETURNING ${USER_SELECT}`,
     [level, userId]
   );
+}
+
+export async function updateUserLastLogin(userId: string): Promise<void> {
+  await query(`UPDATE users SET last_login_at = now(), updated_at = now() WHERE id = $1`, [userId]);
+}
+
+export type StreamerDirectoryPatch = {
+  streamer_directory_visible?: boolean;
+  streamer_directory_avatar_url?: string | null;
+  streamer_directory_bio?: string | null;
+};
+
+/** Updates public directory fields for the current user (validated). */
+export async function updateStreamerDirectoryFields(
+  userId: string,
+  patch: StreamerDirectoryPatch
+): Promise<{ ok: true; user: UserRow } | { ok: false; error: string }> {
+  const updates: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (patch.streamer_directory_visible !== undefined) {
+    if (typeof patch.streamer_directory_visible !== "boolean") {
+      return { ok: false, error: "streamer_directory_visible must be a boolean" };
+    }
+    updates.push(`streamer_directory_visible = $${idx++}`);
+    values.push(patch.streamer_directory_visible);
+  }
+  if (patch.streamer_directory_avatar_url !== undefined) {
+    const raw = patch.streamer_directory_avatar_url;
+    if (raw === null || raw === "") {
+      updates.push(`streamer_directory_avatar_url = $${idx++}`);
+      values.push(null);
+    } else if (typeof raw === "string") {
+      const t = raw.trim();
+      if (t.length > 2048) return { ok: false, error: "Avatar URL is too long" };
+      try {
+        const u = new URL(t);
+        if (u.protocol !== "http:" && u.protocol !== "https:") {
+          return { ok: false, error: "Avatar URL must be http(s)" };
+        }
+      } catch {
+        return { ok: false, error: "Avatar URL is invalid" };
+      }
+      updates.push(`streamer_directory_avatar_url = $${idx++}`);
+      values.push(t);
+    } else {
+      return { ok: false, error: "Invalid avatar URL" };
+    }
+  }
+  if (patch.streamer_directory_bio !== undefined) {
+    if (patch.streamer_directory_bio !== null && typeof patch.streamer_directory_bio !== "string") {
+      return { ok: false, error: "Invalid bio" };
+    }
+    const bio =
+      patch.streamer_directory_bio === null
+        ? null
+        : patch.streamer_directory_bio.trim().slice(0, 2000) || null;
+    updates.push(`streamer_directory_bio = $${idx++}`);
+    values.push(bio);
+  }
+
+  if (updates.length === 0) {
+    return { ok: false, error: "No fields to update" };
+  }
+
+  updates.push(`updated_at = now()`);
+  values.push(userId);
+  const row = await queryOneUserRow(
+    `UPDATE users SET ${updates.join(", ")} WHERE id = $${idx} RETURNING ${USER_SELECT}`,
+    values
+  );
+  if (!row) return { ok: false, error: "User not found" };
+  return { ok: true, user: row };
 }

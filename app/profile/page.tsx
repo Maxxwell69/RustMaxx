@@ -8,24 +8,10 @@ import {
   type MembershipLevel,
 } from "@/lib/membership-level";
 import { SteamIdForm } from "@/components/profile/SteamIdForm";
+import type { AuthMePayload } from "@/lib/auth-me-payload";
+import { LogoUpload } from "@/app/servers/logo-upload";
 
-type Profile = {
-  id: string;
-  email: string;
-  role: string;
-  display_name: string | null;
-  created_at: string;
-  membership_level?: string;
-  signup_interested_server_owner?: boolean;
-  signup_interested_streamer?: boolean;
-  steam?: {
-    steamId: string;
-    personaName: string | null;
-    profileUrl: string;
-    avatarUrl: string | null;
-    linkedAt: string | null;
-  } | null;
-};
+type Profile = AuthMePayload;
 
 type TwitchStatus = {
   linked: boolean;
@@ -187,6 +173,10 @@ function ProfilePageContent() {
     | { status: string; admin_notes: string | null }
   >(undefined);
 
+  const [dirDraft, setDirDraft] = useState({ visible: false, bio: "", avatar: "" });
+  const [dirSaveMsg, setDirSaveMsg] = useState<string | null>(null);
+  const [dirSaving, setDirSaving] = useState(false);
+
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => {
@@ -208,6 +198,20 @@ function ProfilePageContent() {
       .then((r) => (r.ok ? r.json() : { linked: false }))
       .then(setTwitch);
   }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+    setDirDraft({
+      visible: Boolean(profile.streamer_directory_visible),
+      bio: profile.streamer_directory_bio ?? "",
+      avatar: profile.streamer_directory_avatar_url ?? "",
+    });
+  }, [
+    profile?.id,
+    profile?.streamer_directory_visible,
+    profile?.streamer_directory_bio,
+    profile?.streamer_directory_avatar_url,
+  ]);
 
   useEffect(() => {
     if (!profile) return;
@@ -263,6 +267,55 @@ function ProfilePageContent() {
       });
   }
 
+  async function saveDirectorySettings() {
+    if (!profile) return;
+    const canDirectoryOptIn =
+      profile.role === "super_admin" || streamerApp?.status === "approved";
+    if (!canDirectoryOptIn && dirDraft.visible) {
+      setDirSaveMsg("Your RustMaxx streamer application must be approved before you can appear in the directory.");
+      return;
+    }
+    setDirSaving(true);
+    setDirSaveMsg(null);
+    try {
+      const res = await fetch("/api/user/streamer-directory", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          streamer_directory_visible: dirDraft.visible,
+          streamer_directory_bio: dirDraft.bio.trim() || null,
+          streamer_directory_avatar_url: dirDraft.avatar.trim() || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDirSaveMsg(typeof data.error === "string" ? data.error : "Save failed");
+        return;
+      }
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              streamer_directory_visible: Boolean(data.streamer_directory_visible),
+              streamer_directory_avatar_url: data.streamer_directory_avatar_url ?? null,
+              streamer_directory_bio: data.streamer_directory_bio ?? null,
+            }
+          : prev
+      );
+      setDirDraft({
+        visible: Boolean(data.streamer_directory_visible),
+        bio: data.streamer_directory_bio ?? "",
+        avatar: data.streamer_directory_avatar_url ?? "",
+      });
+      setDirSaveMsg("Saved.");
+    } catch {
+      setDirSaveMsg("Network error");
+    } finally {
+      setDirSaving(false);
+    }
+  }
+
   function runDisconnectTwitch() {
     if (disconnecting) return;
     setDisconnecting(true);
@@ -300,6 +353,9 @@ function ProfilePageContent() {
     canApplyStreamer &&
     streamerApp === null &&
     (wantsStreamer || wantsOwner);
+
+  const canDirectoryOptIn =
+    profile.role === "super_admin" || streamerApp?.status === "approved";
 
   return (
     <div className="mx-auto max-w-2xl p-6">
@@ -400,6 +456,14 @@ function ProfilePageContent() {
               <dt className="text-sm text-zinc-500">Member since</dt>
               <dd className="mt-0.5 text-zinc-300">
                 {new Date(profile.created_at).toLocaleDateString()}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-zinc-500">Last password sign-in</dt>
+              <dd className="mt-0.5 text-zinc-300">
+                {profile.last_login_at
+                  ? new Date(profile.last_login_at).toLocaleString()
+                  : "Not recorded yet"}
               </dd>
             </div>
             {profile.membership_level && (
@@ -506,6 +570,88 @@ function ProfilePageContent() {
             </div>
           </div>
 
+          <div id="public-streamer" className="mt-8 border-t border-zinc-800 pt-6">
+            <h2 className="mb-3 text-lg font-semibold text-zinc-100">Public streamer page</h2>
+            <p className="mb-4 text-sm text-zinc-500">
+              Control whether you appear on the{" "}
+              <Link href="/streamers" className="text-rust-cyan hover:underline">
+                RustMaxx streamers
+              </Link>{" "}
+              directory. Avatar and bio here are separate from your Steam card above.
+            </p>
+            {streamerApp === undefined ? (
+              <p className="text-xs text-zinc-500">Loading application status…</p>
+            ) : (
+              <div className="space-y-4 rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
+                <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-300">
+                  <input
+                    type="checkbox"
+                    className="mt-1 rounded border-zinc-600"
+                    checked={dirDraft.visible}
+                    onChange={(e) => setDirDraft((d) => ({ ...d, visible: e.target.checked }))}
+                    disabled={!canDirectoryOptIn}
+                  />
+                  <span>
+                    Show my profile on the public streamers directory
+                    {!canDirectoryOptIn ? (
+                      <span className="mt-1 block text-xs text-amber-400/90">
+                        Your RustMaxx streamer application must be approved by staff before you can enable this (super
+                        admins excepted).
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+                <div>
+                  <p className="mb-1 text-xs font-medium text-zinc-500">Directory profile picture</p>
+                  <LogoUpload
+                    value={dirDraft.avatar}
+                    onChange={(url) => setDirDraft((d) => ({ ...d, avatar: url }))}
+                    disabled={dirSaving}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="dir-bio" className="mb-1 block text-xs font-medium text-zinc-500">
+                    Public bio
+                  </label>
+                  <textarea
+                    id="dir-bio"
+                    rows={4}
+                    value={dirDraft.bio}
+                    onChange={(e) => setDirDraft((d) => ({ ...d, bio: e.target.value }))}
+                    disabled={dirSaving}
+                    className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 disabled:opacity-50"
+                    placeholder="Short intro for visitors…"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void saveDirectorySettings()}
+                    disabled={dirSaving}
+                    className="rounded bg-rust-cyan px-4 py-2 text-sm font-medium text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                  >
+                    {dirSaving ? "Saving…" : "Save directory profile"}
+                  </button>
+                  <Link
+                    href={`/streamers/${profile.id}`}
+                    className="text-sm text-rust-cyan hover:underline"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View public page ↗
+                  </Link>
+                </div>
+                {dirSaveMsg ? (
+                  <p
+                    className={`text-xs ${dirSaveMsg === "Saved." ? "text-emerald-400/90" : "text-amber-400/90"}`}
+                  >
+                    {dirSaveMsg}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+
           <div id="steam" className="mt-8 border-t border-zinc-800 pt-6">
             <h2 className="mb-3 text-lg font-semibold text-zinc-100">Steam</h2>
             <p className="mb-4 text-sm text-zinc-500">
@@ -558,7 +704,7 @@ function ProfilePageContent() {
             ) : null}
             <SteamIdForm
               initialSteamId={profile.steam?.steamId ?? null}
-              onSaved={(p) => setProfile(p as Profile)}
+              onSaved={(p) => setProfile(p)}
             />
           </div>
 

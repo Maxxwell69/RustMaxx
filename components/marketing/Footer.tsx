@@ -3,6 +3,7 @@ import { Logo } from "./Logo";
 
 const FOOTER_LINKS = [
   { href: "/server-list", label: "Servers" },
+  { href: "/streamers", label: "Streamers" },
   { href: "/streamer-interaction", label: "Streamer Interaction" },
   { href: "/features", label: "Features" },
   { href: "/pricing", label: "Pricing" },

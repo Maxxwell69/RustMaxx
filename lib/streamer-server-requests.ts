@@ -1,6 +1,6 @@
 import { query } from "./db";
 
-export type StreamerServerRequestStatus = "pending" | "approved" | "rejected";
+export type StreamerServerRequestStatus = "pending" | "approved" | "rejected" | "revoked";
 
 export type StreamerServerRequestRow = {
   id: string;
@@ -16,6 +16,8 @@ export type StreamerServerRequestRow = {
 
 export type StreamerServerRequestWithEmail = StreamerServerRequestRow & {
   applicant_email: string;
+  /** Present when users.last_login_at exists (migration 028). */
+  applicant_last_login_at?: Date | string | null;
 };
 
 export async function hasApprovedStreamerServerRequest(
@@ -47,12 +49,19 @@ export async function listStreamerServerRequestsWithEmails(
 ): Promise<StreamerServerRequestWithEmail[]> {
   const { rows } = await query<StreamerServerRequestWithEmail>(
     `SELECT r.id, r.server_id, r.user_id, r.message, r.status, r.reviewed_by, r.reviewed_at, r.created_at, r.updated_at,
-            u.email AS applicant_email
+            u.email AS applicant_email,
+            u.last_login_at AS applicant_last_login_at
      FROM streamer_server_requests r
      JOIN users u ON u.id = r.user_id
      WHERE r.server_id = $1
      ORDER BY
-       CASE r.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+       CASE r.status
+         WHEN 'pending' THEN 0
+         WHEN 'approved' THEN 1
+         WHEN 'rejected' THEN 2
+         WHEN 'revoked' THEN 3
+         ELSE 4
+       END,
        r.updated_at DESC`,
     [serverId]
   );
@@ -108,7 +117,7 @@ export async function submitStreamerServerRequest(
   }
 
   const trimmed = message?.trim() || null;
-  if (existing?.status === "rejected") {
+  if (existing?.status === "rejected" || existing?.status === "revoked") {
     const { rows } = await query<StreamerServerRequestRow>(
       `UPDATE streamer_server_requests SET
         message = $3, status = 'pending', reviewed_by = NULL, reviewed_at = NULL, updated_at = now()
@@ -170,4 +179,58 @@ export async function resolveStreamerServerRequest(
   }
 
   return { ok: true, row };
+}
+
+/**
+ * Owner kick: remove TikFinity webhook, revoke approved request (if any), remove from manual allowlist.
+ */
+export function serializeStreamerServerRequestForApi(r: StreamerServerRequestWithEmail): {
+  id: string;
+  user_id: string;
+  applicant_email: string;
+  applicant_last_login_at: string | null;
+  message: string | null;
+  status: string;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+} {
+  const last = r.applicant_last_login_at ?? null;
+  return {
+    id: r.id,
+    user_id: r.user_id,
+    applicant_email: r.applicant_email,
+    applicant_last_login_at:
+      last instanceof Date ? last.toISOString() : typeof last === "string" ? last : null,
+    message: r.message,
+    status: r.status,
+    reviewed_at: r.reviewed_at instanceof Date ? r.reviewed_at.toISOString() : r.reviewed_at,
+    created_at: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : String(r.updated_at),
+  };
+}
+
+export async function kickStreamerFromServer(
+  serverId: string,
+  targetUserId: string,
+  reviewerUserId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (targetUserId === reviewerUserId) {
+    return { ok: false, error: "You cannot remove your own access this way." };
+  }
+  await query(`DELETE FROM streamer_webhooks WHERE server_id = $1 AND user_id = $2::uuid`, [
+    serverId,
+    targetUserId,
+  ]);
+  await query(
+    `UPDATE streamer_server_requests SET
+       status = 'revoked', reviewed_by = $3::uuid, reviewed_at = now(), updated_at = now()
+     WHERE server_id = $1 AND user_id = $2::uuid AND status = 'approved'`,
+    [serverId, targetUserId, reviewerUserId]
+  );
+  await query(
+    `UPDATE servers SET streamer_allowed_user_ids = array_remove(COALESCE(streamer_allowed_user_ids, '{}'), $2::uuid) WHERE id = $1`,
+    [serverId, targetUserId]
+  );
+  return { ok: true };
 }

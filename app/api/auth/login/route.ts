@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSessionCookieForUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { verifyCredentials } from "@/lib/users";
+import { verifyCredentials, updateUserLastLogin } from "@/lib/users";
 
 export async function POST(request: NextRequest) {
   const secret = process.env.SESSION_SECRET;
@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     );
   }
   await audit(user.id, "login", { email: user.email }).catch(() => {});
+  await updateUserLastLogin(user.id).catch(() => {});
   let cookie: string;
   try {
     cookie = createSessionCookieForUser(user.id, user.email, user.role);
