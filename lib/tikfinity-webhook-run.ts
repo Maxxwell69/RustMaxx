@@ -71,12 +71,12 @@ const NPCMAXX_REQUIRE_CREW_REGISTRY =
   process.env.NPCMAXX_REQUIRE_CREW_REGISTRY === "true" ||
   process.env.NPCMAXX_REQUIRE_CREW_REGISTRY === "1";
 
-/** CORS: allow TikFinity's site to call this webhook from the browser. */
-const TIKFINITY_ORIGIN = "https://tikfinity.zerody.one";
 export const TIKFINITY_CORS_HEADERS = {
-  "Access-Control-Allow-Origin": TIKFINITY_ORIGIN,
+  // Token-protected webhook endpoint: permissive CORS keeps browser-based TikFinity actions flowing.
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-Rustmaxx-Webhook-Token, X-Requested-With, Accept",
   "Access-Control-Max-Age": "86400",
 };
 
