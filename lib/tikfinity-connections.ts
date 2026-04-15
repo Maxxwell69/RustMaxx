@@ -44,6 +44,10 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/^!+/, "");
 }
 
+function canonicalizeName(name: string): string {
+  return normalizeName(name).replace(/[^a-z0-9]+/g, "");
+}
+
 /** Get server action for an incoming event/action name from admin connections (case-insensitive). */
 export async function getActionFromConnectionName(
   name: string
@@ -57,10 +61,15 @@ export async function getConnectionByEventName(
   name: string
 ): Promise<TikfinityConnectionForWebhook | null> {
   const key = normalizeName(name);
+  const canonical = canonicalizeName(name);
   if (!key) return null;
   const { rows } = await query<TikfinityConnectionRow>(
-    "SELECT id, server_action, COALESCE(scrap_amount, 0) AS scrap_amount, message, npc_template_key FROM tikfinity_connections WHERE lower(trim(name)) = $1 LIMIT 1",
-    [key]
+    `SELECT id, server_action, COALESCE(scrap_amount, 0) AS scrap_amount, message, npc_template_key
+     FROM tikfinity_connections
+     WHERE lower(trim(name)) = $1
+        OR regexp_replace(lower(trim(name)), '[^a-z0-9]+', '', 'g') = $2
+     LIMIT 1`,
+    [key, canonical]
   );
   const row = rows[0];
   if (!row?.server_action || !(TIKTRIGGER_ACTIONS as readonly string[]).includes(row.server_action))
@@ -116,8 +125,12 @@ export async function createTikfinityConnection(
     npcTemplateKey = parsed;
   }
   const { rows: existing } = await query<TikfinityConnectionRow>(
-    "SELECT 1 FROM tikfinity_connections WHERE lower(trim(name)) = $1 LIMIT 1",
-    [normalizeName(trimmed)]
+    `SELECT 1
+     FROM tikfinity_connections
+     WHERE lower(trim(name)) = $1
+        OR regexp_replace(lower(trim(name)), '[^a-z0-9]+', '', 'g') = $2
+     LIMIT 1`,
+    [normalizeName(trimmed), canonicalizeName(trimmed)]
   );
   if (existing.length > 0)
     return { error: "A connection with this name already exists" };

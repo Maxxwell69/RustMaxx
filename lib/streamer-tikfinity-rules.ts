@@ -29,6 +29,10 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/^!+/, "");
 }
 
+function canonicalizeName(name: string): string {
+  return normalizeName(name).replace(/[^a-z0-9]+/g, "");
+}
+
 const SCRAP_MAX = 10000;
 
 export async function getStreamerRuleByEventName(
@@ -36,12 +40,19 @@ export async function getStreamerRuleByEventName(
   name: string
 ): Promise<TikfinityConnectionForWebhook | null> {
   const key = normalizeName(name);
+  const canonical = canonicalizeName(name);
   if (!key) return null;
   const { rows } = await query<StreamerTikfinityRuleRow>(
     `SELECT id, streamer_webhook_id, name, server_action, COALESCE(scrap_amount, 0) AS scrap_amount,
             COALESCE(duration_seconds, 10) AS duration_seconds, message, npc_template_key
-     FROM streamer_tikfinity_rules WHERE streamer_webhook_id = $1 AND lower(trim(name)) = $2 LIMIT 1`,
-    [streamerWebhookId, key]
+     FROM streamer_tikfinity_rules
+     WHERE streamer_webhook_id = $1
+       AND (
+         lower(trim(name)) = $2
+         OR regexp_replace(lower(trim(name)), '[^a-z0-9]+', '', 'g') = $3
+       )
+     LIMIT 1`,
+    [streamerWebhookId, key, canonical]
   );
   const row = rows[0];
   if (
@@ -114,8 +125,15 @@ export async function createStreamerRule(
     npcTemplateKey = parsed;
   }
   const { rows: existing } = await query<{ n: string }>(
-    "SELECT 1 AS n FROM streamer_tikfinity_rules WHERE streamer_webhook_id = $1 AND lower(trim(name)) = $2 LIMIT 1",
-    [streamerWebhookId, normalizeName(trimmed)]
+    `SELECT 1 AS n
+     FROM streamer_tikfinity_rules
+     WHERE streamer_webhook_id = $1
+       AND (
+         lower(trim(name)) = $2
+         OR regexp_replace(lower(trim(name)), '[^a-z0-9]+', '', 'g') = $3
+       )
+     LIMIT 1`,
+    [streamerWebhookId, normalizeName(trimmed), canonicalizeName(trimmed)]
   );
   if (existing.length > 0) return { error: "A rule with this event name already exists" };
   const { rows } = await query<{ id: string }>(
