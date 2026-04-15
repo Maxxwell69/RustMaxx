@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { findUserById } from "@/lib/users";
-import { getServerWithRole } from "@/lib/server-access";
+import { canEditServer, getServerWithRole } from "@/lib/server-access";
 import {
   getStripe,
   ensureUserStripeCustomerId,
@@ -116,8 +116,15 @@ export async function POST(request: NextRequest) {
       );
     }
     const access = await getServerWithRole(serverId, user.id, user.role);
-    if (!access || access.server.owner_id !== user.id) {
-      return NextResponse.json({ error: "Only the server owner can purchase a server plan" }, { status: 403 });
+    if (!access || !canEditServer(access.serverRole)) {
+      return NextResponse.json(
+        { error: "Only the server owner or server admin can purchase a server plan" },
+        { status: 403 }
+      );
+    }
+    const ownerUserId = access.server.owner_id;
+    if (!ownerUserId) {
+      return NextResponse.json({ error: "Server owner is missing for this server" }, { status: 400 });
     }
     priceId = priceForServerTier(tier);
     if (!priceId) {
@@ -132,9 +139,11 @@ export async function POST(request: NextRequest) {
     metadata.rustmaxx_kind = "server";
     metadata.rustmaxx_server_id = serverId;
     metadata.rustmaxx_server_tier = tier;
+    metadata.rustmaxx_owner_user_id = ownerUserId;
     subscriptionMetadata.rustmaxx_kind = "server";
     subscriptionMetadata.rustmaxx_server_id = serverId;
     subscriptionMetadata.rustmaxx_server_tier = tier;
+    subscriptionMetadata.rustmaxx_owner_user_id = ownerUserId;
     successPath = `/servers/${serverId}?checkout=success`;
   }
 

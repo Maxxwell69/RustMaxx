@@ -54,13 +54,14 @@ export async function POST(request: NextRequest) {
         const kind = s.metadata?.rustmaxx_kind;
         if (kind === "server") {
           const serverId = s.metadata?.rustmaxx_server_id?.trim();
+          const ownerUserId = s.metadata?.rustmaxx_owner_user_id ?? userId;
           const tierMeta = parseServerBillingTier(s.metadata?.rustmaxx_server_tier);
           const billingTierWhenActive =
             tierMeta ?? serverTierFromStripePriceId(firstPriceId(sub)) ?? "pro";
-          if (serverId) {
+          if (serverId && ownerUserId) {
             await applyServerSubscriptionFromStripe({
               serverId,
-              ownerUserId: userId,
+              ownerUserId,
               subscriptionId: subId,
               stripeStatus: sub.status,
               billingTierWhenActive,
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
       const isDeleted = event.type === "customer.subscription.deleted";
 
       if (meta.rustmaxx_kind === "server" && meta.rustmaxx_server_id) {
-        const ownerUserId = meta.rustmaxx_user_id;
+        const ownerUserId = meta.rustmaxx_owner_user_id ?? meta.rustmaxx_user_id;
         if (ownerUserId) {
           const billingTierWhenActive =
             parseServerBillingTier(meta.rustmaxx_server_tier) ??

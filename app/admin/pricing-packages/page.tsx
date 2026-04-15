@@ -151,7 +151,7 @@ export default function AdminPricingPackagesPage() {
   if (forbidden) {
     return (
       <div className="mx-auto max-w-4xl p-6">
-        <p className="text-zinc-400">Only super admins can manage pricing packages.</p>
+        <p className="text-zinc-400">Only admins and super admins can manage pricing packages.</p>
         <Link href="/admin" className="mt-4 inline-block text-rust-cyan hover:underline">
           ← Admin
         </Link>

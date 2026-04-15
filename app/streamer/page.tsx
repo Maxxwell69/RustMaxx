@@ -485,7 +485,7 @@ export default function StreamerDashboardPage() {
   const serverIdsWithHooks = new Set(hooks.map((h) => h.serverId));
   const serversAvailableToAdd = servers.filter((s) => !serverIdsWithHooks.has(s.id));
   const serverForAdd = servers.find((s) => s.id === serverId);
-  const canSubmitWebhookAdd = Boolean(serverId && serverForAdd?.streamer_interactions_enabled);
+  const canSubmitWebhookAdd = Boolean(serverId);
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl p-6">
@@ -734,8 +734,8 @@ export default function StreamerDashboardPage() {
               title={
                 !serverId
                   ? "Choose a server"
-                  : !serverForAdd?.streamer_interactions_enabled
-                    ? "The server owner must enable Streamer interactions (and server plan) before you can add a webhook."
+                  : !serverForAdd
+                    ? "Choose a server"
                     : undefined
               }
               className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -744,7 +744,7 @@ export default function StreamerDashboardPage() {
             </button>
           </form>
         ) : null}
-        {serversAvailableToAdd.length > 0 && serverId && !canSubmitWebhookAdd ? (
+        {serversAvailableToAdd.length > 0 && serverId && serverForAdd && !serverForAdd.streamer_interactions_enabled ? (
           <p className="mb-4 text-xs text-amber-200/90">
             TikFinity is not enabled on this server yet. The owner must turn on{" "}
             <strong className="text-amber-100">Streamer interactions</strong> under{" "}

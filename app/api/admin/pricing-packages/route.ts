@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireCanManageAdmins } from "@/lib/api-auth";
+import { requireCanManageServersFromDb } from "@/lib/api-auth";
 import { coerceFeatures, listAllPricingPackagesForAdmin } from "@/lib/pricing-packages";
 
-/** Super admin: list all pricing packages (published and draft) for /admin/pricing-packages. */
+/** Admin + super_admin: list all pricing packages for /admin/pricing-packages. */
 export async function GET(request: NextRequest) {
-  const err = await requireCanManageAdmins(request);
+  const err = await requireCanManageServersFromDb(request);
   if (err) return err;
   const packages = await listAllPricingPackagesForAdmin();
   return NextResponse.json({

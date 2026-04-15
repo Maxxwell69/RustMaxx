@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireCanManageAdmins } from "@/lib/api-auth";
+import { requireCanManageServersFromDb } from "@/lib/api-auth";
 import { updatePricingPackageById, type PricingPackagePatch } from "@/lib/pricing-packages";
 
 const UUID_RE =
@@ -9,7 +9,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const err = await requireCanManageAdmins(request);
+  const err = await requireCanManageServersFromDb(request);
   if (err) return err;
   const { id } = await params;
   if (!UUID_RE.test(id)) {

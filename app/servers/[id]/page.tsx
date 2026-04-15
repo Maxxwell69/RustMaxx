@@ -878,7 +878,7 @@ export default function ServerDetailPage() {
         </div>
       </div>
 
-      {server.myRole === "owner" && (
+      {(server.myRole === "owner" || server.myRole === "admin") && (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
           <h2 className="text-sm font-medium text-zinc-300">Server plan</h2>
           <p className="mt-1 text-xs text-zinc-500">
@@ -892,7 +892,8 @@ export default function ServerDetailPage() {
             </span>
           </p>
           <p className="mt-1 text-[11px] text-zinc-600">
-            Pro enables TikFinity on this server; Analytics adds server analytics when the dashboard ships.
+            Pro enables TikFinity on this server; Analytics adds server analytics when the dashboard ships. Owners
+            and server admins can start checkout.
           </p>
           {serverCheckoutErr ? (
             <p className="mt-2 text-xs text-red-400">{serverCheckoutErr}</p>
