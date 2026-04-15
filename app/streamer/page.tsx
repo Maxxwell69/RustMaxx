@@ -48,13 +48,13 @@ function readSecretForPublicId(publicId: string | undefined): string | null {
   return m[publicId] ?? null;
 }
 
-/** Full hook URL for TikFinity: token + rule name as `action` (empty-body safe). */
+/** Full hook URL for TikFinity: token + resolved server action as `action` (empty-body safe). */
 function fullRuleWebhookUrl(
   webhookBase: string | null,
   secret: string | null,
-  ruleEventName: string
+  serverAction: string
 ): string | null {
-  const name = ruleEventName.trim();
+  const name = serverAction.trim();
   if (!webhookBase || !secret || !name) return null;
   return `${webhookBase}?token=${encodeURIComponent(secret)}&action=${encodeURIComponent(name)}`;
 }
@@ -472,10 +472,10 @@ export default function StreamerDashboardPage() {
     firstHook?.webhookUrl && firstSecret
       ? `${firstHook.webhookUrl}?token=${encodeURIComponent(firstSecret)}`
       : null;
-  /** TikFinity often sends an empty POST body; `&action=` matches your Event → action rule name. */
+  /** TikFinity often sends an empty POST body; force the final in-game action key in URL. */
   const exampleRuleForUrl =
-    rules.find((r) => r.name.toLowerCase().trim() === "wolf")?.name ??
-    rules[0]?.name ??
+    rules.find((r) => r.server_action.toLowerCase().trim() === "wolf")?.server_action ??
+    rules[0]?.server_action ??
     "wolf";
   const fullTikfinityUrlWithRuleAction =
     firstUrl && exampleRuleForUrl
@@ -803,7 +803,8 @@ export default function StreamerDashboardPage() {
         <p className="mb-4 text-xs text-zinc-500">
           Rules belong to <strong className="text-zinc-400">one server webhook</strong> at a time. Pick which server below,
           then add rules or quick spawns. Use <strong className="font-medium text-zinc-300">Copy webhook</strong> on a rule
-          for the URL with <code className="rounded bg-zinc-800 px-1">action</code> for empty-body TikFinity posts.
+          for a URL that sends the final <code className="rounded bg-zinc-800 px-1">server action</code> directly (most
+          reliable for empty-body TikFinity posts).
         </p>
 
         <div className="mb-4">
@@ -923,7 +924,7 @@ export default function StreamerDashboardPage() {
               wh?.publicId != null
                 ? secretByPublicId[wh.publicId] ?? readSecretForPublicId(wh.publicId)
                 : null;
-            const ruleUrl = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.name);
+            const ruleUrl = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.server_action);
             return (
               <li
                 key={r.id}
