@@ -53,6 +53,9 @@ export type ServerRow = {
    * `streamer_server_requests` row (see `lib/streamer-server-allowlist.ts`).
    */
   streamer_join_requires_owner_approval?: boolean;
+  /** free | pro | analytics — billing tier for this server (Stripe). */
+  billing_tier?: string;
+  stripe_subscription_id?: string | null;
 };
 
 export type PublicServerRow = {

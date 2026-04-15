@@ -100,6 +100,9 @@ type State = {
     subscriptionStatus: string;
     billingOk: boolean;
     dashboardOk: boolean;
+    streamerTier: "free" | "plus" | "max";
+    streamerWebhookLimit: number;
+    streamerWebhookCount: number;
   };
   hooks: HookSummary[];
   rules: RuleRow[];
@@ -160,8 +163,19 @@ export default function StreamerDashboardPage() {
       return;
     }
     const raw = sJson as Record<string, unknown>;
+    const u = raw.user as Record<string, unknown> | undefined;
+    const tierRaw = u?.streamerTier;
+    const streamerTier: State["user"]["streamerTier"] =
+      tierRaw === "plus" || tierRaw === "max" ? tierRaw : "free";
     setState({
-      user: raw.user as State["user"],
+      user: {
+        ...(u as State["user"]),
+        streamerTier,
+        streamerWebhookLimit:
+          typeof u?.streamerWebhookLimit === "number" ? u.streamerWebhookLimit : 5,
+        streamerWebhookCount:
+          typeof u?.streamerWebhookCount === "number" ? u.streamerWebhookCount : 0,
+      },
       hooks: Array.isArray(raw.hooks) ? (raw.hooks as HookSummary[]) : [],
       rules: Array.isArray(raw.rules) ? (raw.rules as RuleRow[]) : [],
       allowedStreamerItemsByServer: Array.isArray(raw.allowedStreamerItemsByServer)
@@ -402,11 +416,13 @@ export default function StreamerDashboardPage() {
     await load();
   }
 
-  async function startCheckout() {
+  async function startStreamerCheckout(tier: "plus" | "max") {
     setErr("");
     const res = await fetch("/api/billing/checkout", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
+      body: JSON.stringify({ kind: "streamer", tier }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -487,17 +503,46 @@ export default function StreamerDashboardPage() {
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Account</h2>
         <p className="text-sm text-zinc-300">{user.email}</p>
         <p className="mt-1 text-xs text-zinc-500">
-          Subscription: {user.subscriptionStatus} · Billing gate: {user.billingOk ? "ok" : "inactive"}
+          Streamer plan:{" "}
+          <span className="text-zinc-300 capitalize">{user.streamerTier}</span>
+          {" · "}
+          Webhooks: {user.streamerWebhookCount}/{user.streamerWebhookLimit}
         </p>
-        {!user.billingOk ? (
-          <button
-            type="button"
-            onClick={() => startCheckout()}
-            className="mt-3 rounded-lg bg-rust-cyan px-4 py-2 text-sm font-medium text-zinc-950"
-          >
-            Subscribe with Stripe
-          </button>
-        ) : null}
+        <p className="mt-1 text-[11px] text-zinc-600">
+          Stripe subscription: {user.subscriptionStatus}
+        </p>
+        <p className="mt-2 text-[11px] text-zinc-500">Viewer-based perks — coming soon.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {user.streamerTier === "free" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void startStreamerCheckout("plus")}
+                className="rounded-lg bg-rust-cyan px-4 py-2 text-sm font-medium text-zinc-950"
+              >
+                Upgrade to Plus — $19.99/mo
+              </button>
+              <button
+                type="button"
+                onClick={() => void startStreamerCheckout("max")}
+                className="rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-700"
+              >
+                Upgrade to Max — $39.99/mo
+              </button>
+            </>
+          ) : user.streamerTier === "plus" ? (
+            <button
+              type="button"
+              onClick={() => void startStreamerCheckout("max")}
+              className="rounded-lg bg-rust-cyan px-4 py-2 text-sm font-medium text-zinc-950"
+            >
+              Upgrade to Max — $39.99/mo
+            </button>
+          ) : null}
+          <Link href="/pricing" className="text-sm text-rust-cyan hover:underline">
+            Pricing
+          </Link>
+        </div>
       </section>
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">

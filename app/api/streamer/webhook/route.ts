@@ -59,7 +59,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { row, secretPlain } = await createWebhookForServer(user.id, serverId);
+  let row: Awaited<ReturnType<typeof createWebhookForServer>>["row"];
+  let secretPlain: string | undefined;
+  try {
+    const created = await createWebhookForServer(user.id, serverId);
+    row = created.row;
+    secretPlain = created.secretPlain;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.startsWith("WEBHOOK_LIMIT:")) {
+      return NextResponse.json(
+        { error: msg.replace(/^WEBHOOK_LIMIT:\s*/, "") },
+        { status: 403 }
+      );
+    }
+    throw e;
+  }
   const base = (process.env.APP_URL ?? process.env.SITE_URL ?? "").replace(/\/$/, "");
 
   return NextResponse.json({

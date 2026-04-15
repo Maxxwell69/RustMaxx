@@ -5,6 +5,8 @@ import type { MembershipLevel } from "./membership-level";
 import { MEMBERSHIP_LEVELS } from "./membership-level";
 import { isOurHostedUploadPublicPath } from "./upload-files";
 import { coerceDirectorySocialsFromDb, parseDirectorySocialOverrides } from "./streamer-directory-socials";
+import type { StreamerBillingTier } from "./billing-tiers";
+import { parseStreamerBillingTier } from "./billing-tiers";
 
 const SALT_ROUNDS = 10;
 
@@ -43,6 +45,7 @@ export type UserRow = {
   streamer_directory_bio?: string | null;
   streamer_directory_socials?: Record<string, string> | null;
   streamer_directory_show_servers?: boolean;
+  streamer_tier?: StreamerBillingTier;
   created_at: Date;
   updated_at: Date;
 };
@@ -64,6 +67,7 @@ const USER_SELECT = `id, email, password_hash, role, display_name,
     signup_interested_server_owner, signup_interested_streamer,
     last_login_at, streamer_directory_visible, streamer_directory_avatar_url, streamer_directory_bio,
     streamer_directory_socials, streamer_directory_show_servers,
+    streamer_tier,
     created_at, updated_at`;
 
 /** Same row shape before migration 023 (signup intent columns). */
@@ -108,6 +112,7 @@ function mapRowToUserRow(row: Record<string, unknown>): UserRow {
       typeof row.streamer_directory_bio === "string" ? row.streamer_directory_bio : null,
     streamer_directory_socials: coerceDirectorySocialsFromDb(row.streamer_directory_socials),
     streamer_directory_show_servers: row.streamer_directory_show_servers === true,
+    streamer_tier: parseStreamerBillingTier(row.streamer_tier) ?? "free",
   };
 }
 

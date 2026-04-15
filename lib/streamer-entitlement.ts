@@ -13,7 +13,10 @@ export function billingSkippedInEnv(): boolean {
   return v === "1" || v === "true" || v === "yes";
 }
 
-/** Streamer dashboard + personal TikFinity hook require an entitled subscription (or staff / env bypass). */
+/**
+ * Streamer TikFinity / webhook features: available to logged-in users (guest+).
+ * Paid tiers raise webhook limits; subscription active also counts as entitled for legacy accounts.
+ */
 export function canUseStreamerNetwork(opts: {
   role: UserRole;
   subscriptionStatus: string | null | undefined;
@@ -22,5 +25,6 @@ export function canUseStreamerNetwork(opts: {
   if (hasRoleAtLeast(opts.role, "moderator")) return true;
   const s = (opts.subscriptionStatus ?? "inactive").toLowerCase();
   if (s === "active" || s === "trialing") return true;
+  if (hasRoleAtLeast(opts.role, "guest")) return true;
   return false;
 }

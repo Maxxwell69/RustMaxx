@@ -50,6 +50,7 @@ export default function ServerDetailPage() {
     streamer_allowed_item_shortnames?: string[];
     streamer_allowlist_users?: { id: string; email: string }[];
     streamer_join_requires_owner_approval?: boolean;
+    billing_tier?: string | null;
   } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [listingForm, setListingForm] = useState({
@@ -111,6 +112,8 @@ export default function ServerDetailPage() {
   const [streamerRequestsError, setStreamerRequestsError] = useState<string | null>(null);
   const [streamerRequestBusyId, setStreamerRequestBusyId] = useState<string | null>(null);
   const [streamerKickBusyUserId, setStreamerKickBusyUserId] = useState<string | null>(null);
+  const [serverCheckoutTier, setServerCheckoutTier] = useState<"pro" | "analytics" | null>(null);
+  const [serverCheckoutErr, setServerCheckoutErr] = useState<string | null>(null);
   const [streamerSelectableItems, setStreamerSelectableItems] = useState<
     {
       shortname: string;
@@ -658,6 +661,31 @@ export default function ServerDetailPage() {
     }
   }
 
+  async function startServerPlanCheckout(tier: "pro" | "analytics") {
+    setServerCheckoutErr(null);
+    setServerCheckoutTier(tier);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ kind: "server", serverId: id, tier }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setServerCheckoutErr(
+          typeof data.error === "string" ? data.error : `Checkout failed (HTTP ${res.status}).`
+        );
+        return;
+      }
+      if (typeof data.url === "string") window.location.href = data.url;
+    } catch {
+      setServerCheckoutErr("Network error starting checkout.");
+    } finally {
+      setServerCheckoutTier(null);
+    }
+  }
+
   async function sendCommand(cmd: string) {
     const c = (cmd || command).trim();
     if (!c) return;
@@ -849,6 +877,53 @@ export default function ServerDetailPage() {
           )}
         </div>
       </div>
+
+      {server.myRole === "owner" && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <h2 className="text-sm font-medium text-zinc-300">Server plan</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Current:{" "}
+            <span className="text-zinc-300">
+              {server.billing_tier === "analytics"
+                ? "Analytics ($29.99/mo)"
+                : server.billing_tier === "pro"
+                  ? "Pro ($19.99/mo)"
+                  : "Free (listed on the server list)"}
+            </span>
+          </p>
+          <p className="mt-1 text-[11px] text-zinc-600">
+            Pro enables TikFinity on this server; Analytics adds server analytics when the dashboard ships.
+          </p>
+          {serverCheckoutErr ? (
+            <p className="mt-2 text-xs text-red-400">{serverCheckoutErr}</p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {server.billing_tier !== "pro" && server.billing_tier !== "analytics" ? (
+              <button
+                type="button"
+                disabled={serverCheckoutTier !== null}
+                onClick={() => void startServerPlanCheckout("pro")}
+                className="rounded-lg bg-rust-cyan px-3 py-1.5 text-sm font-medium text-zinc-950 disabled:opacity-50"
+              >
+                {serverCheckoutTier === "pro" ? "Redirecting…" : "Upgrade to Pro — $19.99/mo"}
+              </button>
+            ) : null}
+            {server.billing_tier !== "analytics" ? (
+              <button
+                type="button"
+                disabled={serverCheckoutTier !== null}
+                onClick={() => void startServerPlanCheckout("analytics")}
+                className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {serverCheckoutTier === "analytics" ? "Redirecting…" : "Upgrade to Analytics — $29.99/mo"}
+              </button>
+            ) : null}
+            <Link href="/pricing" className="self-center text-sm text-rust-cyan hover:underline">
+              Pricing
+            </Link>
+          </div>
+        </div>
+      )}
 
       {(server.myRole === "owner" || server.myRole === "admin") && (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">

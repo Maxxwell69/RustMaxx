@@ -7,6 +7,10 @@ import { listStreamerWebhooksForUser } from "@/lib/streamer-webhooks";
 import { listStreamerRules } from "@/lib/streamer-tikfinity-rules";
 import { query } from "@/lib/db";
 import { getEffectiveStreamerItemsForServer } from "@/lib/streamer-item-policy";
+import {
+  getStreamerWebhookLimit,
+  parseStreamerBillingTier,
+} from "@/lib/billing-tiers";
 
 function appOrigin(): string | null {
   const u = process.env.APP_URL?.trim() ?? process.env.SITE_URL?.trim();
@@ -35,6 +39,8 @@ export async function GET(_request: NextRequest) {
   const origin = appOrigin();
 
   const hooksRows = await listStreamerWebhooksForUser(user.id);
+  const streamerTier = parseStreamerBillingTier(user.streamer_tier) ?? "free";
+  const streamerWebhookLimit = getStreamerWebhookLimit(streamerTier);
 
   const hooks: Array<{
     id: string;
@@ -123,6 +129,9 @@ export async function GET(_request: NextRequest) {
       subscriptionStatus: user.subscription_status,
       billingOk,
       dashboardOk,
+      streamerTier,
+      streamerWebhookLimit,
+      streamerWebhookCount: hooksRows.length,
     },
     hooks,
     rules: rulesOut,

@@ -1,6 +1,8 @@
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { query } from "@/lib/db";
+import { findUserById } from "@/lib/users";
+import { billingSkippedInEnv, getStreamerWebhookLimit } from "@/lib/billing-tiers";
 
 const SALT_ROUNDS = 10;
 
@@ -38,6 +40,14 @@ export async function getStreamerWebhookByPublicId(
     [publicId]
   );
   return rows[0] ?? null;
+}
+
+export async function countStreamerWebhooksForUser(userId: string): Promise<number> {
+  const { rows } = await query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM streamer_webhooks WHERE user_id = $1`,
+    [userId]
+  );
+  return parseInt(rows[0]?.n ?? "0", 10);
 }
 
 export async function listStreamerWebhooksForUser(
@@ -93,6 +103,16 @@ export async function createWebhookForServer(
   const existing = await getWebhookByUserAndServer(userId, serverId);
   if (existing) {
     return { row: existing };
+  }
+
+  const user = await findUserById(userId);
+  if (!user) throw new Error("User not found");
+  const limit = getStreamerWebhookLimit(user.streamer_tier);
+  const n = await countStreamerWebhooksForUser(userId);
+  if (!billingSkippedInEnv() && n >= limit) {
+    throw new Error(
+      `WEBHOOK_LIMIT: Your plan allows ${limit} server webhook(s). Upgrade your streamer plan for more.`
+    );
   }
 
   const plain = generatePlainSecret();

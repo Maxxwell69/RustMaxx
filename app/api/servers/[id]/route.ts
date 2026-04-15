@@ -14,6 +14,11 @@ import {
   assertOwnerStreamerItemsAllowedByCatalog,
   validateStreamerItemShortnamesPayload,
 } from "@/lib/streamer-item-policy";
+import {
+  billingSkippedInEnv,
+  coerceServerBillingTier,
+  serverTierAllowsStreamerInteraction,
+} from "@/lib/billing-tiers";
 
 export async function GET(
   request: NextRequest,
@@ -161,6 +166,19 @@ export async function PATCH(
         { error: "streamer_interactions_enabled must be a boolean" },
         { status: 400 }
       );
+    }
+    if (body.streamer_interactions_enabled === true) {
+      const tier = coerceServerBillingTier(existing);
+      if (!billingSkippedInEnv() && !serverTierAllowsStreamerInteraction(tier)) {
+        return NextResponse.json(
+          {
+            error:
+              "Streamer interactions require Pro or Analytics billing for this server ($19.99/mo per server). Upgrade in Billing after checkout.",
+            code: "SERVER_TIER_REQUIRED",
+          },
+          { status: 402 }
+        );
+      }
     }
     updates.push(`streamer_interactions_enabled = $${idx++}`);
     values.push(body.streamer_interactions_enabled);

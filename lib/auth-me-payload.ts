@@ -1,6 +1,11 @@
 import { toProfile, type UserRow, type UserProfile } from "./users";
 import { fetchSteamPlayerSummary } from "./steam-web-api";
 import { coerceDirectorySocialsFromDb } from "./streamer-directory-socials";
+import {
+  getStreamerWebhookLimit,
+  parseStreamerBillingTier,
+  type StreamerBillingTier,
+} from "./billing-tiers";
 
 export type AuthMeSteam = {
   steamId: string;
@@ -18,6 +23,9 @@ export type AuthMePayload = UserProfile & {
   streamer_directory_bio: string | null;
   streamer_directory_socials: Record<string, string>;
   streamer_directory_show_servers: boolean;
+  /** Account-level TikFinity webhook tier (limits how many server hooks you may create). */
+  streamer_tier: StreamerBillingTier;
+  streamer_webhook_limit: number;
 };
 
 export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> {
@@ -52,6 +60,8 @@ export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> 
           ? user.last_login_at
           : null;
 
+  const streamerTier = parseStreamerBillingTier(user.streamer_tier) ?? "free";
+
   return {
     ...base,
     steam,
@@ -61,5 +71,7 @@ export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> 
     streamer_directory_bio: user.streamer_directory_bio ?? null,
     streamer_directory_socials: coerceDirectorySocialsFromDb(user.streamer_directory_socials),
     streamer_directory_show_servers: user.streamer_directory_show_servers === true,
+    streamer_tier: streamerTier,
+    streamer_webhook_limit: getStreamerWebhookLimit(streamerTier),
   };
 }

@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { query } from "@/lib/db";
+import type { ServerBillingTier, StreamerBillingTier } from "@/lib/billing-tiers";
 
 let stripeSingleton: Stripe | null = null;
 
@@ -28,27 +29,61 @@ function mapStripeSubscriptionStatus(
   }
 }
 
-/** Upsert billing fields and promote guest/player → streamer when subscribing. */
+/** Upsert streamer subscription + tier; promote guest/player → streamer when subscribing. */
 export async function applySubscriptionFromStripe(opts: {
   userId: string;
   customerId: string;
   subscriptionId: string | null;
   stripeStatus: Stripe.Subscription.Status;
+  /** When set, stored as streamer_tier. When omitted, active subs default to plus; inactive → free. */
+  streamerTier?: StreamerBillingTier | null;
 }): Promise<void> {
   const subStatus = mapStripeSubscriptionStatus(opts.stripeStatus);
+  let tier: StreamerBillingTier;
+  if (opts.streamerTier != null) {
+    tier = opts.streamerTier;
+  } else if (subStatus === "canceled" || subStatus === "inactive") {
+    tier = "free";
+  } else {
+    tier = "plus";
+  }
   await query(
     `UPDATE users SET
       stripe_customer_id = COALESCE($1, stripe_customer_id),
       stripe_subscription_id = $2,
       subscription_status = $3,
+      streamer_tier = $4,
       role = CASE
         WHEN role::text IN ('guest', 'player') THEN 'streamer'::user_role
         ELSE role
       END,
       updated_at = now()
-    WHERE id = $4`,
-    [opts.customerId, opts.subscriptionId, subStatus, opts.userId]
+    WHERE id = $5`,
+    [opts.customerId, opts.subscriptionId, subStatus, tier, opts.userId]
   );
+}
+
+/** Update a server row paid tier (owner must match). Inactive Stripe status → free + clear sub id. */
+export async function applyServerSubscriptionFromStripe(opts: {
+  serverId: string;
+  ownerUserId: string;
+  subscriptionId: string | null;
+  stripeStatus: Stripe.Subscription.Status;
+  billingTierWhenActive: ServerBillingTier;
+}): Promise<boolean> {
+  const subStatus = mapStripeSubscriptionStatus(opts.stripeStatus);
+  const active = subStatus === "active" || subStatus === "trialing";
+  const tier: ServerBillingTier = active ? opts.billingTierWhenActive : "free";
+  const subId = active ? opts.subscriptionId : null;
+  const { rowCount } = await query(
+    `UPDATE servers SET
+      billing_tier = $1,
+      stripe_subscription_id = $2,
+      updated_at = now()
+    WHERE id = $3::uuid AND owner_id = $4::uuid`,
+    [tier, subId, opts.serverId, opts.ownerUserId]
+  );
+  return (rowCount ?? 0) > 0;
 }
 
 export function getStripePriceId(): string | null {
