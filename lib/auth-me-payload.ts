@@ -25,7 +25,14 @@ export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> 
       personaName: summary?.personaName ?? null,
       profileUrl: summary?.profileUrl ?? fallbackProfile,
       avatarUrl: summary?.avatarUrl ? summary.avatarUrl : null,
-      linkedAt: user.steam_linked_at?.toISOString() ?? null,
+      linkedAt:
+        user.steam_linked_at == null
+          ? null
+          : user.steam_linked_at instanceof Date
+            ? user.steam_linked_at.toISOString()
+            : typeof user.steam_linked_at === "string"
+              ? user.steam_linked_at
+              : null,
     };
   }
 

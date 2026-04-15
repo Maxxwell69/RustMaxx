@@ -7,6 +7,13 @@ import {
   upsertStreamerApplication,
 } from "@/lib/streamer-applications";
 
+function iso(d: Date | string | null | undefined): string {
+  if (d == null) return new Date().toISOString();
+  if (typeof d === "string") return d;
+  if (d instanceof Date) return d.toISOString();
+  return new Date().toISOString();
+}
+
 function serialize(row: Awaited<ReturnType<typeof getStreamerApplicationByUserId>>) {
   if (!row) return null;
   return {
@@ -27,10 +34,10 @@ function serialize(row: Awaited<ReturnType<typeof getStreamerApplicationByUserId
     content_summary: row.content_summary,
     why_rustmaxx: row.why_rustmaxx,
     status: row.status,
-    reviewed_at: row.reviewed_at?.toISOString() ?? null,
+    reviewed_at: row.reviewed_at == null ? null : iso(row.reviewed_at),
     admin_notes: row.status === "rejected" ? row.admin_notes : null,
-    created_at: row.created_at.toISOString(),
-    updated_at: row.updated_at.toISOString(),
+    created_at: iso(row.created_at),
+    updated_at: iso(row.updated_at),
   };
 }
 
@@ -39,8 +46,16 @@ export async function GET(request: NextRequest) {
   const err = requireSession(request);
   if (err) return err;
   const session = getSessionFromRequest(request)!;
-  const row = await getStreamerApplicationByUserId(session.userId);
-  return NextResponse.json({ application: serialize(row) });
+  try {
+    const row = await getStreamerApplicationByUserId(session.userId);
+    return NextResponse.json({ application: serialize(row) });
+  } catch (e) {
+    console.error("[streamer-application] GET failed:", e);
+    return NextResponse.json(
+      { error: "Could not load application.", application: null },
+      { status: 500 }
+    );
+  }
 }
 
 /** Create or update application (pending / resubmit after rejection). */
@@ -61,15 +76,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const result = await upsertStreamerApplication(session.userId, parsed.data);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
+  try {
+    const result = await upsertStreamerApplication(session.userId, parsed.data);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    await audit(session.userId, "streamer_application_upsert", {
+      application_id: result.row.id,
+      status: result.row.status,
+    }).catch(() => {});
+
+    return NextResponse.json({ ok: true, application: serialize(result.row) });
+  } catch (e) {
+    console.error("[streamer-application] POST failed:", e);
+    return NextResponse.json(
+      { error: "Could not save your application. If this persists, contact support." },
+      { status: 500 }
+    );
   }
-
-  await audit(session.userId, "streamer_application_upsert", {
-    application_id: result.row.id,
-    status: result.row.status,
-  }).catch(() => {});
-
-  return NextResponse.json({ ok: true, application: serialize(result.row) });
 }

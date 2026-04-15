@@ -161,7 +161,7 @@ export async function upsertStreamerApplication(
     `INSERT INTO streamer_applications (
         user_id, legal_name, preferred_stream_name, tiktok_url, twitch_url, kick_url, youtube_url, twitter_url, instagram_url,
         discord_username, other_socials, avg_live_viewers, stream_schedule, content_summary, why_rustmaxx
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING id, user_id, legal_name, preferred_stream_name, tiktok_url, twitch_url, kick_url, youtube_url, twitter_url, instagram_url,
         discord_username, other_socials, avg_live_viewers, stream_schedule, content_summary, why_rustmaxx,
         status, reviewed_by, reviewed_at, admin_notes, created_at, updated_at`,

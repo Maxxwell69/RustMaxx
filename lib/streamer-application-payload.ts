@@ -14,8 +14,11 @@ function trimStr(v: unknown, max: number): string {
 }
 
 function optionalUrl(v: unknown): string | null {
-  const t = trimStr(v, L.url);
+  let t = trimStr(v, L.url);
   if (!t) return null;
+  if (!/^https?:\/\//i.test(t)) {
+    t = `https://${t}`;
+  }
   try {
     const u = new URL(t);
     if (u.protocol !== "http:" && u.protocol !== "https:") return null;

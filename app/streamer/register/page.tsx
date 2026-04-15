@@ -57,7 +57,7 @@ export default function StreamerRegisterPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const me = await fetch("/api/auth/me");
+      const me = await fetch("/api/auth/me", { credentials: "same-origin" });
       if (!me.ok) {
         if (!cancelled) {
           setForbidden(true);
@@ -66,7 +66,7 @@ export default function StreamerRegisterPage() {
         }
         return;
       }
-      const appRes = await fetch("/api/streamer-application");
+      const appRes = await fetch("/api/streamer-application", { credentials: "same-origin" });
       const data: { application: ApplicationJson | null } = appRes.ok
         ? await appRes.json()
         : { application: null };
