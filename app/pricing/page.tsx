@@ -1,61 +1,6 @@
 import Link from "next/link";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
-
-const SERVER_TIERS = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "",
-    note: "Per server",
-    features: ["Listed on the public server list"],
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$19.99",
-    period: "/mo",
-    note: "Per server",
-    highlighted: true,
-    features: ["Everything in Free", "Streamer interaction (TikFinity) enabled on this server"],
-  },
-  {
-    id: "analytics",
-    name: "Analytics",
-    price: "$29.99",
-    period: "/mo",
-    note: "Per server",
-    features: ["Everything in Pro", "Server analytics dashboard (coming soon)"],
-  },
-];
-
-const STREAMER_TIERS = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "",
-    note: "Per account",
-    features: ["Up to 5 TikFinity server webhooks"],
-  },
-  {
-    id: "plus",
-    name: "Plus",
-    price: "$19.99",
-    period: "/mo",
-    note: "Per account",
-    highlighted: true,
-    features: ["Up to 12 server webhooks"],
-  },
-  {
-    id: "max",
-    name: "Max",
-    price: "$39.99",
-    period: "/mo",
-    note: "Per account",
-    features: ["Up to 25 server webhooks", "More viewer-based perks — coming soon"],
-  },
-];
+import { getPublishedPricingPageData } from "@/lib/pricing-packages";
 
 const FAQ = [
   {
@@ -78,7 +23,12 @@ export const metadata = {
   openGraph: { title: "Pricing | RustMaxx", description: "Server and streamer plans for RustMaxx." },
 };
 
-export default function PricingPage() {
+/** Always reflect latest rows from admin-edited `pricing_packages`. */
+export const revalidate = 0;
+
+export default async function PricingPage() {
+  const { server: serverTiers, streamer: streamerTiers } = await getPublishedPricingPageData();
+
   return (
     <MarketingLayout>
       <div className="relative px-4 py-16 sm:px-6 sm:py-24">
@@ -94,7 +44,7 @@ export default function PricingPage() {
               Billed per server in RustMaxx. Upgrade from your server&apos;s settings after you log in.
             </p>
             <div className="mt-6 grid gap-8 md:grid-cols-3">
-              {SERVER_TIERS.map((t) => (
+              {serverTiers.map((t) => (
                 <div
                   key={t.id}
                   className={`rounded-xl border bg-rust-surface p-6 ${
@@ -102,7 +52,7 @@ export default function PricingPage() {
                   }`}
                 >
                   <h3 className="text-lg font-semibold text-zinc-100">{t.name}</h3>
-                  <p className="mt-1 text-sm text-zinc-400">{t.note}</p>
+                  {t.note ? <p className="mt-1 text-sm text-zinc-400">{t.note}</p> : null}
                   <p className="mt-4 flex flex-wrap items-baseline gap-1">
                     <span className="text-2xl font-bold text-zinc-100">{t.price}</span>
                     {t.period ? <span className="text-zinc-500">{t.period}</span> : null}
@@ -125,7 +75,7 @@ export default function PricingPage() {
               One plan per RustMaxx account. Controls how many servers you can connect with TikFinity webhooks.
             </p>
             <div className="mt-6 grid gap-8 md:grid-cols-3">
-              {STREAMER_TIERS.map((t) => (
+              {streamerTiers.map((t) => (
                 <div
                   key={t.id}
                   className={`rounded-xl border bg-rust-surface p-6 ${
@@ -133,7 +83,7 @@ export default function PricingPage() {
                   }`}
                 >
                   <h3 className="text-lg font-semibold text-zinc-100">{t.name}</h3>
-                  <p className="mt-1 text-sm text-zinc-400">{t.note}</p>
+                  {t.note ? <p className="mt-1 text-sm text-zinc-400">{t.note}</p> : null}
                   <p className="mt-4 flex flex-wrap items-baseline gap-1">
                     <span className="text-2xl font-bold text-zinc-100">{t.price}</span>
                     {t.period ? <span className="text-zinc-500">{t.period}</span> : null}

@@ -235,6 +235,12 @@ export default function SuperAdminDashboardPage() {
             >
               Manage users & roles →
             </Link>
+            <Link
+              href="/admin/pricing-packages"
+              className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
+            >
+              Pricing packages →
+            </Link>
           </div>
         </div>
         <div className="p-4">
