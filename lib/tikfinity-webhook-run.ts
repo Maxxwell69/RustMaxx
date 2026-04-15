@@ -302,10 +302,18 @@ export async function runTikfinityWebhook(
   const crewJoinResponse = await handleCrewRnpcJoin(request, body, ctx.serverId);
   if (crewJoinResponse) return crewJoinResponse;
 
-  // Action from URL query — TikFinity sometimes uses ?event=customName instead of ?action=
+  // Action from URL query — TikFinity presets vary:
+  // ?action=, ?event=, ?eventName=, ?trigger=, ?giftName=, etc.
   const q = request.nextUrl.searchParams;
   const queryActionRaw =
-    q.get("action")?.trim() ?? q.get("event")?.trim() ?? "";
+    q.get("action")?.trim() ??
+    q.get("event")?.trim() ??
+    q.get("eventName")?.trim() ??
+    q.get("trigger")?.trim() ??
+    q.get("giftName")?.trim() ??
+    q.get("gift")?.trim() ??
+    q.get("command")?.trim() ??
+    "";
   const actionFromQuery = queryActionRaw
     ? getActionFromPayload({ action: queryActionRaw.toLowerCase() })
     : null;
