@@ -56,6 +56,7 @@ export type UserProfile = {
   role: UserRole;
   display_name: string | null;
   membership_level: MembershipLevel;
+  membership_packages?: string[];
   signup_interested_server_owner: boolean;
   signup_interested_streamer: boolean;
   created_at: string;
@@ -221,11 +222,79 @@ export function toProfile(row: UserRow): UserProfile {
   };
 }
 
+function isMissingRelationError(e: unknown): boolean {
+  if (e === null || typeof e !== "object") return false;
+  const err = e as { code?: string };
+  return err.code === "42P01";
+}
+
+export async function listUserMembershipPackagesForUserIds(
+  userIds: string[]
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (userIds.length === 0) return out;
+  try {
+    const { rows } = await query<{ user_id: string; package_kind: string; tier_key: string }>(
+      `SELECT user_id, package_kind, tier_key
+       FROM user_pricing_packages
+       WHERE user_id = ANY($1::uuid[])
+       ORDER BY package_kind ASC, tier_key ASC`,
+      [userIds]
+    );
+    for (const r of rows) {
+      const key = `${r.package_kind}:${r.tier_key}`;
+      const list = out.get(r.user_id) ?? [];
+      list.push(key);
+      out.set(r.user_id, list);
+    }
+    return out;
+  } catch (e) {
+    if (isMissingRelationError(e)) return out;
+    throw e;
+  }
+}
+
+export async function replaceUserMembershipPackages(
+  userId: string,
+  packageKeys: string[]
+): Promise<void> {
+  const parsed = Array.from(
+    new Set(
+      packageKeys
+        .map((x) => String(x).trim().toLowerCase())
+        .filter(Boolean)
+        .filter((x) => /^(server|streamer|combo):[a-z0-9_-]{1,64}$/.test(x))
+    )
+  ).map((key) => {
+    const [packageKind, tierKey] = key.split(":");
+    return { packageKind, tierKey };
+  });
+  try {
+    await query("DELETE FROM user_pricing_packages WHERE user_id = $1::uuid", [userId]);
+    for (const row of parsed) {
+      await query(
+        `INSERT INTO user_pricing_packages (user_id, package_kind, tier_key)
+         VALUES ($1::uuid, $2, $3)
+         ON CONFLICT (user_id, package_kind, tier_key) DO NOTHING`,
+        [userId, row.packageKind, row.tierKey]
+      );
+    }
+  } catch (e) {
+    if (isMissingRelationError(e)) return;
+    throw e;
+  }
+}
+
 export async function listUsers(): Promise<UserProfile[]> {
   const rows = await queryReturningUserRows(
     `SELECT ${USER_SELECT} FROM users ORDER BY created_at ASC`
   );
-  return rows.map(toProfile);
+  const base = rows.map(toProfile);
+  const packageMap = await listUserMembershipPackagesForUserIds(base.map((u) => u.id));
+  return base.map((u) => ({
+    ...u,
+    membership_packages: packageMap.get(u.id) ?? [],
+  }));
 }
 
 export async function countUsersWithRole(role: UserRole): Promise<number> {

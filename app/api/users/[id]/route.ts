@@ -7,6 +7,8 @@ import {
   toProfile,
   countUsersWithRole,
   deleteUserById,
+  listUserMembershipPackagesForUserIds,
+  replaceUserMembershipPackages,
 } from "@/lib/users";
 import { audit } from "@/lib/audit";
 import type { UserRole } from "@/lib/permissions";
@@ -32,7 +34,7 @@ export async function PATCH(
   const session = getSessionFromRequest(request)!;
   const { id: userId } = await params;
 
-  let body: { role?: string; membershipLevel?: string };
+  let body: { role?: string; membershipLevel?: string; membershipPackages?: string[] };
   try {
     body = await request.json();
   } catch {
@@ -41,9 +43,10 @@ export async function PATCH(
 
   const hasRole = body.role !== undefined;
   const hasLevel = body.membershipLevel !== undefined;
-  if (!hasRole && !hasLevel) {
+  const hasPackages = body.membershipPackages !== undefined;
+  if (!hasRole && !hasLevel && !hasPackages) {
     return NextResponse.json(
-      { error: "Provide role and/or membershipLevel" },
+      { error: "Provide role, membershipLevel, and/or membershipPackages" },
       { status: 400 }
     );
   }
@@ -94,9 +97,27 @@ export async function PATCH(
     });
   }
 
+  if (hasPackages) {
+    if (!Array.isArray(body.membershipPackages)) {
+      return NextResponse.json(
+        { error: "membershipPackages must be an array of package keys" },
+        { status: 400 }
+      );
+    }
+    await replaceUserMembershipPackages(userId, body.membershipPackages);
+    await audit(session.userId, "user.membership_packages_update", {
+      targetUserId: userId,
+      membershipPackages: body.membershipPackages,
+    });
+  }
+
   const fresh = await findUserById(userId);
   if (!fresh) return NextResponse.json({ error: "User not found" }, { status: 404 });
-  return NextResponse.json(toProfile(fresh));
+  const packages = await listUserMembershipPackagesForUserIds([userId]);
+  return NextResponse.json({
+    ...toProfile(fresh),
+    membership_packages: packages.get(userId) ?? [],
+  });
 }
 
 /** Permanently delete a user (super_admin only). */

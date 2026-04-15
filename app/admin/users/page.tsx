@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  MEMBERSHIP_LEVELS,
   MEMBERSHIP_LEVEL_LABELS,
   type MembershipLevel,
 } from "@/lib/membership-level";
@@ -14,13 +13,20 @@ type User = {
   role: string;
   display_name: string | null;
   membership_level: MembershipLevel;
+  membership_packages?: string[];
   created_at: string;
+};
+
+type PackageOption = {
+  key: string;
+  label: string;
 };
 
 const ROLES = ["guest", "player", "streamer", "support", "moderator", "admin", "super_admin"];
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [packageOptions, setPackageOptions] = useState<PackageOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -34,26 +40,40 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/users")
-      .then((r) => {
+    Promise.all([
+      fetch("/api/users").then((r) => {
         if (!r.ok) {
           if (r.status === 403) setError("Only super_admin can manage users.");
           else setError("Failed to load users.");
           return [];
         }
         return r.json();
-      })
-      .then((data) =>
+      }),
+      fetch("/api/admin/pricing-packages", { credentials: "same-origin" }).then((r) =>
+        r.ok ? r.json() : { packages: [] }
+      ),
+    ])
+      .then(([userData, pkgData]) => {
         setUsers(
-          Array.isArray(data)
-            ? data.map((u: User) => ({
+          Array.isArray(userData)
+            ? userData.map((u: User) => ({
                 ...u,
                 membership_level: u.membership_level ?? "standard",
+                membership_packages: Array.isArray(u.membership_packages) ? u.membership_packages : [],
               }))
             : []
-        )
-      )
-      .catch(() => setError("Failed to load users."))
+        );
+        const list = Array.isArray((pkgData as { packages?: unknown[] }).packages)
+          ? ((pkgData as { packages?: Array<{ package_kind: string; tier_key: string; name: string }> }).packages ?? [])
+          : [];
+        setPackageOptions(
+          list.map((p) => ({
+            key: `${p.package_kind}:${p.tier_key}`,
+            label: `${p.package_kind} - ${p.name} (${p.tier_key})`,
+          }))
+        );
+      })
+      .catch(() => setError("Failed to load users/pricing."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -87,12 +107,12 @@ export default function AdminUsersPage() {
       .finally(() => setUpdating(null));
   }
 
-  function updateMembershipLevel(userId: string, level: MembershipLevel) {
+  function updateMembershipPackages(userId: string, packages: string[]) {
     setUpdating(userId);
     fetch(`/api/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ membershipLevel: level }),
+      body: JSON.stringify({ membershipPackages: packages }),
     })
       .then((r) => r.json().then((d) => ({ ok: r.ok, ...d })))
       .then((data) => {
@@ -106,8 +126,9 @@ export default function AdminUsersPage() {
             u.id === userId
               ? {
                   ...u,
-                  membership_level: data.membership_level ?? level,
-                  role: data.role ?? u.role,
+                  membership_packages: Array.isArray(data.membership_packages)
+                    ? data.membership_packages
+                    : packages,
                 }
               : u
           )
@@ -154,8 +175,9 @@ export default function AdminUsersPage() {
       </div>
       <p className="mb-4 text-sm text-zinc-500">
         Only super_admin can access this page. Change a user&apos;s <strong className="text-zinc-400">role</strong>{" "}
-        (permissions) and their <strong className="text-zinc-400">membership level</strong> (Standard / Pro / Elite)
-        for perks and future limits. Remove admin by setting role to guest. Use <strong className="text-zinc-400">Delete</strong>{" "}
+        (permissions) and assign one or more <strong className="text-zinc-400">pricing packages</strong> based on current
+        server/streamer/combo tiers. Remove admin by setting role to guest. Use{" "}
+        <strong className="text-zinc-400">Delete</strong>{" "}
         to remove an account entirely (you cannot delete yourself or the last super_admin).
       </p>
       {error && (
@@ -172,7 +194,7 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3 font-medium text-zinc-300">Role</th>
                 <th className="px-4 py-3 font-medium text-zinc-300">Level</th>
                 <th className="px-4 py-3 font-medium text-zinc-300">Change role</th>
-                <th className="px-4 py-3 font-medium text-zinc-300">Change level</th>
+                <th className="px-4 py-3 font-medium text-zinc-300">Assigned packages</th>
                 <th className="px-4 py-3 font-medium text-zinc-300">Actions</th>
               </tr>
             </thead>
@@ -215,20 +237,25 @@ export default function AdminUsersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <select
-                      value={u.membership_level}
-                      onChange={(e) =>
-                        updateMembershipLevel(u.id, e.target.value as MembershipLevel)
-                      }
-                      disabled={updating === u.id}
-                      className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-zinc-200 disabled:opacity-50"
-                    >
-                      {MEMBERSHIP_LEVELS.map((lev) => (
-                        <option key={lev} value={lev}>
-                          {MEMBERSHIP_LEVEL_LABELS[lev]}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="space-y-2">
+                      <select
+                        multiple
+                        value={u.membership_packages ?? []}
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.selectedOptions).map((opt) => opt.value);
+                          updateMembershipPackages(u.id, selected);
+                        }}
+                        disabled={updating === u.id}
+                        className="min-w-[240px] rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-zinc-200 disabled:opacity-50"
+                      >
+                        {packageOptions.map((p) => (
+                          <option key={p.key} value={p.key}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-zinc-500">Hold Ctrl/Cmd to select multiple packages.</p>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <button
