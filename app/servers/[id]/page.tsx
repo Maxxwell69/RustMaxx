@@ -41,6 +41,7 @@ export default function ServerDetailPage() {
     streamer_interactions_enabled?: boolean;
     streamer_allowed_actions?: string[];
     streamer_allowed_item_shortnames?: string[];
+    streamer_allowlist_users?: { id: string; email: string }[];
   } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [listingForm, setListingForm] = useState({
@@ -76,6 +77,9 @@ export default function ServerDetailPage() {
   const [streamerSaving, setStreamerSaving] = useState(false);
   const [streamerFeedback, setStreamerFeedback] = useState<string | null>(null);
   const [streamerItemShortnames, setStreamerItemShortnames] = useState<string[]>([]);
+  const [allowlistEmail, setAllowlistEmail] = useState("");
+  const [allowlistBusy, setAllowlistBusy] = useState(false);
+  const [allowlistErr, setAllowlistErr] = useState<string | null>(null);
   const [streamerSelectableItems, setStreamerSelectableItems] = useState<
     {
       shortname: string;
@@ -377,6 +381,75 @@ export default function ServerDetailPage() {
       eventSourceRef.current = null;
     } finally {
       setRconSaving(false);
+    }
+  }
+
+  async function addStreamerToAllowlist() {
+    setAllowlistErr(null);
+    const email = allowlistEmail.trim();
+    if (!email) {
+      setAllowlistErr("Enter the streamer's RustMaxx login email.");
+      return;
+    }
+    setAllowlistBusy(true);
+    try {
+      const res = await fetch(`/api/servers/${id}/streamer-allowlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ addEmail: email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAllowlistErr(typeof data.error === "string" ? data.error : "Could not add");
+        return;
+      }
+      setAllowlistEmail("");
+      setServer((prev) =>
+        prev
+          ? {
+              ...prev,
+              streamer_allowlist_users: Array.isArray(data.streamer_allowlist_users)
+                ? data.streamer_allowlist_users
+                : prev.streamer_allowlist_users,
+            }
+          : null
+      );
+    } finally {
+      setAllowlistBusy(false);
+    }
+  }
+
+  async function removeStreamerFromAllowlist(userId: string) {
+    if (!window.confirm("Remove this streamer from the allowlist? Their TikFinity webhook for this server will be deleted.")) {
+      return;
+    }
+    setAllowlistErr(null);
+    setAllowlistBusy(true);
+    try {
+      const res = await fetch(`/api/servers/${id}/streamer-allowlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ removeUserId: userId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAllowlistErr(typeof data.error === "string" ? data.error : "Could not remove");
+        return;
+      }
+      setServer((prev) =>
+        prev
+          ? {
+              ...prev,
+              streamer_allowlist_users: Array.isArray(data.streamer_allowlist_users)
+                ? data.streamer_allowlist_users
+                : [],
+            }
+          : null
+      );
+    } finally {
+      setAllowlistBusy(false);
     }
   }
 
@@ -920,6 +993,54 @@ export default function ServerDetailPage() {
                   />
                   Allow streamers to use this server for TikFinity webhooks
                 </label>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                  <p className="mb-2 text-xs font-medium text-zinc-400">Allowed streamers (optional)</p>
+                  <p className="mb-2 text-xs text-zinc-500">
+                    Leave the list empty to let <strong className="text-zinc-400">any</strong> eligible streamer connect
+                    (same as before). Add RustMaxx account emails to <strong className="text-zinc-400">restrict</strong> who
+                    may create a webhook or receive TikFinity events on this server.
+                  </p>
+                  {allowlistErr ? (
+                    <p className="mb-2 text-xs text-red-400">{allowlistErr}</p>
+                  ) : null}
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <input
+                      type="email"
+                      value={allowlistEmail}
+                      onChange={(e) => setAllowlistEmail(e.target.value)}
+                      placeholder="streamer@email.com"
+                      className="min-w-[12rem] flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100"
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void addStreamerToAllowlist()}
+                      disabled={allowlistBusy}
+                      className="rounded bg-zinc-600 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-500 disabled:opacity-50"
+                    >
+                      {allowlistBusy ? "…" : "Add"}
+                    </button>
+                  </div>
+                  {server?.streamer_allowlist_users && server.streamer_allowlist_users.length > 0 ? (
+                    <ul className="space-y-1 text-sm text-zinc-300">
+                      {server.streamer_allowlist_users.map((u) => (
+                        <li key={u.id} className="flex items-center justify-between gap-2 rounded bg-zinc-900/60 px-2 py-1">
+                          <span>{u.email}</span>
+                          <button
+                            type="button"
+                            onClick={() => void removeStreamerFromAllowlist(u.id)}
+                            disabled={allowlistBusy}
+                            className="text-xs text-red-400 hover:underline disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-zinc-600">No entries — all eligible streamers may use this server.</p>
+                  )}
+                </div>
                 {streamerEnabled && streamerActions.length === 0 ? (
                   <p className="text-xs text-amber-200/90">
                     Turn on at least one action below, or streamers&apos; webhooks will be rejected until you add some.

@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
     serverAction?: string;
     message?: string | null;
     scrapAmount?: number;
+    durationSeconds?: number;
     npcTemplateKey?: string | null;
   };
   try {
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
   const result = await createStreamerRule(hook.id, name, serverAction, {
     message: body.message,
     scrapAmount: body.scrapAmount,
+    durationSeconds: body.durationSeconds,
     npcTemplateKey: body.npcTemplateKey,
   });
   if ("error" in result) {

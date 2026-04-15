@@ -490,8 +490,21 @@ export async function runTikfinityWebhook(
   if (RUSTCHAOS_TEN_SCRAP_SPAWN_ACTIONS.has(action)) {
     giftValue = giftValue > 0 ? Math.min(giftValue, 10) : 10;
   }
+  const ruleDefaultDuration =
+    connectionFromAdmin != null &&
+    isRustChaosStatusEffectAction(action) &&
+    typeof connectionFromAdmin.duration_seconds === "number" &&
+    Number.isFinite(connectionFromAdmin.duration_seconds) &&
+    connectionFromAdmin.duration_seconds >= 1 &&
+    connectionFromAdmin.duration_seconds <= 120
+      ? Math.trunc(connectionFromAdmin.duration_seconds)
+      : 0;
+  const statusDurationBase =
+    isRustChaosStatusEffectAction(action) && ruleDefaultDuration > 0
+      ? ruleDefaultDuration
+      : giftValue;
   const rustChaosFourthArg = isRustChaosStatusEffectAction(action)
-    ? parseRustChaosStatusDurationSeconds(request.nextUrl.searchParams, body, giftValue)
+    ? parseRustChaosStatusDurationSeconds(request.nextUrl.searchParams, body, statusDurationBase)
     : giftValue;
   const messageArg =
     connectionFromAdmin?.message?.trim() != null && connectionFromAdmin.message.trim() !== ""

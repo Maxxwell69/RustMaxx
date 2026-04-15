@@ -53,6 +53,7 @@ export async function GET(_request: NextRequest) {
     server_action: string;
     message: string | null;
     scrap_amount: number;
+    duration_seconds: number;
     npc_template_key: string | null;
     created_at: string;
   }> = [];
@@ -92,6 +93,7 @@ export async function GET(_request: NextRequest) {
         server_action: r.server_action,
         message: r.message,
         scrap_amount: r.scrap_amount,
+        duration_seconds: r.duration_seconds,
         npc_template_key: r.npc_template_key,
         created_at:
           r.created_at instanceof Date

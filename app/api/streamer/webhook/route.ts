@@ -4,6 +4,7 @@ import { findUserById } from "@/lib/users";
 import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
 import { query } from "@/lib/db";
 import { createWebhookForServer } from "@/lib/streamer-webhooks";
+import { isStreamerAllowedForServerHooks } from "@/lib/streamer-server-allowlist";
 
 export async function POST(request: NextRequest) {
   const session = getSession(request.headers.get("cookie"));
@@ -45,6 +46,16 @@ export async function POST(request: NextRequest) {
           "This server does not allow streamer interactions. The owner must enable them under Server setup → Streamer interactions.",
       },
       { status: 400 }
+    );
+  }
+
+  if (!(await isStreamerAllowedForServerHooks(serverId, user.id))) {
+    return NextResponse.json(
+      {
+        error:
+          "This server’s owner has not added your account to the allowed streamers list. Ask them to open Servers → this server → Streamer interactions → Allowed streamers.",
+      },
+      { status: 403 }
     );
   }
 

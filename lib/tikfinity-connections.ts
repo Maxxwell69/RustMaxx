@@ -26,6 +26,8 @@ export type TikfinityConnectionForWebhook = {
   scrap_amount: number;
   message: string | null;
   npc_template_key: string | null;
+  /** Streamer rules: default status-effect duration (1–120s). Admin connections omit (null). */
+  duration_seconds?: number | null;
 };
 
 const NPC_TEMPLATE_KEY_RE = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -69,6 +71,7 @@ export async function getConnectionByEventName(
     scrap_amount: Number(row.scrap_amount) || 0,
     message: row.message ?? null,
     npc_template_key: row.npc_template_key ?? null,
+    duration_seconds: null,
   };
 }
 

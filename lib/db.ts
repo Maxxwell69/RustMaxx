@@ -46,6 +46,8 @@ export type ServerRow = {
   streamer_allowed_actions?: string[];
   /** Subset of streamer_platform_items streamers may reference on this server. */
   streamer_allowed_item_shortnames?: string[];
+  /** When non-empty, only these user IDs may use streamer TikFinity webhooks for this server. */
+  streamer_allowed_user_ids?: string[];
 };
 
 export type PublicServerRow = {

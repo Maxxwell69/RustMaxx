@@ -43,11 +43,17 @@ export async function GET(_request: NextRequest) {
     const res = await query<ServerOption>(
       `SELECT DISTINCT s.id, s.name, s.listing_name, s.streamer_interactions_enabled
        FROM servers s
-       WHERE s.streamer_interactions_enabled = true
-          OR s.owner_id = $1
+       WHERE s.owner_id = $1
           OR EXISTS (
             SELECT 1 FROM server_users su
             WHERE su.server_id = s.id AND su.user_id = $1
+          )
+          OR (
+            s.streamer_interactions_enabled = true
+            AND (
+              cardinality(COALESCE(s.streamer_allowed_user_ids, '{}')) = 0
+              OR $1::uuid = ANY (COALESCE(s.streamer_allowed_user_ids, '{}'))
+            )
           )
        ORDER BY COALESCE(s.listing_name, s.name) ASC`,
       [user.id]

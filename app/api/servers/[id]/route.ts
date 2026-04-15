@@ -26,7 +26,22 @@ export async function GET(
   const result = await getServerWithRole(id, session.userId, session.role);
   if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { rcon_password: _pw, ...safe } = result.server as Record<string, unknown>;
-  return NextResponse.json({ ...safe, myRole: result.serverRole });
+  const allowIds = Array.isArray(result.server.streamer_allowed_user_ids)
+    ? result.server.streamer_allowed_user_ids
+    : [];
+  let streamer_allowlist_users: { id: string; email: string }[] = [];
+  if (allowIds.length > 0) {
+    const { rows: users } = await query<{ id: string; email: string }>(
+      `SELECT id, email FROM users WHERE id = ANY($1::uuid[]) ORDER BY lower(email)`,
+      [allowIds]
+    );
+    streamer_allowlist_users = users;
+  }
+  return NextResponse.json({
+    ...safe,
+    streamer_allowlist_users,
+    myRole: result.serverRole,
+  });
 }
 
 export async function PATCH(
@@ -204,7 +219,7 @@ export async function PATCH(
   if (rconCredentialsChanged) disconnect(serverId);
   values.push(serverId);
   const { rows } = await query<ServerRow>(
-    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id, streamer_interactions_enabled, streamer_allowed_actions, streamer_allowed_item_shortnames`,
+    `UPDATE servers SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url, seed, world_size, level, map_preview_url, map_last_fetched_at, tikfinity_anchor_steam_id, streamer_interactions_enabled, streamer_allowed_actions, streamer_allowed_item_shortnames, streamer_allowed_user_ids`,
     values
   );
   const auditFields = Object.keys(body).filter((k) => k !== "rcon_password");
@@ -212,7 +227,23 @@ export async function PATCH(
     auditFields.push("rcon_password_set");
   }
   await audit(session.userId, "server.update", { serverId, fields: auditFields });
-  return NextResponse.json({ ...rows[0], myRole: result.serverRole });
+  const updated = rows[0];
+  const allowIds = Array.isArray(updated?.streamer_allowed_user_ids)
+    ? updated.streamer_allowed_user_ids
+    : [];
+  let streamer_allowlist_users: { id: string; email: string }[] = [];
+  if (allowIds.length > 0) {
+    const { rows: users } = await query<{ id: string; email: string }>(
+      `SELECT id, email FROM users WHERE id = ANY($1::uuid[]) ORDER BY lower(email)`,
+      [allowIds]
+    );
+    streamer_allowlist_users = users;
+  }
+  return NextResponse.json({
+    ...updated,
+    streamer_allowlist_users,
+    myRole: result.serverRole,
+  });
 }
 
 export async function DELETE(

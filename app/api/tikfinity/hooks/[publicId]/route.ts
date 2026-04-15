@@ -12,6 +12,7 @@ import { findUserById } from "@/lib/users";
 import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
 import { getStreamerRuleByEventName } from "@/lib/streamer-tikfinity-rules";
 import { getStreamerPolicyForServer } from "@/lib/streamer-action-policy";
+import { isStreamerAllowedForServerHooks } from "@/lib/streamer-server-allowlist";
 
 function getHookToken(request: NextRequest): string | null {
   const q = request.nextUrl.searchParams.get("token")?.trim();
@@ -110,6 +111,20 @@ async function handleHook(
           error: "Streamer interactions are disabled for this server.",
           debug:
             "The server owner must enable streamer access under RustMaxx → Servers → this server → Streamer interactions.",
+        },
+        { status: 403 }
+      )
+    );
+  }
+
+  if (!(await isStreamerAllowedForServerHooks(hook.server_id, hook.user_id))) {
+    return withCors(
+      NextResponse.json(
+        {
+          ok: false,
+          error: "This streamer is not on the allowlist for this server.",
+          debug:
+            "The server owner must add your RustMaxx account under Servers → this server → Streamer interactions → Allowed streamers.",
         },
         { status: 403 }
       )

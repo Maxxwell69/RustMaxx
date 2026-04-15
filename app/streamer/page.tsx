@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Logo } from "@/components/marketing/Logo";
 import { SteamIdForm } from "@/components/profile/SteamIdForm";
 import { STREAMER_SPAWN_PRESETS } from "@/lib/streamer-spawn-presets";
+import { isRustChaosStatusEffectAction } from "@/lib/tikfinity";
 
 const LEGACY_WH_STORAGE = "rustmaxx_streamer_wh";
 const SECRET_MAP_KEY = "rustmaxx_streamer_wh_by_pub";
@@ -75,6 +76,7 @@ type RuleRow = {
   server_action: string;
   message: string | null;
   scrap_amount: number;
+  duration_seconds: number;
   npc_template_key: string | null;
   created_at: string;
 };
@@ -136,6 +138,7 @@ export default function StreamerDashboardPage() {
   const [ruleName, setRuleName] = useState("");
   const [ruleAction, setRuleAction] = useState("");
   const [npcTemplate, setNpcTemplate] = useState("");
+  const [ruleDurationSeconds, setRuleDurationSeconds] = useState("10");
   const [quickAdding, setQuickAdding] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -335,6 +338,10 @@ export default function StreamerDashboardPage() {
     if (ruleAction === "npcmaxx" && npcTemplate.trim()) {
       body.npcTemplateKey = npcTemplate.trim();
     }
+    if (isRustChaosStatusEffectAction(ruleAction)) {
+      const n = parseInt(ruleDurationSeconds.trim(), 10);
+      body.durationSeconds = Number.isFinite(n) ? Math.min(120, Math.max(1, n)) : 10;
+    }
     const res = await fetch("/api/streamer/rules", {
       method: "POST",
       credentials: "same-origin",
@@ -347,6 +354,7 @@ export default function StreamerDashboardPage() {
       return;
     }
     setRuleName("");
+    setRuleDurationSeconds("10");
     await load();
   }
 
@@ -512,7 +520,8 @@ export default function StreamerDashboardPage() {
         <p className="mb-3 text-xs text-zinc-500">
           Add each RustMaxx server you want TikFinity to drive — you get a <strong className="text-zinc-400">separate URL</strong>{" "}
           per server. Servers you own or are on the team for always appear in the add list; others appear once they enable{" "}
-          <strong className="text-zinc-400">Streamer interactions</strong>.
+          <strong className="text-zinc-400">Streamer interactions</strong> and, if they use an allowlist, add your RustMaxx
+          account email there.
         </p>
         {servers.length === 0 ? (
           <p className="mb-4 rounded-lg border border-amber-800/60 bg-amber-950/30 p-3 text-sm text-amber-100/95">
@@ -793,6 +802,20 @@ export default function StreamerDashboardPage() {
               />
             </div>
           ) : null}
+          {isRustChaosStatusEffectAction(ruleAction) ? (
+            <div>
+              <label className="mb-1 block text-xs text-zinc-500">Effect duration (seconds)</label>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={ruleDurationSeconds}
+                onChange={(e) => setRuleDurationSeconds(e.target.value)}
+                className="w-full max-w-[10rem] rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-zinc-600">1–120. Applies to poison, thirst, hunger, bleed, and dart HUD effects.</p>
+            </div>
+          ) : null}
           <div className="sm:col-span-2">
             <button
               type="submit"
@@ -821,6 +844,9 @@ export default function StreamerDashboardPage() {
                   </span>
                   <code className="text-emerald-300">{r.name}</code> →{" "}
                   <code className="text-zinc-300">{r.server_action}</code>
+                  {isRustChaosStatusEffectAction(r.server_action) ? (
+                    <span className="text-zinc-500"> · {r.duration_seconds ?? 10}s</span>
+                  ) : null}
                 </span>
                 <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
                   {ruleUrl ? (
