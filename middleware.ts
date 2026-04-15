@@ -26,6 +26,7 @@ const PUBLIC_PATHS = [
   "/api/twitch/webhook",   // Twitch EventSub verification and notifications (no session)
   "/api/tikfinity/webhook", // TikFinity Trigger WebHook (no session)
   "/api/tikfinity/hooks", // Per-streamer hooks /api/tikfinity/hooks/:publicId (token in URL or header)
+  "/api/tiktok-live/ingest", // Signed worker ingest endpoint (no browser session)
   "/sitemap.xml",
   "/robots.txt",
 ];

@@ -552,6 +552,9 @@ export default function StreamerDashboardPage() {
           <Link href="/pricing" className="text-sm text-rust-cyan hover:underline">
             Pricing
           </Link>
+          <Link href="/streamer/tiktok-live" className="text-sm text-rust-cyan hover:underline">
+            TikTok Live (Direct)
+          </Link>
         </div>
       </section>
 

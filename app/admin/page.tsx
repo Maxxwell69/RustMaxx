@@ -241,6 +241,12 @@ export default function SuperAdminDashboardPage() {
             >
               Pricing packages →
             </Link>
+            <Link
+              href="/admin/tiktok-live"
+              className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
+            >
+              TikTok Live direct →
+            </Link>
           </div>
         </div>
         <div className="p-4">
