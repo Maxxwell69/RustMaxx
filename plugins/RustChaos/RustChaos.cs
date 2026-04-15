@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.27")]
+    [Info("RustChaos", "RustMaxx", "1.15.28")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -189,18 +189,9 @@ namespace Oxide.Plugins
             if (bp == null || !bp.IsValid()) return;
             ulong uid = bp.userID;
             // Flash — keep stamina high so the streamer can sprint continuously (feels like 2x mobility).
+            // PlayerMetabolism.stamina exists on many builds but not all Oxide reference assemblies; use reflection.
             if (IsConfiguredStreamer(bp) && HasActiveStreamerStatusKind("flash"))
-            {
-                try
-                {
-                    if (instance.stamina != null)
-                        instance.stamina.value = instance.stamina.max;
-                }
-                catch
-                {
-                    // ignore
-                }
-            }
+                TryTopUpFlashStamina(bp, instance);
 
             if (!_reviveChaosProtectUntil.TryGetValue(uid, out float until)) return;
             if (Time.realtimeSinceStartup > until)
@@ -216,6 +207,35 @@ namespace Oxide.Plugins
             catch
             {
                 // ignore
+            }
+        }
+
+        /// <summary>
+        /// Flash effect: max stamina so sprint does not drain. Some server DLLs omit <c>PlayerMetabolism.stamina</c> from the
+        /// Oxide reference — set via reflection when the property exists at runtime.
+        /// </summary>
+        private static void TryTopUpFlashStamina(BasePlayer bp, PlayerMetabolism metabolism)
+        {
+            if (bp == null || metabolism == null) return;
+            try
+            {
+                PropertyInfo stProp = typeof(PlayerMetabolism).GetProperty("stamina",
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (stProp == null) return;
+                object staminaAttr = stProp.GetValue(metabolism, null);
+                if (staminaAttr == null) return;
+                Type t = staminaAttr.GetType();
+                PropertyInfo maxP = t.GetProperty("max", BindingFlags.Public | BindingFlags.Instance);
+                PropertyInfo valP = t.GetProperty("value", BindingFlags.Public | BindingFlags.Instance);
+                if (maxP == null || valP == null) return;
+                object maxObj = maxP.GetValue(staminaAttr, null);
+                if (maxObj is float maxF)
+                    valP.SetValue(staminaAttr, maxF, null);
+                metabolism.SendChangesToClient();
+            }
+            catch
+            {
+                // stamina API missing or different on this build
             }
         }
 
