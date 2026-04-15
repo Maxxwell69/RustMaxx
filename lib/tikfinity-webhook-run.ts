@@ -304,19 +304,22 @@ export async function runTikfinityWebhook(
 
   // Action from URL query — TikFinity presets vary:
   // ?action=, ?event=, ?eventName=, ?trigger=, ?giftName=, etc.
+  // Prefer explicit action, then giftName/gift (TikTok often sends both a generic event type and a real gift name).
   const q = request.nextUrl.searchParams;
   const queryActionRaw =
     q.get("action")?.trim() ??
+    q.get("giftName")?.trim() ??
+    q.get("gift")?.trim() ??
     q.get("event")?.trim() ??
     q.get("eventName")?.trim() ??
     q.get("trigger")?.trim() ??
-    q.get("giftName")?.trim() ??
-    q.get("gift")?.trim() ??
     q.get("command")?.trim() ??
     "";
-  const actionFromQuery = queryActionRaw
-    ? getActionFromPayload({ action: queryActionRaw.toLowerCase() })
-    : null;
+  let actionFromQuery: TikTriggerAction | null = null;
+  if (queryActionRaw) {
+    actionFromQuery = getActionFromPayload({ action: queryActionRaw.toLowerCase() });
+    if (!actionFromQuery) actionFromQuery = getActionForGift(queryActionRaw);
+  }
   const templateFromQuery = request.nextUrl.searchParams.get("template")?.trim() ?? null;
 
   // Admin connection (scrap/message/template metadata) by TikFinity event name — load whenever the body names an event,
