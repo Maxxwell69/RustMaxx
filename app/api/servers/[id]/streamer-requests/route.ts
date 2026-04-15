@@ -35,11 +35,28 @@ export async function GET(
     return NextResponse.json({ error: "Only owner or server admin can view requests" }, { status: 403 });
   }
 
-  const rows = await listStreamerServerRequestsWithEmails(serverId);
-  const pending = rows.filter((r) => r.status === "pending").map(serializeRequest);
-  const approved = rows.filter((r) => r.status === "approved").map(serializeRequest);
-  const rejected = rows.filter((r) => r.status === "rejected").map(serializeRequest);
-  return NextResponse.json({ pending, approved, rejected });
+  try {
+    const rows = await listStreamerServerRequestsWithEmails(serverId);
+    const pending = rows.filter((r) => r.status === "pending").map(serializeRequest);
+    const approved = rows.filter((r) => r.status === "approved").map(serializeRequest);
+    const rejected = rows.filter((r) => r.status === "rejected").map(serializeRequest);
+    return NextResponse.json({ pending, approved, rejected });
+  } catch (e) {
+    console.error("[streamer-requests] GET failed:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    const missingTable =
+      msg.includes("streamer_server_requests") ||
+      msg.includes("42P01") ||
+      msg.toLowerCase().includes("does not exist");
+    return NextResponse.json(
+      {
+        error: missingTable
+          ? "Database is missing streamer access tables. Run migration 027_streamer_server_requests.sql on this environment."
+          : "Could not load access requests.",
+      },
+      { status: 503 }
+    );
+  }
 }
 
 /** Owner / server admin: approve or reject a pending request. */

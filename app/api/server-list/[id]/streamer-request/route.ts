@@ -36,20 +36,37 @@ export async function POST(
     /* empty body ok */
   }
 
-  const result = await submitStreamerServerRequest(serverId, user.id, message);
-  if (!result.ok) {
+  try {
+    const result = await submitStreamerServerRequest(serverId, user.id, message);
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status ?? 400 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      request: {
+        id: result.row.id,
+        status: result.row.status,
+        message: result.row.message,
+      },
+    });
+  } catch (e) {
+    console.error("[server-list streamer-request] POST failed:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    const missingTable =
+      msg.includes("streamer_server_requests") ||
+      msg.includes("42P01") ||
+      msg.toLowerCase().includes("does not exist");
     return NextResponse.json(
-      { error: result.error },
-      { status: result.status ?? 400 }
+      {
+        error: missingTable
+          ? "This site is not fully migrated yet (missing access-request storage). Ask the host to run database migration 027."
+          : "Could not save your request. Try again later.",
+      },
+      { status: 503 }
     );
   }
-
-  return NextResponse.json({
-    ok: true,
-    request: {
-      id: result.row.id,
-      status: result.row.status,
-      message: result.row.message,
-    },
-  });
 }

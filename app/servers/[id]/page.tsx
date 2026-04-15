@@ -116,6 +116,7 @@ export default function ServerDetailPage() {
     }>;
   } | null>(null);
   const [streamerRequestsLoading, setStreamerRequestsLoading] = useState(false);
+  const [streamerRequestsError, setStreamerRequestsError] = useState<string | null>(null);
   const [streamerRequestBusyId, setStreamerRequestBusyId] = useState<string | null>(null);
   const [streamerSelectableItems, setStreamerSelectableItems] = useState<
     {
@@ -211,26 +212,46 @@ export default function ServerDetailPage() {
       .catch(() => {});
   }, [id]);
 
+  const loadStreamerRequests = useCallback(async () => {
+    setStreamerRequestsError(null);
+    setStreamerRequestsLoading(true);
+    try {
+      const r = await fetch(`/api/servers/${id}/streamer-requests`, { credentials: "same-origin" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setStreamerRequests(null);
+        setStreamerRequestsError(
+          typeof data.error === "string" ? data.error : `Could not load requests (HTTP ${r.status}).`
+        );
+        return;
+      }
+      if (
+        data &&
+        Array.isArray(data.pending) &&
+        Array.isArray(data.approved) &&
+        Array.isArray(data.rejected)
+      ) {
+        setStreamerRequests({
+          pending: data.pending,
+          approved: data.approved,
+          rejected: data.rejected,
+        });
+      } else {
+        setStreamerRequests(null);
+        setStreamerRequestsError("Unexpected response while loading requests.");
+      }
+    } catch {
+      setStreamerRequests(null);
+      setStreamerRequestsError("Network error while loading requests.");
+    } finally {
+      setStreamerRequestsLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     if (setupTab !== "streamer" || streamerSetupSubTab !== "access") return;
-    if (!server || (server.myRole !== "owner" && server.myRole !== "admin")) return;
-    setStreamerRequestsLoading(true);
-    fetch(`/api/servers/${id}/streamer-requests`, { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d && Array.isArray(d.pending) && Array.isArray(d.approved) && Array.isArray(d.rejected)) {
-          setStreamerRequests({
-            pending: d.pending,
-            approved: d.approved,
-            rejected: d.rejected,
-          });
-        } else {
-          setStreamerRequests({ pending: [], approved: [], rejected: [] });
-        }
-      })
-      .catch(() => setStreamerRequests({ pending: [], approved: [], rejected: [] }))
-      .finally(() => setStreamerRequestsLoading(false));
-  }, [id, setupTab, streamerSetupSubTab, server?.myRole]);
+    void loadStreamerRequests();
+  }, [setupTab, streamerSetupSubTab, loadStreamerRequests]);
 
   // Load RustMaxx profiled players (inactive/active) for this server
   useEffect(() => {
@@ -564,6 +585,7 @@ export default function ServerDetailPage() {
         return;
       }
       if (data.pending && data.approved && data.rejected) {
+        setStreamerRequestsError(null);
         setStreamerRequests({
           pending: data.pending,
           approved: data.approved,
@@ -1092,7 +1114,10 @@ export default function ServerDetailPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStreamerSetupSubTab("access")}
+                    onClick={() => {
+                      setStreamerSetupSubTab("access");
+                      void loadStreamerRequests();
+                    }}
                     className={`rounded px-3 py-1.5 text-xs font-medium ${
                       streamerSetupSubTab === "access"
                         ? "bg-zinc-700 text-zinc-100"
@@ -1338,10 +1363,30 @@ export default function ServerDetailPage() {
                 ) : (
                   <div className="space-y-4 text-sm text-zinc-300">
                     <p className="text-xs text-zinc-500">
-                      Streamers with a staff-approved RustMaxx application can request access from the public server list
-                      when <strong className="text-zinc-400">Require owner approval</strong> is on under Actions &amp;
-                      allowlist. Approve or deny here; approved streamers can add their TikFinity webhook for this server.
+                      <strong className="text-zinc-300">Pending below</strong> only lists streamers who used the public{" "}
+                      <a href="/server-list" className="text-rust-cyan hover:underline" target="_blank" rel="noreferrer">
+                        server list
+                      </a>
+                      , opened <strong className="text-zinc-300">this server</strong>, and clicked{" "}
+                      <strong className="text-zinc-300">Submit access request</strong>. Adding an email under Allowed
+                      streamers does <strong className="text-zinc-300">not</strong> create a row here — those accounts are
+                      approved immediately.
                     </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void loadStreamerRequests()}
+                        disabled={streamerRequestsLoading}
+                        className="rounded border border-zinc-600 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+                      >
+                        {streamerRequestsLoading ? "Refreshing…" : "Refresh list"}
+                      </button>
+                    </div>
+                    {streamerRequestsError ? (
+                      <p className="rounded border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-200">
+                        {streamerRequestsError}
+                      </p>
+                    ) : null}
                     {streamerRequestsLoading ? (
                       <p className="text-xs text-zinc-500">Loading requests…</p>
                     ) : streamerRequests ? (
@@ -1415,8 +1460,8 @@ export default function ServerDetailPage() {
                           )}
                         </div>
                       </>
-                    ) : (
-                      <p className="text-xs text-zinc-600">Could not load requests.</p>
+                    ) : streamerRequestsError ? null : (
+                      <p className="text-xs text-zinc-600">Use Refresh list if pending requests do not appear.</p>
                     )}
                   </div>
                 )}
