@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.39")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.40")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -3685,7 +3685,7 @@ namespace Oxide.Plugins
             {
                 if (player == null || player.IsNpc || player.IsDestroyed) continue;
 
-                var lootNowOpen = IsPlayerLootInventoryUiOpen(player);
+                var lootNowOpen = IsAnyLootUiPanelsOpen(player);
                 if (_prevPlayerLootUiOpen.TryGetValue(player.userID, out var wasLootOpen) && wasLootOpen &&
                     !lootNowOpen && RoamingNPCs != null && RoamingNPCs.IsLoaded)
                 {
@@ -3719,8 +3719,8 @@ namespace Oxide.Plugins
                 }
                 else if (_cfg.Gui.ShowInvaderHudList)
                 {
-                    // Right-side INVADERS list overlaps Rust's loot / NPC inventory UI — hide while loot is open.
-                    if (IsPlayerLootInventoryUiOpen(player))
+                    // Right-side INVADERS list overlaps Rust UI — hide while bag/inventory or non-crafting loot is open.
+                    if (ShouldHideMainInvadersHudList(player))
                     {
                         _lastHudContentByUser.Remove(player.userID);
                         CuiHelper.DestroyUi(player, HudOverlayUiName);
@@ -3750,17 +3750,71 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>
-        /// True only while looting another entity/container.
-        /// Do not treat the player's own inventory/crafting panel as "loot open" or the INVADERS HUD will disappear while crafting.
-        /// </summary>
-        private static bool IsPlayerLootInventoryUiOpen(BasePlayer player)
+        /// <summary>Any loot/inventory panels open (bag, box, corpse, crafting station, etc.) — for RoamingNPCs loot-close tracking.</summary>
+        private static bool IsAnyLootUiPanelsOpen(BasePlayer player)
         {
             try
             {
                 var loot = player?.inventory?.loot;
                 if (loot == null) return false;
-                return loot.entitySource != null;
+                if (loot.entitySource != null) return true;
+                return loot.containers != null && loot.containers.Count > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// True while the main INVADERS list should hide (overlaps inventory / loot UIs). Crafting stations (workbench, mixing, etc.)
+        /// keep the list visible; player bag (Tab) hides it.
+        /// </summary>
+        private static bool ShouldHideMainInvadersHudList(BasePlayer player)
+        {
+            try
+            {
+                var loot = player?.inventory?.loot;
+                if (loot == null) return false;
+                var src = loot.entitySource;
+                if (src == null)
+                    return loot.containers != null && loot.containers.Count > 0;
+                return !IsCraftingStationLootEntity(src);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsCraftingStationLootEntity(BaseEntity ent)
+        {
+            if (ent == null) return false;
+            try
+            {
+                if (ent is Workbench) return true;
+                if (ent is MixingTable) return true;
+                if (ent is ResearchTable) return true;
+                var pn = ent.ShortPrefabName ?? "";
+                if (pn.IndexOf("workbench", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (pn.IndexOf("mixing", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (pn.IndexOf("repair", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (pn.IndexOf("research", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return false;
+        }
+
+        /// <summary>Looting a world entity (box, corpse, bench, etc.) — used by loot-task overlay.</summary>
+        private static bool IsPlayerLootingFromWorldEntity(BasePlayer player)
+        {
+            try
+            {
+                return player?.inventory?.loot?.entitySource != null;
             }
             catch
             {
@@ -3845,7 +3899,7 @@ namespace Oxide.Plugins
             Dictionary<ulong, string> bridgeTaskByEntity)
         {
             if (player == null || bridgeTaskByEntity == null) return;
-            if (_adminMainGuiOpen.Contains(player.userID) || !IsPlayerLootInventoryUiOpen(player))
+            if (_adminMainGuiOpen.Contains(player.userID) || !IsPlayerLootingFromWorldEntity(player))
             {
                 CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
                 _lastLootTaskOverlayContentByUser.Remove(player.userID);
