@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.42")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.43")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -81,7 +81,7 @@ namespace Oxide.Plugins
         /// <summary>Admin has main MaxxInvaders CUI open — hide right INVADERS overlay so it does not stack on the GUI.</summary>
         private readonly HashSet<ulong> _adminMainGuiOpen = new HashSet<ulong>();
         private readonly Dictionary<ulong, float> _lastMiddleMouseDepositBoxAt = new();
-        /// <summary>Tab inventory is client-heavy; server loot state often omits the player bag. Toggle on <see cref="BUTTON.INVENTORY"/> to hide the INVADERS HUD while the bag UI is open.</summary>
+        /// <summary>Tab inventory is client-heavy; server loot state often omits the player bag. Toggle on client command <c>inventory.toggle</c> to hide the INVADERS HUD while the bag UI is open.</summary>
         private readonly Dictionary<ulong, bool> _invTabInventoryOpenByUser = new();
         private DateTime _lastRoamingSpawnFailWarnUtc;
         private string _lastRoamingSpawnFailTemplate;
@@ -1872,15 +1872,6 @@ namespace Oxide.Plugins
         {
             if (player == null || input == null) return;
 
-            if (input.WasJustPressed(BUTTON.INVENTORY) && CanShowInvadersStreamerUi(player))
-            {
-                var uid = player.userID;
-                if (_invTabInventoryOpenByUser.TryGetValue(uid, out var open))
-                    _invTabInventoryOpenByUser[uid] = !open;
-                else
-                    _invTabInventoryOpenByUser[uid] = true;
-            }
-
             if (!input.WasJustPressed(BUTTON.FIRE_THIRD)) return;
             if (!CanShowInvadersStreamerUi(player)) return;
             var now = Time.realtimeSinceStartup;
@@ -1889,6 +1880,17 @@ namespace Oxide.Plugins
                 return;
             _lastMiddleMouseDepositBoxAt[player.userID] = now;
             AssignDepositBoxFromLookForAllRoaming(player);
+        }
+
+        private void OnPlayerCommand(BasePlayer player, string command, string[] args)
+        {
+            if (player == null || !CanShowInvadersStreamerUi(player) || string.IsNullOrWhiteSpace(command)) return;
+            if (!command.Equals("inventory.toggle", StringComparison.OrdinalIgnoreCase)) return;
+            var uid = player.userID;
+            if (_invTabInventoryOpenByUser.TryGetValue(uid, out var open))
+                _invTabInventoryOpenByUser[uid] = !open;
+            else
+                _invTabInventoryOpenByUser[uid] = true;
         }
 
         private static ulong ResolveBridgeAnchorSteam(InvaderRuntime r, BasePlayer issuer)
