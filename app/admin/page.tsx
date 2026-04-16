@@ -218,6 +218,12 @@ export default function SuperAdminDashboardPage() {
               Streamer applications →
             </Link>
             <Link
+              href="/admin/superfan/site-applications"
+              className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
+            >
+              Viewer superfan (site) →
+            </Link>
+            <Link
               href="/admin/streamer-actions"
               className="rounded bg-rust-cyan/20 px-3 py-1.5 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/30"
             >

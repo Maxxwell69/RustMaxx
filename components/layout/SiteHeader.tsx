@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/server-list", label: "Server list" },
   { href: "/streamers", label: "Streamers" },
+  { href: "/viewer/superfan", label: "Superfans" },
   { href: "/streamer-interaction", label: "Streamer Interaction" },
   { href: "/features", label: "Features" },
 ];
@@ -30,12 +31,14 @@ export function SiteHeader() {
 
   const isDashboard = pathname === "/servers" || pathname?.startsWith("/servers/");
   const isStreamersSection = pathname === "/streamers" || pathname?.startsWith("/streamers/");
+  const isViewerSuperfan = pathname === "/viewer" || pathname?.startsWith("/viewer/");
 
   const navLinks = loggedIn ? NAV_LINKS.filter((l) => l.href !== "/") : NAV_LINKS;
 
   function navLinkActive(href: string): boolean {
     if (href === "/servers") return isDashboard;
     if (href === "/streamers") return isStreamersSection;
+    if (href === "/viewer/superfan") return isViewerSuperfan;
     return pathname === href;
   }
 

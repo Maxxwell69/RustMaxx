@@ -636,7 +636,12 @@ export default function StreamerDashboardPage() {
         <p className="mt-1 text-[11px] text-zinc-600">
           Stripe subscription: {user.subscriptionStatus}
         </p>
-        <p className="mt-2 text-[11px] text-zinc-500">Viewer-based perks — coming soon.</p>
+        <p className="mt-2 text-[11px] text-zinc-500">
+          <Link href="/streamer/superfan" className="text-rust-cyan hover:underline">
+            Superfan requests
+          </Link>{" "}
+          — approve viewers who applied on the site.
+        </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {user.streamerTier === "free" ? (
             <>

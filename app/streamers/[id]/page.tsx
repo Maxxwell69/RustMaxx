@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
+import { StreamerSuperfanCta } from "@/components/streamers/StreamerSuperfanCta";
 
 type PublicSocial = {
   key: string;
@@ -190,6 +191,12 @@ export default function StreamerPublicProfilePage() {
                   </p>
                 </div>
               ) : null}
+
+              <StreamerSuperfanCta
+                streamerId={profile.id}
+                streamerLabel={profile.stream_name || profile.display_name || "this streamer"}
+                hideForSelf={profile.is_self}
+              />
             </div>
           )}
         </div>
