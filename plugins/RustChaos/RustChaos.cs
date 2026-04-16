@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.31")]
+    [Info("RustChaos", "RustMaxx", "1.15.32")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -417,7 +417,10 @@ namespace Oxide.Plugins
             "assets/bundled/prefabs/autospawn/animals/chicken/chicken.prefab"
         };
 
-        /// <summary>Heavy / oil-rig style scientist with flamethrower; fall back to heavy if path missing.</summary>
+        /// <summary>
+        /// Prefer dedicated heavy+flame prefab when present; otherwise heavy scientist.
+        /// Loadout is always overridden to a flamethrower after spawn (heavy prefabs alone can roll minigun/M249/etc.).
+        /// </summary>
         private static readonly string[] FlameScientistPrefabCandidates =
         {
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy_flame.prefab",
@@ -628,19 +631,19 @@ namespace Oxide.Plugins
 
                 case "scientistflame":
                     if (target == null)
-                        PrintWarning($"{LogPrefix} Flame scientist skipped: streamer not online. Set StreamerName in config (current: '{_config?.StreamerName ?? ""}').");
+                        PrintWarning($"{LogPrefix} Flamethrower scientist skipped: streamer not online. Set StreamerName in config (current: '{_config?.StreamerName ?? ""}').");
                     else
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}! (flame scientist)"));
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}! (flamethrower scientist)"));
                         ScheduleDelayedSingleSpawn("scientistflame", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
                             if (current == null || !current.IsValid()) return;
                             Vector3 pos = GetSingleSpawnPosition(current);
-                            if (pos != Vector3.zero && TrySpawnSingleScientistFromCandidates(current, pos, FlameScientistPrefabCandidates))
-                                Puts($"{LogPrefix} Spawned 1 flame scientist near {current.displayName}");
+                            if (pos != Vector3.zero && TrySpawnSingleScientistFromCandidates(current, pos, FlameScientistPrefabCandidates, equipFlamethrower: true))
+                                Puts($"{LogPrefix} Spawned 1 flamethrower scientist near {current.displayName}");
                             else
-                                PrintWarning($"{LogPrefix} Flame scientist spawn failed (prefab paths).");
+                                PrintWarning($"{LogPrefix} Flamethrower scientist spawn failed (prefab paths).");
                         });
                     }
                     break;
@@ -2477,8 +2480,76 @@ namespace Oxide.Plugins
             return TrySpawnSingleScientistFromCandidates(streamer, position, SingleScientistPrefabCandidates);
         }
 
+        /// <summary>
+        /// Heavy scientist prefabs often spawn with minigun/M249/SPAS; scientistflame must always use a flamethrower.
+        /// Clears belt and equips military flamethrower when available, else handmade, with a full fuel tank.
+        /// </summary>
+        private void TryEquipScientistNpcFlamethrower(BaseEntity entity)
+        {
+            var scientist = entity as ScientistNPC;
+            if (scientist == null || scientist.IsDestroyed) return;
+            try
+            {
+                var belt = scientist.inventory?.containerBelt;
+                if (belt == null) return;
+
+                for (int i = belt.capacity - 1; i >= 0; i--)
+                {
+                    var slot = belt.GetSlot(i);
+                    slot?.RemoveFromContainer();
+                }
+
+                Item ft = ItemManager.CreateByName("military flamethrower", 1);
+                if (ft == null)
+                    ft = ItemManager.CreateByName("flamethrower", 1);
+                if (ft == null) return;
+
+                if (!ft.MoveToContainer(belt, 0))
+                {
+                    ft.Remove();
+                    return;
+                }
+
+                scientist.UpdateActiveItem(ft.uid);
+                TrySetFlameThrowerAmmoFromItem(ft);
+
+                NetworkableId nid = scientist.net.ID;
+                timer.Once(0.12f, () =>
+                {
+                    var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    var npc = ent as ScientistNPC;
+                    if (npc == null || npc.IsDestroyed) return;
+                    var b = npc.inventory?.containerBelt;
+                    if (b == null) return;
+                    for (int s = 0; s < b.capacity; s++)
+                    {
+                        var it = b.GetSlot(s);
+                        if (it?.info == null) continue;
+                        string sn = it.info.shortname;
+                        if (sn != "flamethrower" && sn != "military flamethrower") continue;
+                        TrySetFlameThrowerAmmoFromItem(it);
+                        break;
+                    }
+                });
+            }
+            catch
+            {
+                // Prefab may be non-standard; spawn still proceeds.
+            }
+        }
+
+        private static void TrySetFlameThrowerAmmoFromItem(Item weaponItem)
+        {
+            if (weaponItem?.info == null) return;
+            var held = weaponItem.GetHeldEntity() as FlameThrower;
+            if (held == null) return;
+            bool military = string.Equals(weaponItem.info.shortname, "military flamethrower", StringComparison.OrdinalIgnoreCase);
+            held.ammo = military ? 150 : 100;
+        }
+
         /// <summary>Spawn one scientist from an ordered prefab list (first path that CreateEntity accepts).</summary>
-        private bool TrySpawnSingleScientistFromCandidates(BasePlayer streamer, Vector3 position, string[] candidates)
+        /// <param name="equipFlamethrower">When true, clears belt and gives a military (or handmade) flamethrower with fuel — fixes heavy prefabs that would otherwise spawn with minigun/M249/etc.</param>
+        private bool TrySpawnSingleScientistFromCandidates(BasePlayer streamer, Vector3 position, string[] candidates, bool equipFlamethrower = false)
         {
             if (streamer == null || !streamer.IsValid() || candidates == null || candidates.Length == 0) return false;
             position = SnapLandNpcSpawnToGround(position);
@@ -2491,6 +2562,8 @@ namespace Oxide.Plugins
             }
             if (entity == null) return false;
             entity.Spawn();
+            if (equipFlamethrower)
+                TryEquipScientistNpcFlamethrower(entity);
             RegisterSoloWildEntity(entity, streamer);
             TryProvokeChaosWaveEnemy(entity, streamer);
             NetworkableId nid = entity.net.ID;

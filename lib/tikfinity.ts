@@ -287,9 +287,9 @@ export const ACTION_META: Record<
     exampleGifts: ["Galaxy", "Galaxy Gift", "Scientist"],
   },
   scientistflame: {
-    label: "Flame scientist",
+    label: "Flamethrower scientist",
     description:
-      "Spawn one heavy / flamethrower-style scientist near the streamer (prefab: heavy_flame with heavy fallback). Scrap from the webhook is capped at 10 for spawn actions.",
+      "Spawn a heavy scientist near the streamer and force a military (or handmade) flamethrower with fuel — heavy prefabs alone can roll other weapons. Scrap from the webhook is capped at 10 for spawn actions.",
     exampleGifts: ["Flame scientist", "FlameScientist"],
   },
   wolf: {
