@@ -13,13 +13,16 @@ function PlayerContent() {
   const serverId = params.id as string;
   const playerId = params.playerId as string;
   const name = searchParams.get("name") || playerId;
-  const [server, setServer] = useState<{ name: string } | null>(null);
+  const [server, setServer] = useState<{ name: string; myRole?: string } | null>(null);
   const [groupSummary, setGroupSummary] = useState<GroupSummaryItem[]>([] as GroupSummaryItem[]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [giveItems, setGiveItems] = useState<GiveItem[]>([]);
   const [giving, setGiving] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [oxidePerm, setOxidePerm] = useState("");
+  const [oxideBusy, setOxideBusy] = useState<string | null>(null);
+  const [oxideMessage, setOxideMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     fetch(`/api/servers/${serverId}`)
@@ -100,6 +103,50 @@ function PlayerContent() {
       setMessage({ type: "error", text: "Network error" });
     } finally {
       setGiving(null);
+    }
+  }
+
+  const canManageOxide = server?.myRole === "owner" || server?.myRole === "admin";
+
+  async function runOxidePermission(action: "grant" | "revoke") {
+    setOxideMessage(null);
+    const permission = oxidePerm.trim();
+    if (!permission) {
+      setOxideMessage({ type: "error", text: "Enter an Oxide permission (e.g. maxxinvaders.use)." });
+      return;
+    }
+    setOxideBusy(action);
+    try {
+      const res = await fetch(`/api/servers/${serverId}/oxide-permissions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          subject: "user",
+          subjectId: playerId,
+          permission,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOxideMessage({
+          type: "error",
+          text: typeof data.error === "string" ? data.error : "Failed.",
+        });
+        return;
+      }
+      const resp =
+        typeof (data as { response?: string }).response === "string"
+          ? (data as { response: string }).response.trim()
+          : "";
+      setOxideMessage({
+        type: "ok",
+        text: resp || (action === "grant" ? "Granted." : "Revoked."),
+      });
+    } catch {
+      setOxideMessage({ type: "error", text: "Network error." });
+    } finally {
+      setOxideBusy(null);
     }
   }
 
@@ -186,6 +233,51 @@ function PlayerContent() {
           </ul>
         )}
       </div>
+
+      {canManageOxide && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <h2 className="mb-2 text-lg font-medium text-zinc-300">Plugin permission (Oxide)</h2>
+          <p className="mb-3 text-xs text-zinc-500">
+            Grant or revoke a single permission for this Steam ID on the live server (
+            <code className="rounded bg-zinc-800 px-1">oxide.grant user …</code>). Prefer the plugin detail page to
+            pick from the plugin&apos;s registered permissions list.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600"
+              placeholder="permission.name"
+              value={oxidePerm}
+              onChange={(e) => setOxidePerm(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={oxideBusy !== null}
+                onClick={() => runOxidePermission("grant")}
+                className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+              >
+                {oxideBusy === "grant" ? "…" : "Grant"}
+              </button>
+              <button
+                type="button"
+                disabled={oxideBusy !== null}
+                onClick={() => runOxidePermission("revoke")}
+                className="rounded-lg border border-amber-800/80 bg-amber-950/40 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-900/30 disabled:opacity-50"
+              >
+                {oxideBusy === "revoke" ? "…" : "Revoke"}
+              </button>
+            </div>
+          </div>
+          {oxideMessage && (
+            <p
+              className={`mt-2 text-sm ${oxideMessage.type === "ok" ? "text-emerald-400" : "text-red-400"}`}
+            >
+              {oxideMessage.text}
+            </p>
+          )}
+        </div>
+      )}
 
       {message && (
         <p className={`text-sm ${message.type === "ok" ? "text-emerald-400" : "text-red-400"}`}>
