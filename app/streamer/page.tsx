@@ -49,18 +49,17 @@ function readSecretForPublicId(publicId: string | undefined): string | null {
 }
 
 /**
- * Full URL for one rule: token + `event` = rule alias (matches streamer_tikfinity_rules.name).
- * Server resolves the alias to server_action + duration — same URL keeps working when you rotate the token;
- * re-copy from this page (or use Copy all) to refresh TikFinity.
+ * Full URL for TikFinity: token + in-game action key as `action=` (empty-body safe; matches streamer rule’s server_action).
+ * Re-copy after rotating the token (Copy all or each Copy webhook).
  */
 function fullRuleWebhookUrl(
   webhookBase: string | null,
   secret: string | null,
-  ruleEventAlias: string
+  serverAction: string
 ): string | null {
-  const alias = ruleEventAlias.trim();
-  if (!webhookBase || !secret || !alias) return null;
-  return `${webhookBase}?token=${encodeURIComponent(secret)}&event=${encodeURIComponent(alias)}`;
+  const name = serverAction.trim();
+  if (!webhookBase || !secret || !name) return null;
+  return `${webhookBase}?token=${encodeURIComponent(secret)}&action=${encodeURIComponent(name)}`;
 }
 
 type HookSummary = {
@@ -393,7 +392,7 @@ export default function StreamerDashboardPage() {
         wh?.publicId != null
           ? secretByPublicId[wh.publicId] ?? readSecretForPublicId(wh.publicId)
           : null;
-      const u = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.name);
+      const u = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.server_action);
       if (u) {
         lines.push(`${r.name} (${r.server_action})`, u, "");
       }
@@ -549,14 +548,14 @@ export default function StreamerDashboardPage() {
     firstHook?.webhookUrl && firstSecret
       ? `${firstHook.webhookUrl}?token=${encodeURIComponent(firstSecret)}`
       : null;
-  /** TikFinity often sends an empty POST body; tie URL to a rule alias via `event=` (matches rule name). */
-  const exampleRuleAlias =
-    rules.find((r) => r.server_action.toLowerCase().trim() === "wolf")?.name ??
-    rules[0]?.name ??
-    "rose";
+  /** TikFinity often sends an empty POST body; force the final in-game action key in the URL. */
+  const exampleRuleForUrl =
+    rules.find((r) => r.server_action.toLowerCase().trim() === "wolf")?.server_action ??
+    rules[0]?.server_action ??
+    "wolf";
   const fullTikfinityUrlWithRuleAction =
-    firstUrl && exampleRuleAlias
-      ? `${firstUrl}&event=${encodeURIComponent(exampleRuleAlias)}`
+    firstUrl && exampleRuleForUrl
+      ? `${firstUrl}&action=${encodeURIComponent(exampleRuleForUrl)}`
       : null;
 
   const serverIdsWithHooks = new Set(hooks.map((h) => h.serverId));
@@ -775,7 +774,7 @@ export default function StreamerDashboardPage() {
                   onClick={() => void copyFullWebhookUrl(fullTikfinityUrlWithRuleAction)}
                   className="rounded-lg border border-amber-700/80 bg-amber-900/30 px-3 py-1.5 text-[11px] font-medium text-amber-100 hover:bg-amber-900/50"
                 >
-                  Copy URL with &amp;event=
+                  Copy URL with &amp;action=
                 </button>
               </>
             ) : null}
@@ -880,12 +879,12 @@ export default function StreamerDashboardPage() {
         <p className="mb-4 text-xs text-zinc-500">
           Rules belong to <strong className="text-zinc-400">one server webhook</strong> at a time. Pick which server below,
           then add rules or quick spawns. <strong className="font-medium text-zinc-300">TikFinity event name</strong> is your
-          alias (stored as the rule name); <strong className="font-medium text-zinc-300">Server action</strong> is the
-          in-game key. <strong className="font-medium text-zinc-300">Copy webhook</strong> builds{" "}
-          <code className="rounded bg-zinc-800 px-1">?token=…&amp;event=your-alias</code> so RustMaxx resolves duration and
-          action from the rule. After you click <strong className="text-zinc-300">New secret</strong>, use{" "}
-          <strong className="text-zinc-300">Copy all rule webhooks</strong> (or each Copy) — URLs on this page always use the
-          current token (TikFinity still needs the updated URL pasted in).
+          alias/label; <strong className="font-medium text-zinc-300">Server action</strong> is the in-game action key.{" "}
+          <strong className="font-medium text-zinc-300">Copy webhook</strong> builds{" "}
+          <code className="rounded bg-zinc-800 px-1">?token=…&amp;action=server_action</code> (e.g.{" "}
+          <code className="rounded bg-zinc-800 px-1">statusflippers</code>) — most reliable for empty-body TikFinity posts.
+          After <strong className="text-zinc-300">New secret</strong>, use <strong className="text-zinc-300">Copy all rule webhooks</strong>{" "}
+          or each Copy so TikFinity gets the new token.
         </p>
         {rotateHint ? (
           <p className="mb-4 rounded-lg border border-emerald-900/50 bg-emerald-950/30 p-3 text-xs text-emerald-100/95">
@@ -1030,7 +1029,7 @@ export default function StreamerDashboardPage() {
               wh?.publicId != null
                 ? secretByPublicId[wh.publicId] ?? readSecretForPublicId(wh.publicId)
                 : null;
-            const ruleUrl = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.name);
+            const ruleUrl = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.server_action);
             return (
               <li
                 key={r.id}
