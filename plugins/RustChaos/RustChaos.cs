@@ -12,6 +12,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.AI;
@@ -21,7 +22,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.36")]
+    [Info("RustChaos", "RustMaxx", "1.15.37")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -133,6 +134,7 @@ namespace Oxide.Plugins
             _streamerTimedStatuses.Clear();
             _flippersBackupItemByUser.Clear();
             ClearStreamerStatusUiForAllPlayers();
+            DestroyGiftBannerForAllPlayers();
         }
 
         private void OnPlayerDisconnected(BasePlayer player, string reason)
@@ -354,6 +356,14 @@ namespace Oxide.Plugins
         private const string StatusFxHudAnchorMax = "0.5 0";
         private const string StatusFxHudOffsetMin = "-380 92";
         private const string StatusFxHudOffsetMax = "380 248";
+        /// <summary>TikTok / viewer gift line toast above the hotbar (separate from MaxxInvaders HUD).</summary>
+        private const string GiftBannerUiName = "RustChaos.GiftBanner";
+        private const float GiftBannerDurationSeconds = 5.5f;
+        private const string GiftBannerAnchorMin = "0.5 0";
+        private const string GiftBannerAnchorMax = "0.5 0";
+        private const string GiftBannerOffsetMin = "-420 92";
+        private const string GiftBannerOffsetMax = "420 182";
+        private const int GiftBannerMaxPlainChars = 280;
         // Countdown seconds between waves:
         // wave 1 -> wave 2 = 20s, wave 2 -> wave 3 = 25s, and default to 30s for the rest (until you tell me different).
         // Index = completedWave - 1 (so [0] is after wave 1).
@@ -596,17 +606,17 @@ namespace Oxide.Plugins
             switch (action)
             {
                 case "test":
-                    BroadcastChat(ChatMsg($"{viewerName} triggered a TikTok test event!"));
+                    BroadcastChatGiftBanner(ChatMsg($"{viewerName} triggered a TikTok test event!"));
                     break;
 
                 case "rose":
-                    BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                    BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                     break;
 
                 case "smoke":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         SpawnEffect(EffectSmoke, GetPositionNear(target));
                     }
                     break;
@@ -614,7 +624,7 @@ namespace Oxide.Plugins
                 case "fireworks":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         Vector3 pos = GetPositionNear(target);
                         SpawnEffect(EffectFireworks, pos);
                     }
@@ -625,7 +635,7 @@ namespace Oxide.Plugins
                         PrintWarning($"{LogPrefix} Scientist skipped: streamer not online. Set StreamerName in config (current: '{_config?.StreamerName ?? ""}').");
                     else
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("scientist", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -644,7 +654,7 @@ namespace Oxide.Plugins
                         PrintWarning($"{LogPrefix} Flamethrower scientist skipped: streamer not online. Set StreamerName in config (current: '{_config?.StreamerName ?? ""}').");
                     else
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}! (flamethrower scientist)"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}! (flamethrower scientist)"));
                         ScheduleDelayedSingleSpawn("scientistflame", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -661,7 +671,7 @@ namespace Oxide.Plugins
                 case "wolf":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("wolf", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -677,7 +687,7 @@ namespace Oxide.Plugins
                 case "bear":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("bear", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -693,7 +703,7 @@ namespace Oxide.Plugins
                 case "tiger":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("tiger", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -702,7 +712,7 @@ namespace Oxide.Plugins
                                 Puts($"{LogPrefix} Spawned 1 tiger near {current.displayName}");
                             else
                             {
-                                BroadcastChat(ChatMsg($"{viewerName} sent a tiger but spawn failed — set TigerPrefabPath in RustChaos.json."));
+                                BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a tiger but spawn failed — set TigerPrefabPath in RustChaos.json."));
                                 PrintWarning($"{LogPrefix} Tiger spawn failed (all prefab candidates).");
                             }
                         });
@@ -712,7 +722,7 @@ namespace Oxide.Plugins
                 case "panther":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("panther", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -721,7 +731,7 @@ namespace Oxide.Plugins
                                 Puts($"{LogPrefix} Spawned 1 panther near {current.displayName}");
                             else
                             {
-                                BroadcastChat(ChatMsg($"{viewerName} sent a panther but spawn failed — set PantherPrefabPath in RustChaos.json."));
+                                BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a panther but spawn failed — set PantherPrefabPath in RustChaos.json."));
                                 PrintWarning($"{LogPrefix} Panther spawn failed (all prefab candidates).");
                             }
                         });
@@ -731,7 +741,7 @@ namespace Oxide.Plugins
                 case "crocodile":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("crocodile", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -740,7 +750,7 @@ namespace Oxide.Plugins
                                 Puts($"{LogPrefix} Spawned 1 crocodile near {current.displayName}");
                             else
                             {
-                                BroadcastChat(ChatMsg($"{viewerName} sent a crocodile but spawn failed — set CrocodilePrefabPath in RustChaos.json."));
+                                BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a crocodile but spawn failed — set CrocodilePrefabPath in RustChaos.json."));
                                 PrintWarning($"{LogPrefix} Crocodile spawn failed (all prefab candidates).");
                             }
                         });
@@ -759,7 +769,7 @@ namespace Oxide.Plugins
                             return $"{viewerName} → {target.displayName}: {customMessage}";
                         }
                         target.Heal(amount);
-                        BroadcastChat(HealingHandsChat($"{viewerName} gave HEALING HANDS to {target.displayName}! +{amount:0} health +10 scrap"));
+                        BroadcastChatGiftBanner(HealingHandsChat($"{viewerName} gave HEALING HANDS to {target.displayName}! +{amount:0} health +10 scrap"));
                         Puts($"{LogPrefix} Healing Hands: healed {target.displayName} by {amount} and gave 10 scrap (from {viewerName})");
                     }
                     break;
@@ -770,7 +780,7 @@ namespace Oxide.Plugins
                         // Heal() should cap at the player's max health.
                         float big = 99999f;
                         target.Heal(big);
-                        BroadcastChat(ChatMsg($"{viewerName} triggered FULL HEALTH!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} triggered FULL HEALTH!"));
                         Puts($"{LogPrefix} Set streamer {target.displayName} to full health (Heal({big})).");
                     }
                     break;
@@ -779,7 +789,7 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         int n = TryApplyBunnyCostumeToStreamer(target);
-                        BroadcastChat(ChatMsg($"{viewerName} put the BUNNY COSTUME on {target.displayName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} put the BUNNY COSTUME on {target.displayName}!"));
                         Puts($"{LogPrefix} Bunny costume: equipped {n} wear item(s) on {target.displayName} (from {viewerName}).");
                     }
                     break;
@@ -810,12 +820,12 @@ namespace Oxide.Plugins
                                 _reviveChaosProtectUntil[reviveUid] = Time.realtimeSinceStartup + ReviveChaosProtectSeconds;
                                 NextTick(() => TryForceResyncRevivedPlayer(reviveUid, revivePos));
                                 timer.Once(0.15f, () => TryForceResyncRevivedPlayer(reviveUid, revivePos));
-                                BroadcastChat(ChatMsg($"{viewerName} triggered REVIVE CHAOS! {target.displayName} is back up — full health!"));
+                                BroadcastChatGiftBanner(ChatMsg($"{viewerName} triggered REVIVE CHAOS! {target.displayName} is back up — full health!"));
                                 Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName}, cleared bleed, full heal, {ReviveChaosProtectSeconds}s protect (bleed + fall).");
                             }
                             else
                             {
-                                BroadcastChat(ChatMsg($"{viewerName} sent Revive Chaos — streamer isn't wounded or bleeding."));
+                                BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent Revive Chaos — streamer isn't wounded or bleeding."));
                                 Puts($"{LogPrefix} Revive Chaos: {target.displayName} not wounded/bleeding; no-op.");
                             }
                         }
@@ -831,7 +841,7 @@ namespace Oxide.Plugins
                     {
                         if (GetStreamerChaosLocation(target) != ChaosLocation.Land)
                         {
-                            BroadcastChat(ChatMsg($"Heli Chaos is land only. {viewerName} sent {giftName}!"));
+                            BroadcastChatGiftBanner(ChatMsg($"Heli Chaos is land only. {viewerName} sent {giftName}!"));
                             break;
                         }
                         StartHeliChaosEvent(target, ChatMsg, viewerName, giftName);
@@ -841,7 +851,7 @@ namespace Oxide.Plugins
                 case "shark":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("shark", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -858,7 +868,7 @@ namespace Oxide.Plugins
                 case "pig":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("pig", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -874,7 +884,7 @@ namespace Oxide.Plugins
                 case "chicken":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         ScheduleDelayedSingleSpawn("chicken", target.userID, () =>
                         {
                             BasePlayer current = FindConnectedPlayerByUserId(target.userID);
@@ -890,7 +900,7 @@ namespace Oxide.Plugins
                 case "pistolammo50":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}! (+50 pistol ammo)"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}! (+50 pistol ammo)"));
                         GiveItemWithLog(target, 50, "ammo.pistol", "TikTok webhook pistolammo50");
                         Puts($"{LogPrefix} Gave 50 pistol ammo to {target.displayName} (from {viewerName}).");
                     }
@@ -970,7 +980,7 @@ namespace Oxide.Plugins
                 case "likes":
                     if (target != null)
                     {
-                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a {giftName}!"));
                         SpawnSupplyDropAt(GetPositionNear(target));
                     }
                     break;
@@ -979,7 +989,7 @@ namespace Oxide.Plugins
                     if (target != null)
                     {
                         ChaosLocation loc = GetStreamerChaosLocation(target);
-                        BroadcastChat(ChatMsg($"{viewerName} triggered CHAOS! ({loc})"));
+                        BroadcastChatGiftBanner(ChatMsg($"{viewerName} triggered CHAOS! ({loc})"));
                         RunChaosEvent(loc, viewerName, giftName, ChatMsg);
                     }
                     break;
@@ -1028,18 +1038,18 @@ namespace Oxide.Plugins
                             Vector3 waterPos = target.transform.position;
                             if (SpawnScientistBoat(waterPos, _config?.ScientistRhibPrefabPath, _config?.ScientistPtBoatPrefabPath))
                             {
-                                BroadcastChat(ChatMsg($"{viewerName} sent a scientist boat!"));
+                                BroadcastChatGiftBanner(ChatMsg($"{viewerName} sent a scientist boat!"));
                                 Puts($"{LogPrefix} Spawned scientist boat (RHIB or PT) at {target.displayName} (water)");
                             }
                             else
                             {
-                                BroadcastChat(ChatMsg($"{viewerName} tried to send a scientist boat but spawn failed. Check ScientistRhibPrefabPath / ScientistPtBoatPrefabPath in config."));
+                                BroadcastChatGiftBanner(ChatMsg($"{viewerName} tried to send a scientist boat but spawn failed. Check ScientistRhibPrefabPath / ScientistPtBoatPrefabPath in config."));
                                 PrintWarning($"{LogPrefix} Scientist boat spawn failed. Set ScientistRhibPrefabPath or ScientistPtBoatPrefabPath in oxide/config/RustChaos.json if paths differ on your build.");
                             }
                         }
                         else
                         {
-                            BroadcastChat(ChatMsg($"Scientist boat requires streamer to be in water (sea or swimming). {viewerName} sent {giftName}!"));
+                            BroadcastChatGiftBanner(ChatMsg($"Scientist boat requires streamer to be in water (sea or swimming). {viewerName} sent {giftName}!"));
                         }
                     }
                     break;
@@ -1071,7 +1081,7 @@ namespace Oxide.Plugins
             GiveItemWithLog(target, 1, "homingmissile.launcher", "Heli chaos (homing launcher)");
             for (int i = 0; i < 20; i++)
                 GiveItemWithLog(target, 1, "ammo.rocket.seeker", "Heli chaos (seeker missile)");
-            BroadcastChat(chatMsg($"{viewerName} triggered HELI CHAOS! Homing launcher + 20 missiles. Locked crate first, patrol helicopter after."));
+            BroadcastChatGiftBanner(chatMsg($"{viewerName} triggered HELI CHAOS! Homing launcher + 20 missiles. Locked crate first, patrol helicopter after."));
             float cDelay = Mathf.Max(2f, _config?.HeliChaosCrateDelaySeconds ?? 8f);
             float pDelay = Mathf.Max(cDelay + 15f, _config?.HeliChaosPatrolDelaySeconds ?? 75f);
             ulong uid = target.userID;
@@ -1810,18 +1820,18 @@ namespace Oxide.Plugins
             ChaosLocation loc = GetStreamerChaosLocation(target);
             if (loc != ChaosLocation.Land)
             {
-                BroadcastChat(chatMsg($"Chaos wave is land only. {viewerName} sent {giftName}!"));
+                BroadcastChatGiftBanner(chatMsg($"Chaos wave is land only. {viewerName} sent {giftName}!"));
                 return false;
             }
             if (_chaosWaveEnemyIds != null)
             {
-                BroadcastChat(chatMsg("Chaos wave already in progress!"));
+                BroadcastChatGiftBanner(chatMsg("Chaos wave already in progress!"));
                 return false;
             }
             if (mode == ChaosWaveMode.Bear)
-                BroadcastChat(chatMsg($"{viewerName} started a CHAOS WAVE! Kill the bears…"));
+                BroadcastChatGiftBanner(chatMsg($"{viewerName} started a CHAOS WAVE! Kill the bears…"));
             else
-                BroadcastChat(chatMsg($"{viewerName} started {ChaosWaveUiTitleForMode(mode)}!"));
+                BroadcastChatGiftBanner(chatMsg($"{viewerName} started {ChaosWaveUiTitleForMode(mode)}!"));
             StartLandChaosWave(target, mode);
             return true;
         }
@@ -2164,7 +2174,7 @@ namespace Oxide.Plugins
                 }
                 SpawnChaosWaveBears(s, 1);
                 int n = _chaosWaveTargetBearCount;
-                BroadcastChat(ChaosWaveSpawnBroadcastLine(1, n));
+                BroadcastChatGiftBanner(ChaosWaveSpawnBroadcastLine(1, n));
                 Puts($"{LogPrefix} Chaos wave 1: {n} enemies spawned after delay ({_chaosWaveMode}).");
                 ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave 1\nEnemies left: {Mathf.Max(0, n)}");
             });
@@ -3000,7 +3010,7 @@ namespace Oxide.Plugins
             }
             SpawnChaosWaveBears(streamer, _chaosWaveNumber);
             int spawnedNow = _chaosWaveTargetBearCount;
-            BroadcastChat(ChaosWaveSpawnBroadcastLine(_chaosWaveNumber, spawnedNow));
+            BroadcastChatGiftBanner(ChaosWaveSpawnBroadcastLine(_chaosWaveNumber, spawnedNow));
             Puts($"{LogPrefix} Chaos wave {_chaosWaveNumber}: {spawnedNow} enemies ({_chaosWaveMode}).");
             ShowChaosWaveUIToAll(_chaosWaveUiTitle, $"Wave {_chaosWaveNumber}\nEnemies left: {spawnedNow}");
         }
@@ -3411,7 +3421,7 @@ namespace Oxide.Plugins
                 return "FAILED: Streamer must be awake online for TikTok status effects (HUD). Check RustChaos.json StreamerName matches their display name.";
             int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
             RegisterStreamerTimedStatus("godmode", durationSec, false, viewerName, giftName);
-            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: TIME GOD MODE ({durationSec}s) — no damage."));
+            BroadcastChatGiftBanner(chatMsg($"{viewerName} → {target.displayName}: TIME GOD MODE ({durationSec}s) — no damage."));
             Puts($"{LogPrefix} TikTok godmode on {target.displayName} for {durationSec}s (viewer {viewerName}).");
             return null;
         }
@@ -3424,7 +3434,7 @@ namespace Oxide.Plugins
             int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
             RegisterStreamerTimedStatus("bullethell", durationSec, false, viewerName, giftName);
             RefillStreamerHeldWeaponAmmo(target);
-            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: BULLET HELL ({durationSec}s) — held weapon ammo refills."));
+            BroadcastChatGiftBanner(chatMsg($"{viewerName} → {target.displayName}: BULLET HELL ({durationSec}s) — held weapon ammo refills."));
             Puts($"{LogPrefix} TikTok bullethell on {target.displayName} for {durationSec}s.");
             return null;
         }
@@ -3436,7 +3446,7 @@ namespace Oxide.Plugins
                 return "FAILED: Streamer must be awake online for TikTok status effects. Check RustChaos.json StreamerName.";
             int durationSec = scrapAmountArg > 0 ? Mathf.Clamp(scrapAmountArg, 1, 120) : 10;
             RegisterStreamerTimedStatus("flash", durationSec, false, viewerName, giftName);
-            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: FLASH ({durationSec}s) — sprint stamina stays topped."));
+            BroadcastChatGiftBanner(chatMsg($"{viewerName} → {target.displayName}: FLASH ({durationSec}s) — sprint stamina stays topped."));
             Puts($"{LogPrefix} TikTok flash on {target.displayName} for {durationSec}s.");
             return null;
         }
@@ -3470,7 +3480,7 @@ namespace Oxide.Plugins
             }
 
             RegisterStreamerTimedStatus("healthx3", durationSec, false, viewerName, giftName, oldMax);
-            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: HEALTH x3 ({durationSec}s) — max HP tripled."));
+            BroadcastChatGiftBanner(chatMsg($"{viewerName} → {target.displayName}: HEALTH x3 ({durationSec}s) — max HP tripled."));
             Puts($"{LogPrefix} TikTok healthx3 on {target.displayName} for {durationSec}s (was max {oldMax:0}).");
             return null;
         }
@@ -3516,7 +3526,7 @@ namespace Oxide.Plugins
             if (backupUid != 0UL)
                 _flippersBackupItemByUser[target.userID] = backupUid;
             RegisterStreamerTimedStatus("flippers", durationSec, false, viewerName, giftName, 0f, backupUid);
-            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: FLIPPERS ({durationSec}s) — diving fins equipped."));
+            BroadcastChatGiftBanner(chatMsg($"{viewerName} → {target.displayName}: FLIPPERS ({durationSec}s) — diving fins equipped."));
             Puts($"{LogPrefix} TikTok flippers on {target.displayName} for {durationSec}s.");
             return null;
         }
@@ -3943,7 +3953,7 @@ namespace Oxide.Plugins
             ApplyStreamerStatusMetabolism(target, kind);
             RegisterStreamerTimedStatus(kind, durationSec, blindOverlay, viewerName, giftName);
             string label = StatusKindDisplay(kind);
-            BroadcastChat(chatMsg($"{viewerName} → {target.displayName}: {label} ({durationSec}s)"));
+            BroadcastChatGiftBanner(chatMsg($"{viewerName} → {target.displayName}: {label} ({durationSec}s)"));
             Puts($"{LogPrefix} TikTok status '{kind}' on {target.displayName} for {durationSec}s (viewer {viewerName}).");
             return null;
         }
@@ -4242,12 +4252,112 @@ namespace Oxide.Plugins
 
         #region Chat
 
-        private void BroadcastChat(string message)
+        /// <summary>Chat + optional slim CUI banner above the hotbar for TikTok / viewer gift style lines.</summary>
+        private void BroadcastChat(string message, bool alsoGiftBannerAboveHotbar = false)
         {
             if (string.IsNullOrEmpty(message)) return;
+            string plain = null;
+            if (alsoGiftBannerAboveHotbar)
+            {
+                plain = StripRichTextTagsForGiftBanner(message);
+                if (plain.Length > GiftBannerMaxPlainChars)
+                    plain = null;
+            }
+
             foreach (var player in BasePlayer.activePlayerList)
-                if (player != null && player.IsConnected)
-                    PrintToChat(player, message);
+            {
+                if (player == null || !player.IsConnected) continue;
+                PrintToChat(player, message);
+                if (plain != null)
+                    ShowGiftBannerToPlayer(player, plain);
+            }
+        }
+
+        private void BroadcastChatGiftBanner(string message) => BroadcastChat(message, true);
+
+        private static string StripRichTextTagsForGiftBanner(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            try
+            {
+                return Regex.Replace(s, "<[^>]+>", string.Empty).Trim();
+            }
+            catch
+            {
+                return s.Trim();
+            }
+        }
+
+        private void ShowGiftBannerToPlayer(BasePlayer player, string plainText)
+        {
+            if (player == null || !player.IsConnected || string.IsNullOrEmpty(plainText)) return;
+            try
+            {
+                CuiHelper.DestroyUi(player, GiftBannerUiName);
+                var container = new CuiElementContainer();
+                container.Add(new CuiPanel
+                {
+                    Image = { Color = "0.05 0.05 0.07 0.92" },
+                    RectTransform =
+                    {
+                        AnchorMin = GiftBannerAnchorMin,
+                        AnchorMax = GiftBannerAnchorMax,
+                        OffsetMin = GiftBannerOffsetMin,
+                        OffsetMax = GiftBannerOffsetMax
+                    }
+                }, "Overlay", GiftBannerUiName);
+                container.Add(new CuiLabel
+                {
+                    Text =
+                    {
+                        Text = plainText,
+                        FontSize = 14,
+                        Align = TextAnchor.MiddleCenter,
+                        Color = "1 1 1 1"
+                    },
+                    RectTransform = { AnchorMin = "0.03 0.08", AnchorMax = "0.97 0.92" }
+                }, GiftBannerUiName);
+                CuiHelper.AddUi(player, container);
+                ulong uid = player.userID;
+                timer.Once(GiftBannerDurationSeconds, () =>
+                {
+                    try
+                    {
+                        foreach (var p in BasePlayer.activePlayerList)
+                        {
+                            if (p != null && p.IsConnected && p.userID == uid)
+                            {
+                                CuiHelper.DestroyUi(p, GiftBannerUiName);
+                                break;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} Gift banner CUI failed: {ex.Message}");
+            }
+        }
+
+        private void DestroyGiftBannerForAllPlayers()
+        {
+            try
+            {
+                foreach (var player in BasePlayer.activePlayerList)
+                {
+                    if (player == null || !player.IsConnected) continue;
+                    CuiHelper.DestroyUi(player, GiftBannerUiName);
+                }
+            }
+            catch
+            {
+                // ignore
+            }
         }
 
         #endregion

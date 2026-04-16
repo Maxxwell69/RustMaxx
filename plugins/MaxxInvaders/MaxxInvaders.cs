@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.46")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.47")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -39,11 +39,9 @@ namespace Oxide.Plugins
         private const string UiName = "MaxxInvaders.AdminUI";
         private const string HudOverlayUiName = "MaxxInvaders.HudOverlay";
         private const string LootTaskOverlayUiName = "MaxxInvaders.LootTaskOverlay";
-        /// <summary>Streamer INVADERS readout: bottom-center + pixel height so it clears the hotbar on scaled UI.</summary>
-        private const string HudStreamerAnchorMin = "0.5 0";
-        private const string HudStreamerAnchorMax = "0.5 0";
-        private const string HudStreamerOffsetMin = "-520 115";
-        private const string HudStreamerOffsetMax = "520 400";
+        /// <summary>Streamer INVADERS readout: right-side column (not gift toasts — those are RustChaos).</summary>
+        private const string HudStreamerAnchorMin = "0.72 0.26";
+        private const string HudStreamerAnchorMax = "0.992 0.74";
         private const int GuiSchemaCurrent = 2;
         private const float InvaderOverlayDrawDuration = 0.45f;
 
@@ -3976,13 +3974,7 @@ namespace Oxide.Plugins
                 new CuiPanel
                 {
                     Image = { Color = "0.05 0.06 0.08 0.82" },
-                    RectTransform =
-                    {
-                        AnchorMin = HudStreamerAnchorMin,
-                        AnchorMax = HudStreamerAnchorMax,
-                        OffsetMin = HudStreamerOffsetMin,
-                        OffsetMax = HudStreamerOffsetMax
-                    },
+                    RectTransform = { AnchorMin = HudStreamerAnchorMin, AnchorMax = HudStreamerAnchorMax },
                     CursorEnabled = false,
                 },
                 "Overlay",
