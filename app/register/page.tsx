@@ -74,10 +74,10 @@ function RegisterForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl">
+      <div className="w-full max-w-[33.6rem] rounded-xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-xl">
         <div className="mb-6 flex justify-center">
           <Logo
-            className="h-36 w-auto"
+            className="h-[10.8rem] w-auto"
             width={720}
             height={144}
             fallbackClassName="text-3xl font-bold text-rust-cyan"
@@ -205,13 +205,6 @@ function RegisterForm() {
           <Link href="/login" className="text-rust-cyan hover:underline">
             Sign in
           </Link>
-        </p>
-        <p className="mt-3 text-center text-sm text-zinc-600">
-          Already know you need streamer approval? You can still open the{" "}
-          <Link href="/streamer/register" className="text-rust-cyan hover:underline">
-            streamer application
-          </Link>{" "}
-          after you sign in.
         </p>
       </div>
     </div>
