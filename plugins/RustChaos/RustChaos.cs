@@ -22,7 +22,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.37")]
+    [Info("RustChaos", "RustMaxx", "1.15.38")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -60,6 +60,11 @@ namespace Oxide.Plugins
             public string PantherPrefabPath { get; set; } = "";
             /// <summary>Optional. Crocodile gift spawn: prefab path if your build differs (empty = built-in candidate list).</summary>
             public string CrocodilePrefabPath { get; set; } = "";
+            /// <summary>
+            /// If true, TikTok / gift lines are also sent with <see cref="PrintToChat"/> (shows the orange Rust/server chat strip in-game).
+            /// If false, only the above-hotbar banner text is used for those lines.
+            /// </summary>
+            public bool EchoGiftAnnouncementsToChat { get; set; } = false;
         }
 
         private PluginConfig _config;
@@ -4264,10 +4269,12 @@ namespace Oxide.Plugins
                     plain = null;
             }
 
+            bool echoChat = !alsoGiftBannerAboveHotbar || (_config?.EchoGiftAnnouncementsToChat ?? false);
             foreach (var player in BasePlayer.activePlayerList)
             {
                 if (player == null || !player.IsConnected) continue;
-                PrintToChat(player, message);
+                if (echoChat)
+                    PrintToChat(player, message);
                 if (plain != null)
                     ShowGiftBannerToPlayer(player, plain);
             }
@@ -4295,9 +4302,10 @@ namespace Oxide.Plugins
             {
                 CuiHelper.DestroyUi(player, GiftBannerUiName);
                 var container = new CuiElementContainer();
+                // Full-alpha root so layout exists without a visible "black box" behind the text.
                 container.Add(new CuiPanel
                 {
-                    Image = { Color = "0.05 0.05 0.07 0.92" },
+                    Image = { Color = "0 0 0 0" },
                     RectTransform =
                     {
                         AnchorMin = GiftBannerAnchorMin,
@@ -4311,11 +4319,11 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text = plainText,
-                        FontSize = 14,
+                        FontSize = 15,
                         Align = TextAnchor.MiddleCenter,
                         Color = "1 1 1 1"
                     },
-                    RectTransform = { AnchorMin = "0.03 0.08", AnchorMax = "0.97 0.92" }
+                    RectTransform = { AnchorMin = "0.02 0.06", AnchorMax = "0.98 0.94" }
                 }, GiftBannerUiName);
                 CuiHelper.AddUi(player, container);
                 ulong uid = player.userID;
