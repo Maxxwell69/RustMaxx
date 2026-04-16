@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.41")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.42")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -81,6 +81,8 @@ namespace Oxide.Plugins
         /// <summary>Admin has main MaxxInvaders CUI open — hide right INVADERS overlay so it does not stack on the GUI.</summary>
         private readonly HashSet<ulong> _adminMainGuiOpen = new HashSet<ulong>();
         private readonly Dictionary<ulong, float> _lastMiddleMouseDepositBoxAt = new();
+        /// <summary>Tab inventory is client-heavy; server loot state often omits the player bag. Toggle on <see cref="BUTTON.INVENTORY"/> to hide the INVADERS HUD while the bag UI is open.</summary>
+        private readonly Dictionary<ulong, bool> _invTabInventoryOpenByUser = new();
         private DateTime _lastRoamingSpawnFailWarnUtc;
         private string _lastRoamingSpawnFailTemplate;
 
@@ -110,6 +112,7 @@ namespace Oxide.Plugins
             CuiHelper.DestroyUi(player, LootTaskOverlayUiName);
             _lastLootTaskOverlayContentByUser.Remove(player.userID);
             _prevPlayerLootUiOpen.Remove(player.userID);
+            _invTabInventoryOpenByUser.Remove(player.userID);
         }
 
         private void OnServerInitialized()
@@ -139,6 +142,7 @@ namespace Oxide.Plugins
             _lastHudContentByUser.Clear();
             _adminMainGuiOpen.Clear();
             _hudOverlayHiddenByUser.Clear();
+            _invTabInventoryOpenByUser.Clear();
 
             if (_cfg?.DespawnOnUnload == true)
                 _registry.DespawnAll(this, "plugin_unload");
@@ -1867,6 +1871,16 @@ namespace Oxide.Plugins
         private void OnPlayerInput(BasePlayer player, InputState input)
         {
             if (player == null || input == null) return;
+
+            if (input.WasJustPressed(BUTTON.INVENTORY) && CanShowInvadersStreamerUi(player))
+            {
+                var uid = player.userID;
+                if (_invTabInventoryOpenByUser.TryGetValue(uid, out var open))
+                    _invTabInventoryOpenByUser[uid] = !open;
+                else
+                    _invTabInventoryOpenByUser[uid] = true;
+            }
+
             if (!input.WasJustPressed(BUTTON.FIRE_THIRD)) return;
             if (!CanShowInvadersStreamerUi(player)) return;
             var now = Time.realtimeSinceStartup;
@@ -3768,21 +3782,31 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// True while the main INVADERS list should hide (overlaps inventory / loot UIs). Crafting stations (workbench, mixing, etc.)
-        /// keep the list visible; player bag / Tab inventory hides it when the server exposes main/wear/belt in <see cref="PlayerLoot.containers"/>.
+        /// keep the list visible; player bag / Tab inventory hides via <see cref="PlayerLoot.containers"/> when present, else via
+        /// <see cref="_invTabInventoryOpenByUser"/> (Tab is often not mirrored server-side the same as box loot).
         /// </summary>
-        private static bool ShouldHideMainInvadersHudList(BasePlayer player)
+        private bool ShouldHideMainInvadersHudList(BasePlayer player)
         {
             try
             {
                 var loot = player?.inventory?.loot;
                 if (loot == null) return false;
                 var src = loot.entitySource;
+                var uid = player.userID;
+
+                // Opening external world loot (box, corpse, etc.) resets Tab tracking — but not when src is self (bag UI), or we'd clear every tick.
+                if (src != null && !IsCraftingStationLootEntity(src) &&
+                    (!(src is BasePlayer bp) || bp.userID != player.userID))
+                    _invTabInventoryOpenByUser[uid] = false;
 
                 // Crafting UI attached to a station — keep INVADERS visible (user request).
                 if (src != null && IsCraftingStationLootEntity(src))
                     return false;
 
-                // Tab / inventory: loot session includes the player's own containers (most reliable on live builds).
+                if (_invTabInventoryOpenByUser.TryGetValue(uid, out var tabOpen) && tabOpen)
+                    return true;
+
+                // Tab / inventory: loot session includes the player's own containers (when the server exposes them).
                 if (LootSessionIncludesPlayerWearMainBelt(loot, player))
                     return true;
 
