@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.38")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.39")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -3750,15 +3750,17 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>True while the player has the loot panel open (own inventory + looting another entity / PNPC, etc.).</summary>
+        /// <summary>
+        /// True only while looting another entity/container.
+        /// Do not treat the player's own inventory/crafting panel as "loot open" or the INVADERS HUD will disappear while crafting.
+        /// </summary>
         private static bool IsPlayerLootInventoryUiOpen(BasePlayer player)
         {
             try
             {
                 var loot = player?.inventory?.loot;
                 if (loot == null) return false;
-                if (loot.entitySource != null) return true;
-                return loot.containers != null && loot.containers.Count > 0;
+                return loot.entitySource != null;
             }
             catch
             {
