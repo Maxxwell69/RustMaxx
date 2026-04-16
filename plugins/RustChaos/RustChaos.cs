@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.33")]
+    [Info("RustChaos", "RustMaxx", "1.15.34")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -2140,6 +2140,9 @@ namespace Oxide.Plugins
         /// <see cref="ScientistNPC"/> inherits <see cref="BasePlayer"/>, so the generic provoke path used to skip them entirely
         /// (bc is BasePlayer → return). Without this, solo scientists often never enter combat.
         /// </summary>
+        /// <summary>
+        /// Bullet damage registers reliably on armored heavies; tiny stab was sometimes absorbed / ignored by AI.
+        /// </summary>
         private static void TryProvokeScientistNpcCombat(ScientistNPC target, BasePlayer streamer)
         {
             if (target == null || streamer == null || target.IsDestroyed || !streamer.IsValid()) return;
@@ -2149,7 +2152,7 @@ namespace Oxide.Plugins
                 hit.Initiator = streamer;
                 hit.HitEntity = target;
                 hit.HitPositionWorld = target.transform.position;
-                hit.damageTypes.Add(DamageType.Stab, 0.05f);
+                hit.damageTypes.Add(DamageType.Bullet, 0.15f);
                 target.Hurt(hit);
             }
             catch
@@ -2240,6 +2243,34 @@ namespace Oxide.Plugins
                     if (nav.Agent != null && !nav.Agent.isOnNavMesh)
                         nav.PlaceOnNavMesh(0f);
                     Vector3 a = humanNpc.transform.position;
+                    Vector3 b = streamerPos;
+                    a.y = 0f;
+                    b.y = 0f;
+                    float dist = Vector3.Distance(a, b);
+                    var speed = dist > 12f ? BaseNavigator.NavigationSpeed.Fast : BaseNavigator.NavigationSpeed.Normal;
+                    nav.SetDestination(streamerPos, speed);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            // ScientistNPC is also NPCPlayer, but movement is driven by Brain.Navigator (not root NavAgent).
+            // The generic NPCPlayer branch below often fails (null agent / off-mesh), so scientists never path into combat.
+            var scientistNpc = ent as ScientistNPC;
+            if (scientistNpc != null)
+            {
+                try
+                {
+                    if (scientistNpc.IsDestroyed) return true;
+                    var brain = scientistNpc.Brain;
+                    if (brain == null || brain.Navigator == null) return false;
+                    var nav = brain.Navigator;
+                    if (nav.Agent != null && !nav.Agent.isOnNavMesh)
+                        nav.PlaceOnNavMesh(0f);
+                    Vector3 a = scientistNpc.transform.position;
                     Vector3 b = streamerPos;
                     a.y = 0f;
                     b.y = 0f;
@@ -2511,17 +2542,21 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// Heavy scientist prefabs often spawn with minigun/M249/SPAS; scientistflame must always use a flamethrower.
-        /// Prefer handmade <c>flamethrower</c> first (matches many monument NPC loadouts); military second.
-        /// Handmade first also avoids some client SFX pitch spam seen when military flamethrower is forced onto NPC models.
+        /// Uses any NPC <see cref="BasePlayer"/> (not only <see cref="ScientistNPC"/> cast), <see cref="PlayerInventory.GiveItem"/>,
+        /// and NextTick from spawn so the belt exists. Prefer handmade flamethrower, then military.
         /// </summary>
-        private void TryEquipScientistNpcFlamethrower(BaseEntity entity)
+        private void TryEquipNpcFlamethrowerForSoloGift(BaseEntity entity)
         {
-            var scientist = entity as ScientistNPC;
-            if (scientist == null || scientist.IsDestroyed) return;
+            var npc = entity as BasePlayer;
+            if (npc == null || !npc.IsNpc || npc.IsDestroyed) return;
             try
             {
-                var belt = scientist.inventory?.containerBelt;
-                if (belt == null) return;
+                var belt = npc.inventory?.containerBelt;
+                if (belt == null)
+                {
+                    PrintWarning($"{LogPrefix} scientistflame: NPC has no belt (skipped weapon swap).");
+                    return;
+                }
 
                 for (int i = belt.capacity - 1; i >= 0; i--)
                 {
@@ -2532,41 +2567,59 @@ namespace Oxide.Plugins
                 Item ft = ItemManager.CreateByName("flamethrower", 1);
                 if (ft == null)
                     ft = ItemManager.CreateByName("military flamethrower", 1);
-                if (ft == null) return;
-
-                if (!ft.MoveToContainer(belt, 0))
+                if (ft == null)
                 {
+                    PrintWarning($"{LogPrefix} scientistflame: ItemManager could not create flamethrower / military flamethrower.");
+                    return;
+                }
+
+                if (!npc.inventory.GiveItem(ft) && !ft.MoveToContainer(belt, 0))
+                {
+                    PrintWarning($"{LogPrefix} scientistflame: could not place flamethrower on NPC (GiveItem + belt slot 0 failed).");
                     ft.Remove();
                     return;
                 }
 
-                scientist.UpdateActiveItem(ft.uid);
-                TrySetFlameThrowerAmmoFromItem(ft);
-                try { scientist.SendNetworkUpdate(); } catch { }
+                Item active = null;
+                for (int s = 0; s < belt.capacity; s++)
+                {
+                    var it = belt.GetSlot(s);
+                    if (it?.info?.shortname == null) continue;
+                    if (it.info.shortname.IndexOf("flamethrower", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    active = it;
+                    break;
+                }
 
-                NetworkableId nid = scientist.net.ID;
+                if (active != null)
+                    npc.UpdateActiveItem(active.uid);
+                else if (ft.parent == belt)
+                    npc.UpdateActiveItem(ft.uid);
+
+                TrySetFlameThrowerAmmoFromItem(active ?? ft);
+                try { npc.SendNetworkUpdate(); } catch { }
+
+                NetworkableId nid = npc.net.ID;
                 timer.Once(0.12f, () =>
                 {
                     var ent = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
-                    var npc = ent as ScientistNPC;
-                    if (npc == null || npc.IsDestroyed) return;
-                    var b = npc.inventory?.containerBelt;
+                    var n = ent as BasePlayer;
+                    if (n == null || !n.IsNpc || n.IsDestroyed) return;
+                    var b = n.inventory?.containerBelt;
                     if (b == null) return;
                     for (int s = 0; s < b.capacity; s++)
                     {
                         var it = b.GetSlot(s);
-                        if (it?.info == null) continue;
-                        string sn = it.info.shortname;
-                        if (sn != "flamethrower" && sn != "military flamethrower") continue;
+                        if (it?.info?.shortname == null) continue;
+                        if (it.info.shortname.IndexOf("flamethrower", StringComparison.OrdinalIgnoreCase) < 0) continue;
                         TrySetFlameThrowerAmmoFromItem(it);
                         break;
                     }
-                    try { npc.SendNetworkUpdate(); } catch { }
+                    try { n.SendNetworkUpdate(); } catch { }
                 });
             }
-            catch
+            catch (Exception ex)
             {
-                // Prefab may be non-standard; spawn still proceeds.
+                PrintWarning($"{LogPrefix} scientistflame: weapon swap exception: {ex.Message}");
             }
         }
 
@@ -2594,23 +2647,41 @@ namespace Oxide.Plugins
             }
             if (entity == null) return false;
             entity.Spawn();
-            if (equipFlamethrower)
-                TryEquipScientistNpcFlamethrower(entity);
             RegisterSoloWildEntity(entity, streamer);
-            TryProvokeChaosWaveEnemy(entity, streamer);
             NetworkableId nid = entity.net.ID;
             ulong sid = streamer.userID;
-            timer.Once(0.25f, () =>
-            {
-                BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
-                BasePlayer s = FindConnectedPlayerByUserId(sid);
-                if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
-                TryProvokeChaosWaveEnemy(e, s);
-            });
-            // Flame loadout: provoke again after held entity + brain catch up (reduces idle / no-attack after belt swap).
+
             if (equipFlamethrower)
             {
-                timer.Once(0.45f, () =>
+                // Belt / held entity are not always ready on the same frame as Spawn(); equip next tick then aggro.
+                NextTick(() =>
+                {
+                    BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    BasePlayer s = FindConnectedPlayerByUserId(sid);
+                    if (e == null || e.IsDestroyed) return;
+                    TryEquipNpcFlamethrowerForSoloGift(e);
+                    if (s != null && s.IsValid())
+                        TryProvokeChaosWaveEnemy(e, s);
+                });
+                timer.Once(0.25f, () =>
+                {
+                    BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    BasePlayer s = FindConnectedPlayerByUserId(sid);
+                    if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
+                    TryProvokeChaosWaveEnemy(e, s);
+                });
+                timer.Once(0.5f, () =>
+                {
+                    BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    BasePlayer s = FindConnectedPlayerByUserId(sid);
+                    if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
+                    TryProvokeChaosWaveEnemy(e, s);
+                });
+            }
+            else
+            {
+                TryProvokeChaosWaveEnemy(entity, streamer);
+                timer.Once(0.25f, () =>
                 {
                     BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
                     BasePlayer s = FindConnectedPlayerByUserId(sid);
