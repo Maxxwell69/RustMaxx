@@ -10,16 +10,29 @@ import { isRustChaosStatusEffectAction } from "@/lib/tikfinity";
 const LEGACY_WH_STORAGE = "rustmaxx_streamer_wh";
 const SECRET_MAP_KEY = "rustmaxx_streamer_wh_by_pub";
 
-function loadSecretMap(): Record<string, string> {
+type StoredSecretEntry = {
+  secret: string;
+  savedAt?: string;
+};
+
+function loadSecretMap(): Record<string, StoredSecretEntry> {
   if (typeof window === "undefined") return {};
   try {
     const raw = sessionStorage.getItem(SECRET_MAP_KEY);
-    if (raw) return JSON.parse(raw) as Record<string, string>;
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, string | StoredSecretEntry>;
+      const out: Record<string, StoredSecretEntry> = {};
+      for (const [publicId, val] of Object.entries(parsed)) {
+        if (typeof val === "string") out[publicId] = { secret: val };
+        else if (val && typeof val.secret === "string") out[publicId] = val;
+      }
+      return out;
+    }
     const old = sessionStorage.getItem(LEGACY_WH_STORAGE);
     if (old) {
       const p = JSON.parse(old) as { publicId?: string; secret?: string };
       if (p.publicId && p.secret) {
-        const m = { [p.publicId]: p.secret };
+        const m = { [p.publicId]: { secret: p.secret } };
         sessionStorage.setItem(SECRET_MAP_KEY, JSON.stringify(m));
         sessionStorage.removeItem(LEGACY_WH_STORAGE);
         return m;
@@ -35,17 +48,33 @@ function persistSecretForPublicId(publicId: string | undefined, secret: string) 
   if (typeof window === "undefined" || !publicId || !secret) return;
   try {
     const m = loadSecretMap();
-    m[publicId] = secret;
+    m[publicId] = { secret, savedAt: new Date().toISOString() };
     sessionStorage.setItem(SECRET_MAP_KEY, JSON.stringify(m));
   } catch {
     /* ignore quota */
   }
 }
 
-function readSecretForPublicId(publicId: string | undefined): string | null {
+function readSecretForPublicId(
+  publicId: string | undefined,
+  webhookUpdatedAt?: string | null
+): string | null {
   if (!publicId) return null;
-  const m = loadSecretMap();
-  return m[publicId] ?? null;
+  try {
+    const m = loadSecretMap();
+    const entry = m[publicId];
+    if (!entry?.secret) return null;
+    if (entry.savedAt && webhookUpdatedAt) {
+      const savedMs = Date.parse(entry.savedAt);
+      const hookMs = Date.parse(webhookUpdatedAt);
+      if (Number.isFinite(savedMs) && Number.isFinite(hookMs) && savedMs + 1000 < hookMs) {
+        return null;
+      }
+    }
+    return entry.secret;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -68,6 +97,7 @@ type HookSummary = {
   serverId: string;
   serverName: string | null;
   webhookUrl: string | null;
+  webhookUpdatedAt: string;
 };
 
 type RuleRow = {
@@ -270,7 +300,12 @@ export default function StreamerDashboardPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setSecretByPublicId((prev) => ({ ...loadSecretMap(), ...prev }));
+    const cached = loadSecretMap();
+    const flat: Record<string, string> = {};
+    for (const [publicId, entry] of Object.entries(cached)) {
+      if (entry?.secret) flat[publicId] = entry.secret;
+    }
+    setSecretByPublicId((prev) => ({ ...flat, ...prev }));
   }, []);
 
   useEffect(() => {
@@ -390,7 +425,8 @@ export default function StreamerDashboardPage() {
       const wh = state?.hooks.find((x) => x.id === r.hookId);
       const sec =
         wh?.publicId != null
-          ? secretByPublicId[wh.publicId] ?? readSecretForPublicId(wh.publicId)
+          ? secretByPublicId[wh.publicId] ??
+            readSecretForPublicId(wh.publicId, wh.webhookUpdatedAt)
           : null;
       const u = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.server_action);
       if (u) {
@@ -543,7 +579,10 @@ export default function StreamerDashboardPage() {
   const firstHook = hooks[0];
   const firstPublicId = firstHook?.publicId;
   const firstSecret =
-    (firstPublicId && (secretByPublicId[firstPublicId] ?? readSecretForPublicId(firstPublicId))) || null;
+    (firstPublicId &&
+      (secretByPublicId[firstPublicId] ??
+        readSecretForPublicId(firstPublicId, firstHook?.webhookUpdatedAt))) ||
+    null;
   const firstUrl =
     firstHook?.webhookUrl && firstSecret
       ? `${firstHook.webhookUrl}?token=${encodeURIComponent(firstSecret)}`
@@ -683,7 +722,9 @@ export default function StreamerDashboardPage() {
         {hooks.length > 0 ? (
           <ul className="mb-6 space-y-4">
             {hooks.map((h) => {
-              const token = secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId);
+              const token =
+                secretByPublicId[h.publicId] ??
+                readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
               const fullUrl =
                 h.webhookUrl && token
                   ? `${h.webhookUrl}?token=${encodeURIComponent(token)}`
@@ -1027,7 +1068,8 @@ export default function StreamerDashboardPage() {
             const wh = hooks.find((x) => x.id === r.hookId);
             const sec =
               wh?.publicId != null
-                ? secretByPublicId[wh.publicId] ?? readSecretForPublicId(wh.publicId)
+                ? secretByPublicId[wh.publicId] ??
+                  readSecretForPublicId(wh.publicId, wh.webhookUpdatedAt)
                 : null;
             const ruleUrl = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.server_action);
             return (

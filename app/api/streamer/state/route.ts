@@ -48,6 +48,7 @@ export async function GET(_request: NextRequest) {
     serverId: string;
     serverName: string | null;
     webhookUrl: string | null;
+    webhookUpdatedAt: string;
   }> = [];
 
   const rulesOut: Array<{
@@ -86,6 +87,8 @@ export async function GET(_request: NextRequest) {
       serverId: h.server_id,
       serverName,
       webhookUrl,
+      webhookUpdatedAt:
+        h.updated_at instanceof Date ? h.updated_at.toISOString() : String(h.updated_at),
     });
 
     const ruleRows = await listStreamerRules(h.id);
