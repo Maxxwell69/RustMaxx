@@ -61,6 +61,7 @@ const RUSTCHAOS_TEN_SCRAP_SPAWN_ACTIONS = new Set<string>([
   "bear",
   "tiger",
   "panther",
+  "crocodile",
   "shark",
   "pig",
   "chicken",

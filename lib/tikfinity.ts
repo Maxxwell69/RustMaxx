@@ -15,6 +15,7 @@ export const TIKTRIGGER_ACTIONS = [
   "bear",
   "tiger",
   "panther",
+  "crocodile",
   "shark",
   "pig",
   "chicken",
@@ -131,6 +132,8 @@ export const DEFAULT_GIFT_TO_ACTION: Record<string, TikTriggerAction> = {
   Bear: "bear",
   Tiger: "tiger",
   Panther: "panther",
+  Crocodile: "crocodile",
+  crocodile: "crocodile",
   Shark: "shark",
   Pig: "pig",
   "Finger Heart": "smoke",
@@ -197,6 +200,7 @@ export const DEFAULT_GIFT_COINS: Record<string, number> = {
   Bear: 10,
   Tiger: 10,
   Panther: 10,
+  Crocodile: 10,
   Shark: 10,
   Pig: 10,
   Wolf: 10,
@@ -309,6 +313,12 @@ export const ACTION_META: Record<
     description:
       "Spawn 1 panther near streamer; also gives semi-auto pistol + 10 pistol ammo on belt. Set PantherPrefabPath in RustChaos.json if spawn fails on your build.",
     exampleGifts: ["Panther"],
+  },
+  crocodile: {
+    label: "Crocodile",
+    description:
+      "Spawn 1 crocodile near the streamer (land snap + leash like other solo animals). Set CrocodilePrefabPath in RustChaos.json if your build uses a different prefab path.",
+    exampleGifts: ["Crocodile", "crocodile"],
   },
   shark: {
     label: "Shark",
@@ -967,6 +977,7 @@ const EVENT_TO_ACTION: Record<string, TikTriggerAction> = {
   bear: "bear",
   tiger: "tiger",
   panther: "panther",
+  crocodile: "crocodile",
   shark: "shark",
   pig: "pig",
   rose: "rose",

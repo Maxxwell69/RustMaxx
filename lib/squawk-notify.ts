@@ -18,6 +18,7 @@ const ANIMAL_AND_SPAWN_ACTIONS: Record<string, string> = {
   bear: "a bear",
   tiger: "a tiger",
   panther: "a panther",
+  crocodile: "a crocodile",
   shark: "a shark",
   pig: "a boar",
   scientist: "a scientist",

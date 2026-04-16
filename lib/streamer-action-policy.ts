@@ -16,6 +16,7 @@ export const STREAMER_BASE_ACTION_KEYS = [
   "bear",
   "tiger",
   "panther",
+  "crocodile",
   "shark",
   "pig",
   "chicken",

@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.29")]
+    [Info("RustChaos", "RustMaxx", "1.15.30")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -56,6 +56,8 @@ namespace Oxide.Plugins
             public string TigerPrefabPath { get; set; } = "";
             /// <summary>Optional. Panther chaos wave: prefab path if your build differs (empty = built-in candidate list).</summary>
             public string PantherPrefabPath { get; set; } = "";
+            /// <summary>Optional. Crocodile gift spawn: prefab path if your build differs (empty = built-in candidate list).</summary>
+            public string CrocodilePrefabPath { get; set; } = "";
         }
 
         private PluginConfig _config;
@@ -338,7 +340,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50", "statuspoison", "statusdehydrated", "statushungry", "statusbleeding", "statusdart", "statusgodmode", "statusbullethell", "statusflippers", "statusflash", "statushealthx3" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "crocodile", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50", "statuspoison", "statusdehydrated", "statushungry", "statusbleeding", "statusdart", "statusgodmode", "statusbullethell", "statusflippers", "statusflash", "statushealthx3" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
@@ -436,6 +438,13 @@ namespace Oxide.Plugins
             "assets/rust.ai/agents/panther/panther.prefab",
             "assets/rust.ai/agents/bigcat/panther.prefab",
             "assets/rust.ai/agents/cat/panther.prefab"
+        };
+
+        /// <summary>Candidate prefabs for crocodile gift spawn — override first via CrocodilePrefabPath in config.</summary>
+        private static readonly string[] CrocodilePrefabCandidates =
+        {
+            "assets/rust.ai/agents/crocodile/crocodile.entity.prefab",
+            "assets/rust.ai/agents/crocodile/crocodile.prefab"
         };
 
         /// <summary>
@@ -701,6 +710,25 @@ namespace Oxide.Plugins
                             {
                                 BroadcastChat(ChatMsg($"{viewerName} sent a panther but spawn failed — set PantherPrefabPath in RustChaos.json."));
                                 PrintWarning($"{LogPrefix} Panther spawn failed (all prefab candidates).");
+                            }
+                        });
+                    }
+                    break;
+
+                case "crocodile":
+                    if (target != null)
+                    {
+                        BroadcastChat(ChatMsg($"{viewerName} sent a {giftName}!"));
+                        ScheduleDelayedSingleSpawn("crocodile", target.userID, () =>
+                        {
+                            BasePlayer current = FindConnectedPlayerByUserId(target.userID);
+                            if (current == null || !current.IsValid()) return;
+                            if (TrySpawnCrocodileOneNearStreamer(current))
+                                Puts($"{LogPrefix} Spawned 1 crocodile near {current.displayName}");
+                            else
+                            {
+                                BroadcastChat(ChatMsg($"{viewerName} sent a crocodile but spawn failed — set CrocodilePrefabPath in RustChaos.json."));
+                                PrintWarning($"{LogPrefix} Crocodile spawn failed (all prefab candidates).");
                             }
                         });
                     }
@@ -1394,6 +1422,7 @@ namespace Oxide.Plugins
                    action == "bear" ||
                    action == "tiger" ||
                    action == "panther" ||
+                   action == "crocodile" ||
                    action == "healinghands" ||
                    action == "fullheal" ||
                    action == "shark" ||
@@ -1793,6 +1822,14 @@ namespace Oxide.Plugins
                 yield return p;
         }
 
+        private IEnumerable<string> EnumerateCrocodilePrefabPaths()
+        {
+            if (!string.IsNullOrWhiteSpace(_config?.CrocodilePrefabPath))
+                yield return _config.CrocodilePrefabPath.Trim();
+            foreach (var p in CrocodilePrefabCandidates)
+                yield return p;
+        }
+
         private static BaseEntity TryCreateEntityFromPrefabCandidates(IEnumerable<string> paths, Vector3 pos)
         {
             foreach (var p in paths)
@@ -1833,6 +1870,19 @@ namespace Oxide.Plugins
             if (pos == Vector3.zero) pos = streamer.transform.position;
             pos = SnapLandNpcSpawnToGround(pos);
             BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumeratePantherPrefabPaths(), pos);
+            if (ent == null) return false;
+            ent.Spawn();
+            RegisterSoloWildEntity(ent, streamer);
+            return true;
+        }
+
+        private bool TrySpawnCrocodileOneNearStreamer(BasePlayer streamer)
+        {
+            if (streamer == null || !streamer.IsValid()) return false;
+            Vector3 pos = GetSingleSpawnPosition(streamer);
+            if (pos == Vector3.zero) pos = streamer.transform.position;
+            pos = SnapLandNpcSpawnToGround(pos);
+            BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumerateCrocodilePrefabPaths(), pos);
             if (ent == null) return false;
             ent.Spawn();
             RegisterSoloWildEntity(ent, streamer);
