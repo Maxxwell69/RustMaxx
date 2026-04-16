@@ -5,35 +5,44 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/marketing/Logo";
 import UserProfile from "./UserProfile";
 import LogoutButton from "./LogoutButton";
-import { useEffect, useState } from "react";
-
-const NAV_LINKS = [
-  { href: "/servers", label: "Dashboard" },
-  { href: "/", label: "Home" },
-  { href: "/server-list", label: "Server list" },
-  { href: "/streamers", label: "Streamers" },
-  { href: "/viewer/superfan", label: "Superfans" },
-  { href: "/streamer-interaction", label: "Streamer Interaction" },
-  { href: "/features", label: "Features" },
-];
+import { useEffect, useMemo, useState } from "react";
+import type { AuthMePayload } from "@/lib/auth-me-payload";
+import { SITE_NAV_LINKS, filterNavLinksForUser } from "@/components/layout/nav-persona";
 
 export function SiteHeader() {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [me, setMe] = useState<AuthMePayload | null>(null);
 
   useEffect(() => {
     setMounted(true);
     fetch("/api/auth/me")
-      .then((r) => setLoggedIn(r.ok))
-      .catch(() => setLoggedIn(false));
+      .then((r) => {
+        setLoggedIn(r.ok);
+        if (r.ok) return r.json();
+        setMe(null);
+        return null;
+      })
+      .then((data: AuthMePayload | null) => {
+        if (data && typeof data === "object" && "email" in data) setMe(data);
+        else setMe(null);
+      })
+      .catch(() => {
+        setLoggedIn(false);
+        setMe(null);
+      });
   }, []);
 
   const isDashboard = pathname === "/servers" || pathname?.startsWith("/servers/");
   const isStreamersSection = pathname === "/streamers" || pathname?.startsWith("/streamers/");
   const isViewerSuperfan = pathname === "/viewer" || pathname?.startsWith("/viewer/");
 
-  const navLinks = loggedIn ? NAV_LINKS.filter((l) => l.href !== "/") : NAV_LINKS;
+  const navLinks = useMemo(() => {
+    if (!loggedIn) return [...SITE_NAV_LINKS];
+    const forPersona = filterNavLinksForUser(me);
+    return forPersona.filter((l) => l.href !== "/");
+  }, [loggedIn, me]);
 
   function navLinkActive(href: string): boolean {
     if (href === "/servers") return isDashboard;

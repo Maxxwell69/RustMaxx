@@ -47,6 +47,12 @@ export async function POST(request: NextRequest) {
   const interestedServerOwner = body.interested_server_owner === true;
   const interestedStreamer = body.interested_streamer === true;
   const interestedFan = body.interested_fan === true;
+  if (!interestedServerOwner && !interestedStreamer && !interestedFan) {
+    return NextResponse.json(
+      { error: "Choose at least one: Server admin, Streamer, or Fan." },
+      { status: 400 }
+    );
+  }
   if (!email || !password) {
     return NextResponse.json(
       { error: "Email and password are required" },

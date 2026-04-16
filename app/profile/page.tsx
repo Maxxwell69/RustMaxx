@@ -454,27 +454,27 @@ function ProfilePageContent() {
             <p className="mt-1 text-sm text-zinc-400">
               {wantsOwner && wantsStreamer && (
                 <>
-                  You chose <strong className="text-zinc-300">server owner</strong> and{" "}
-                  <strong className="text-zinc-300">streamer</strong>. Open the dashboard for your servers, then complete
+                  You signed up as <strong className="text-zinc-300">Server admin</strong> and{" "}
+                  <strong className="text-zinc-300">Streamer</strong>. Open the dashboard for your servers, then complete
                   the streamer application for TikTok / TikFinity tooling.
                 </>
               )}
               {wantsOwner && !wantsStreamer && (
                 <>
-                  You chose <strong className="text-zinc-300">Rust server owner</strong>. Head to the dashboard to add
+                  You signed up as <strong className="text-zinc-300">Server admin</strong>. Head to the dashboard to add
                   servers. TikTok / streamer integrations use the streamer application — we surface it here so you
                   don&apos;t miss it.
                 </>
               )}
               {!wantsOwner && wantsStreamer && (
                 <>
-                  You chose <strong className="text-zinc-300">streamer</strong>. Complete the streamer application below
+                  You signed up as <strong className="text-zinc-300">Streamer</strong>. Complete the streamer application below
                   so we can approve TikFinity hooks and stream tools for your account.
                 </>
               )}
               {!wantsOwner && !wantsStreamer && wantsFan && (
                 <>
-                  You chose <strong className="text-zinc-300">fan / viewer</strong>. Use the superfan page to request
+                  You signed up as <strong className="text-zinc-300">Fan</strong>. Use the superfan page to request
                   access from streamers you follow; they approve you per channel before in-stream interactions unlock.
                 </>
               )}

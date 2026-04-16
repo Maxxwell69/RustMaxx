@@ -16,9 +16,22 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  function togglePersona(
+    key: "owner" | "streamer" | "fan",
+    next: boolean
+  ) {
+    if (key === "owner") setInterestedServerOwner(next);
+    if (key === "streamer") setInterestedStreamer(next);
+    if (key === "fan") setInterestedFan(next);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!interestedServerOwner && !interestedStreamer && !interestedFan) {
+      setError("Choose at least one: Server admin, Streamer, or Fan.");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/auth/register", {
@@ -38,9 +51,19 @@ function RegisterForm() {
         setError(data.error ?? "Registration failed");
         return;
       }
-      const goProfile = interestedServerOwner || interestedStreamer;
-      const goFanOnly = interestedFan && !goProfile;
-      router.push(goProfile ? "/profile" : goFanOnly ? "/viewer/superfan" : "/servers");
+      const owner = interestedServerOwner;
+      const streamer = interestedStreamer;
+      const fan = interestedFan;
+      const goProfile = owner || streamer;
+      const fanOnly = fan && !owner && !streamer;
+      const ownerOnly = owner && !streamer && !fan;
+      const streamerOnly = streamer && !owner && !fan;
+      let dest = "/servers";
+      if (fanOnly) dest = "/viewer/superfan";
+      else if (ownerOnly) dest = "/servers";
+      else if (streamerOnly) dest = "/profile";
+      else if (goProfile) dest = "/profile";
+      router.push(dest);
       router.refresh();
     } catch {
       setError("Network error");
@@ -60,7 +83,10 @@ function RegisterForm() {
             fallbackClassName="text-3xl font-bold text-rust-cyan"
           />
         </div>
-        <p className="mb-6 text-sm text-zinc-400">Create an account — tell us how you&apos;ll use RustMaxx (optional).</p>
+        <p className="mb-6 text-sm text-zinc-400">
+          Create an account. Choose how you&apos;ll use RustMaxx — you can pick more than one (e.g. server admin +
+          streamer).
+        </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
@@ -117,52 +143,52 @@ function RegisterForm() {
               minLength={8}
             />
           </div>
-          <fieldset className="rounded-lg border border-zinc-700/80 bg-zinc-800/40 p-3">
+          <fieldset className="rounded-lg border border-zinc-700/80 bg-zinc-800/40 p-4">
             <legend className="px-1 text-xs font-medium text-zinc-500">I am signing up as…</legend>
-            <div className="mt-2 space-y-2">
-              <label className="flex cursor-pointer items-start gap-3 text-sm text-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={interestedServerOwner}
-                  onChange={(e) => setInterestedServerOwner(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-800 text-rust-cyan focus:ring-rust-cyan"
-                />
-                <span>
-                  <span className="font-medium text-zinc-200">Rust server owner</span>
-                  <span className="mt-0.5 block text-xs text-zinc-500">
-                    Add and manage servers, RCON, and stream hooks from the dashboard.
-                  </span>
+            <p className="mt-1 text-xs text-zinc-600">Tap to select — combine roles if you need more than one area.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => togglePersona("owner", !interestedServerOwner)}
+                className={`rounded-xl border-2 px-3 py-3 text-left transition-colors ${
+                  interestedServerOwner
+                    ? "border-rust-cyan bg-rust-cyan/15 text-zinc-100 shadow-rust-glow-subtle"
+                    : "border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600"
+                }`}
+              >
+                <span className="block text-sm font-semibold text-zinc-100">Server admin</span>
+                <span className="mt-1 block text-xs leading-snug text-zinc-500">
+                  Dashboard, RCON, and server hooks.
                 </span>
-              </label>
-              <label className="flex cursor-pointer items-start gap-3 text-sm text-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={interestedStreamer}
-                  onChange={(e) => setInterestedStreamer(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-800 text-rust-cyan focus:ring-rust-cyan"
-                />
-                <span>
-                  <span className="font-medium text-zinc-200">Streamer</span>
-                  <span className="mt-0.5 block text-xs text-zinc-500">
-                    TikTok / TikFinity or Twitch tools — we&apos;ll highlight the streamer application on your profile.
-                  </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => togglePersona("streamer", !interestedStreamer)}
+                className={`rounded-xl border-2 px-3 py-3 text-left transition-colors ${
+                  interestedStreamer
+                    ? "border-rust-cyan bg-rust-cyan/15 text-zinc-100 shadow-rust-glow-subtle"
+                    : "border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600"
+                }`}
+              >
+                <span className="block text-sm font-semibold text-zinc-100">Streamer</span>
+                <span className="mt-1 block text-xs leading-snug text-zinc-500">
+                  TikTok / TikFinity, Twitch tools, streamer application.
                 </span>
-              </label>
-              <label className="flex cursor-pointer items-start gap-3 text-sm text-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={interestedFan}
-                  onChange={(e) => setInterestedFan(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-800 text-rust-cyan focus:ring-rust-cyan"
-                />
-                <span>
-                  <span className="font-medium text-zinc-200">Fan / viewer</span>
-                  <span className="mt-0.5 block text-xs text-zinc-500">
-                    Superfan tools — you are approved on the site right away; request each streamer and they approve you
-                    per channel.
-                  </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => togglePersona("fan", !interestedFan)}
+                className={`rounded-xl border-2 px-3 py-3 text-left transition-colors sm:col-span-1 ${
+                  interestedFan
+                    ? "border-rust-cyan bg-rust-cyan/15 text-zinc-100 shadow-rust-glow-subtle"
+                    : "border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600"
+                }`}
+              >
+                <span className="block text-sm font-semibold text-zinc-100">Fan</span>
+                <span className="mt-1 block text-xs leading-snug text-zinc-500">
+                  Superfan &amp; viewer tools — request streamers per channel.
                 </span>
-              </label>
+              </button>
             </div>
           </fieldset>
           {error && <p className="text-sm text-red-400">{error}</p>}
