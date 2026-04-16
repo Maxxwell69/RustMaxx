@@ -433,7 +433,8 @@ function ProfilePageContent() {
 
   const wantsOwner = profile.signup_interested_server_owner === true;
   const wantsStreamer = profile.signup_interested_streamer === true;
-  const showSignupOnboarding = wantsOwner || wantsStreamer;
+  const wantsFan = profile.signup_interested_fan === true;
+  const showSignupOnboarding = wantsOwner || wantsStreamer || wantsFan;
   const canApplyStreamer =
     profile.role === "guest" || profile.role === "player";
   const streamerPitchAtTop =
@@ -471,7 +472,19 @@ function ProfilePageContent() {
                   so we can approve TikFinity hooks and stream tools for your account.
                 </>
               )}
+              {!wantsOwner && !wantsStreamer && wantsFan && (
+                <>
+                  You chose <strong className="text-zinc-300">fan / viewer</strong>. Use the superfan page to request
+                  access from streamers you follow; they approve you per channel before in-stream interactions unlock.
+                </>
+              )}
             </p>
+            {wantsFan && (wantsOwner || wantsStreamer) && (
+              <p className="mt-2 text-sm text-zinc-400">
+                You also indicated interest in <strong className="text-zinc-300">viewer / superfan</strong> features —
+                connect with streamers from the superfan page after you finish setup here.
+              </p>
+            )}
             <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start">
               {wantsOwner && (
                 <Link
@@ -495,6 +508,14 @@ function ProfilePageContent() {
                     Start streamer application →
                   </Link>
                 </div>
+              )}
+              {wantsFan && (
+                <Link
+                  href="/viewer/superfan"
+                  className="inline-flex shrink-0 items-center justify-center rounded-lg border border-rust-cyan/50 bg-zinc-900/80 px-4 py-2.5 text-sm font-semibold text-rust-cyan hover:bg-zinc-800/80"
+                >
+                  Viewer / superfan setup →
+                </Link>
               )}
             </div>
             {streamerApp !== null && streamerApp !== undefined && canApplyStreamer && (

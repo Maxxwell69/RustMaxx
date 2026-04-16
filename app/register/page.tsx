@@ -11,6 +11,7 @@ function RegisterForm() {
   const [displayName, setDisplayName] = useState("");
   const [interestedServerOwner, setInterestedServerOwner] = useState(false);
   const [interestedStreamer, setInterestedStreamer] = useState(false);
+  const [interestedFan, setInterestedFan] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -29,6 +30,7 @@ function RegisterForm() {
           display_name: displayName || undefined,
           interested_server_owner: interestedServerOwner,
           interested_streamer: interestedStreamer,
+          interested_fan: interestedFan,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -37,7 +39,8 @@ function RegisterForm() {
         return;
       }
       const goProfile = interestedServerOwner || interestedStreamer;
-      router.push(goProfile ? "/profile" : "/servers");
+      const goFanOnly = interestedFan && !goProfile;
+      router.push(goProfile ? "/profile" : goFanOnly ? "/viewer/superfan" : "/servers");
       router.refresh();
     } catch {
       setError("Network error");
@@ -142,6 +145,20 @@ function RegisterForm() {
                   <span className="font-medium text-zinc-200">Streamer</span>
                   <span className="mt-0.5 block text-xs text-zinc-500">
                     TikTok / TikFinity or Twitch tools — we&apos;ll highlight the streamer application on your profile.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={interestedFan}
+                  onChange={(e) => setInterestedFan(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-800 text-rust-cyan focus:ring-rust-cyan"
+                />
+                <span>
+                  <span className="font-medium text-zinc-200">Fan / viewer</span>
+                  <span className="mt-0.5 block text-xs text-zinc-500">
+                    Superfan tools — connect with streamers you follow and interact when they approve you.
                   </span>
                 </span>
               </label>

@@ -166,6 +166,7 @@ export type GhlSignupPayload = {
   displayName: string | null;
   interestedServerOwner: boolean;
   interestedStreamer: boolean;
+  interestedFan: boolean;
 };
 
 /**
@@ -178,11 +179,13 @@ export async function ghlSyncSignupContact(input: GhlSignupPayload): Promise<Ghl
   const tags = ["rustmaxx", "signup"];
   if (input.interestedServerOwner) tags.push("server-owner");
   if (input.interestedStreamer) tags.push("streamer");
+  if (input.interestedFan) tags.push("fan");
 
   const lines = [
     "Source: RustMaxx sign up",
     `Server owner interest: ${input.interestedServerOwner ? "yes" : "no"}`,
     `Streamer interest: ${input.interestedStreamer ? "yes" : "no"}`,
+    `Viewer / superfan interest: ${input.interestedFan ? "yes" : "no"}`,
   ];
   const note = lines.join("\n");
 

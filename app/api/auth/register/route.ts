@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
     display_name?: string;
     interested_server_owner?: unknown;
     interested_streamer?: unknown;
+    interested_fan?: unknown;
   };
   try {
     body = await request.json();
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
     typeof body.display_name === "string" ? body.display_name.trim() || null : null;
   const interestedServerOwner = body.interested_server_owner === true;
   const interestedStreamer = body.interested_streamer === true;
+  const interestedFan = body.interested_fan === true;
   if (!email || !password) {
     return NextResponse.json(
       { error: "Email and password are required" },
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
   const user = await createUser(email, password, initialRole, displayName, {
     serverOwner: interestedServerOwner,
     streamer: interestedStreamer,
+    fan: interestedFan,
   });
   await audit(user.id, "register", { email: user.email }).catch(() => {});
 
@@ -83,6 +86,7 @@ export async function POST(request: NextRequest) {
       displayName: displayName,
       interestedServerOwner: interestedServerOwner,
       interestedStreamer: interestedStreamer,
+      interestedFan: interestedFan,
     })
       .then((ghl) => {
         if (!ghl.ok) {

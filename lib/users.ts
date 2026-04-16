@@ -39,6 +39,7 @@ export type UserRow = {
   membership_level: MembershipLevel;
   signup_interested_server_owner: boolean;
   signup_interested_streamer: boolean;
+  signup_interested_fan: boolean;
   last_login_at?: Date | null;
   streamer_directory_visible?: boolean;
   streamer_directory_avatar_url?: string | null;
@@ -59,13 +60,14 @@ export type UserProfile = {
   membership_packages?: string[];
   signup_interested_server_owner: boolean;
   signup_interested_streamer: boolean;
+  signup_interested_fan: boolean;
   created_at: string;
 };
 
 const USER_SELECT = `id, email, password_hash, role, display_name,
     steam_id, steam_linked_at, stripe_customer_id, stripe_subscription_id, subscription_status,
     membership_level,
-    signup_interested_server_owner, signup_interested_streamer,
+    signup_interested_server_owner, signup_interested_streamer, signup_interested_fan,
     last_login_at, streamer_directory_visible, streamer_directory_avatar_url, streamer_directory_bio,
     streamer_directory_socials, streamer_directory_show_servers,
     streamer_tier,
@@ -96,6 +98,7 @@ function mapRowToUserRow(row: Record<string, unknown>): UserRow {
     ...base,
     signup_interested_server_owner: row.signup_interested_server_owner === true,
     signup_interested_streamer: row.signup_interested_streamer === true,
+    signup_interested_fan: row.signup_interested_fan === true,
     last_login_at:
       row.last_login_at == null
         ? null
@@ -174,18 +177,19 @@ export async function createUser(
   password: string,
   role: UserRole = "guest",
   displayName?: string | null,
-  signupIntent?: { serverOwner?: boolean; streamer?: boolean }
+  signupIntent?: { serverOwner?: boolean; streamer?: boolean; fan?: boolean }
 ): Promise<UserRow> {
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
   const so = signupIntent?.serverOwner === true;
   const st = signupIntent?.streamer === true;
+  const fan = signupIntent?.fan === true;
   try {
     const { rows } = await query<UserRow>(
       `INSERT INTO users (email, password_hash, role, display_name, membership_level,
-        signup_interested_server_owner, signup_interested_streamer)
-     VALUES ($1, $2, $3, $4, 'standard', $5, $6)
+        signup_interested_server_owner, signup_interested_streamer, signup_interested_fan)
+     VALUES ($1, $2, $3, $4, 'standard', $5, $6, $7)
      RETURNING ${USER_SELECT}`,
-      [email.trim().toLowerCase(), hash, role, displayName ?? null, so, st]
+      [email.trim().toLowerCase(), hash, role, displayName ?? null, so, st, fan]
     );
     if (!rows[0]) throw new Error("Insert user failed");
     return rows[0];
@@ -218,6 +222,7 @@ export function toProfile(row: UserRow): UserProfile {
     membership_level: row.membership_level ?? "standard",
     signup_interested_server_owner: row.signup_interested_server_owner ?? false,
     signup_interested_streamer: row.signup_interested_streamer ?? false,
+    signup_interested_fan: row.signup_interested_fan ?? false,
     created_at: row.created_at.toISOString(),
   };
 }
