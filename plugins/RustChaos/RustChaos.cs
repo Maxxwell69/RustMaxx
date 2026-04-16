@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.30")]
+    [Info("RustChaos", "RustMaxx", "1.15.31")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -443,8 +443,8 @@ namespace Oxide.Plugins
         /// <summary>Candidate prefabs for crocodile gift spawn — override first via CrocodilePrefabPath in config.</summary>
         private static readonly string[] CrocodilePrefabCandidates =
         {
-            "assets/rust.ai/agents/crocodile/crocodile.entity.prefab",
-            "assets/rust.ai/agents/crocodile/crocodile.prefab"
+            "assets/rust.ai/agents/crocodile/crocodile.prefab",
+            "assets/rust.ai/agents/crocodile/crocodile.entity.prefab"
         };
 
         /// <summary>
@@ -1601,7 +1601,80 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Runs chaos event rules on a timer based on streamer location (Land / Sea / Swimming).
+        /// If this horizontal position is in water, set <paramref name="worldPos"/>.y to the water surface (+ small offset).
+        /// Crocodiles are aquatic; snapping them to terrain on dry land often spawns a dead animal.
+        /// </summary>
+        private static bool TryRaiseToWaterSurface(ref Vector3 worldPos)
+        {
+            try
+            {
+                if (!WaterLevel.Test(worldPos, true, true)) return false;
+                float wl = WaterLevel.GetWaterLevel(worldPos, true);
+                worldPos.y = wl + 0.25f;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Finds shallow water near the streamer (same radius as solo gifts); falls back to snapped land.</summary>
+        private bool TryFindCrocodileSpawnPosition(BasePlayer streamer, out Vector3 spawnPos, out bool spawnedInWater)
+        {
+            spawnPos = Vector3.zero;
+            spawnedInWater = false;
+            if (streamer == null || !streamer.IsValid()) return false;
+
+            float leash = Mathf.Max(8f, _config?.ChaosWaveBearLeashDistance ?? 18f);
+            float maxRadius = Mathf.Max(7f, Mathf.Min(leash - 1f, leash));
+
+            for (int i = 0; i < 64; i++)
+            {
+                Vector3 tryFlat = GetPositionWithinRadius(streamer, 6f, maxRadius);
+                if (tryFlat == Vector3.zero) tryFlat = GetPositionNear(streamer);
+                tryFlat.y = TerrainMeta.HeightMap.GetHeight(tryFlat);
+                if (TryRaiseToWaterSurface(ref tryFlat))
+                {
+                    spawnPos = tryFlat;
+                    spawnedInWater = true;
+                    return true;
+                }
+            }
+
+            for (float ring = 8f; ring <= maxRadius + 0.1f; ring += 4f)
+            {
+                for (int step = 0; step < 16; step++)
+                {
+                    float a = step / 16f * Mathf.PI * 2f;
+                    Vector3 tryFlat = streamer.transform.position + new Vector3(Mathf.Cos(a) * ring, 0f, Mathf.Sin(a) * ring);
+                    tryFlat.y = TerrainMeta.HeightMap.GetHeight(tryFlat);
+                    if (TryRaiseToWaterSurface(ref tryFlat))
+                    {
+                        spawnPos = tryFlat;
+                        spawnedInWater = true;
+                        return true;
+                    }
+                }
+            }
+
+            Vector3 atPlayer = streamer.transform.position;
+            atPlayer.y = TerrainMeta.HeightMap.GetHeight(atPlayer);
+            if (TryRaiseToWaterSurface(ref atPlayer))
+            {
+                spawnPos = atPlayer;
+                spawnedInWater = true;
+                return true;
+            }
+
+            spawnPos = GetSingleSpawnPosition(streamer);
+            if (spawnPos == Vector3.zero) spawnPos = streamer.transform.position;
+            spawnPos = SnapLandNpcSpawnToGround(spawnPos);
+            spawnedInWater = false;
+            return spawnPos != Vector3.zero;
+        }
+
+        /// <summary>Runs chaos event rules on a timer based on streamer location (Land / Sea / Swimming).
         /// Each location has its own sequence of delayed spawns and effects.
         /// </summary>
         private void RunChaosEvent(ChaosLocation loc, string viewerName, string giftName, Func<string, string> chatMsg)
@@ -1879,14 +1952,48 @@ namespace Oxide.Plugins
         private bool TrySpawnCrocodileOneNearStreamer(BasePlayer streamer)
         {
             if (streamer == null || !streamer.IsValid()) return false;
-            Vector3 pos = GetSingleSpawnPosition(streamer);
-            if (pos == Vector3.zero) pos = streamer.transform.position;
-            pos = SnapLandNpcSpawnToGround(pos);
+            if (!TryFindCrocodileSpawnPosition(streamer, out Vector3 pos, out bool inWater))
+                return false;
+            if (!inWater)
+                PrintWarning($"{LogPrefix} Crocodile: no water in gift radius — using land snap (spawn may fail far from rivers/ocean).");
+
             BaseEntity ent = TryCreateEntityFromPrefabCandidates(EnumerateCrocodilePrefabPaths(), pos);
             if (ent == null) return false;
             ent.Spawn();
             RegisterSoloWildEntity(ent, streamer);
+            NetworkableId crocId = ent.net.ID;
+            timer.Once(0.15f, () => TryHealSoloWildIfSpawnedDead(crocId));
             return true;
+        }
+
+        /// <summary>Some builds leave aquatic animals at 0 HP if the first tick runs before AI init.</summary>
+        private void TryHealSoloWildIfSpawnedDead(NetworkableId nid)
+        {
+            try
+            {
+                var ent = BaseNetworkable.serverEntities.Find(nid) as BaseCombatEntity;
+                if (ent == null || ent.IsDestroyed) return;
+                if (!ent.IsDead() && ent.health > 0.5f) return;
+                try
+                {
+                    ent.SetHealth(ent.MaxHealth());
+                }
+                catch
+                {
+                    try
+                    {
+                        ent.Heal(99999f);
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
         }
 
         private bool TrySpawnOneChaosWaveEnemy(BasePlayer streamer, float minRadius, float maxRadius)
