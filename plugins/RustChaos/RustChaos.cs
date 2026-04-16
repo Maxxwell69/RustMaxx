@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.28")]
+    [Info("RustChaos", "RustMaxx", "1.15.29")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -147,18 +147,10 @@ namespace Oxide.Plugins
             if (entity == null || info == null) return null;
             var bp = entity as BasePlayer;
             if (bp == null || bp.IsNpc || !bp.IsValid()) return null;
-            // Time God Mode — configured streamer takes no damage while effect is active.
+            // Time God Mode — configured streamer takes no incoming hit damage while effect is active.
             if (IsConfiguredStreamer(bp) && HasActiveStreamerStatusKind("godmode"))
             {
-                try
-                {
-                    info.damageTypes?.Clear();
-                }
-                catch
-                {
-                    // ignore
-                }
-
+                TryNullifyHitInfoDamage(info);
                 return true;
             }
 
@@ -188,6 +180,21 @@ namespace Oxide.Plugins
             var bp = ownerEntity as BasePlayer;
             if (bp == null || !bp.IsValid()) return;
             ulong uid = bp.userID;
+            if (IsConfiguredStreamer(bp) && HasActiveStreamerStatusKind("godmode"))
+            {
+                // Some damage (bleed/poison/radiation ticks) bypasses HitInfo hooks; keep the streamer topped while godmode runs.
+                TryClearBleedMetabolismAttributes(instance);
+                TryTopUpGodModeMetabolism(instance);
+                try
+                {
+                    bp.Heal(99999f);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+
             // Flash — keep stamina high so the streamer can sprint continuously (feels like 2x mobility).
             // PlayerMetabolism.stamina exists on many builds but not all Oxide reference assemblies; use reflection.
             if (IsConfiguredStreamer(bp) && HasActiveStreamerStatusKind("flash"))
@@ -203,6 +210,78 @@ namespace Oxide.Plugins
             try
             {
                 bp.Heal(99999f);
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private static void TryNullifyHitInfoDamage(HitInfo info)
+        {
+            if (info == null) return;
+            try
+            {
+                info.damageTypes?.Clear();
+            }
+            catch
+            {
+                // ignore
+            }
+
+            try
+            {
+                info.HitMaterial = 0U;
+                info.PointStart = info.PointEnd;
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        /// <summary>Best-effort metabolism clear for godmode across Rust/Oxide builds (reflection-safe).</summary>
+        private static void TryTopUpGodModeMetabolism(PlayerMetabolism metabolism)
+        {
+            if (metabolism == null) return;
+            try
+            {
+                foreach (PropertyInfo prop in metabolism.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    object obj = prop.GetValue(metabolism, null);
+                    if (obj == null) continue;
+                    PropertyInfo valueProp = obj.GetType().GetProperty("value", BindingFlags.Public | BindingFlags.Instance);
+                    PropertyInfo minProp = obj.GetType().GetProperty("min", BindingFlags.Public | BindingFlags.Instance);
+                    PropertyInfo maxProp = obj.GetType().GetProperty("max", BindingFlags.Public | BindingFlags.Instance);
+                    if (valueProp == null || valueProp.PropertyType != typeof(float)) continue;
+
+                    string n = prop.Name.ToLowerInvariant();
+                    if (n.Contains("bleed") || n.Contains("poison") || n.Contains("radiation") || n.Contains("calorie") ||
+                        n.Contains("hydration") || n.Contains("wetness") || n.Contains("temperature") || n.Contains("cold") ||
+                        n.Contains("heat"))
+                    {
+                        float next = 0f;
+                        if (n.Contains("calorie") || n.Contains("hydration"))
+                        {
+                            if (maxProp != null && maxProp.PropertyType == typeof(float))
+                                next = (float)maxProp.GetValue(obj, null);
+                        }
+                        else if (minProp != null && minProp.PropertyType == typeof(float))
+                        {
+                            next = (float)minProp.GetValue(obj, null);
+                        }
+                        valueProp.SetValue(obj, next, null);
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            try
+            {
+                metabolism.SendChangesToClient();
             }
             catch
             {
