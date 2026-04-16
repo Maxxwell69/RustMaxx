@@ -14,13 +14,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.AI;
 using Rust;
 using Oxide.Game.Rust.Cui;
 using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.35")]
+    [Info("RustChaos", "RustMaxx", "1.15.36")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -344,11 +345,15 @@ namespace Oxide.Plugins
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
-        /// <summary>Overlay anchors (0,0 = bottom-left): centered band just above the toolbelt / hotbar.</summary>
-        private const string ChaosWaveHudAnchorMin = "0.30 0.09";
-        private const string ChaosWaveHudAnchorMax = "0.70 0.18";
-        private const string StatusFxHudAnchorMin = "0.16 0.09";
-        private const string StatusFxHudAnchorMax = "0.84 0.28";
+        /// <summary>HUD parent is Overlay; anchor bottom-center + pixel offsets so the bar sits just above the hotbar at different UI scales.</summary>
+        private const string ChaosWaveHudAnchorMin = "0.5 0";
+        private const string ChaosWaveHudAnchorMax = "0.5 0";
+        private const string ChaosWaveHudOffsetMin = "-300 88";
+        private const string ChaosWaveHudOffsetMax = "300 168";
+        private const string StatusFxHudAnchorMin = "0.5 0";
+        private const string StatusFxHudAnchorMax = "0.5 0";
+        private const string StatusFxHudOffsetMin = "-380 92";
+        private const string StatusFxHudOffsetMax = "380 248";
         // Countdown seconds between waves:
         // wave 1 -> wave 2 = 20s, wave 2 -> wave 3 = 25s, and default to 30s for the rest (until you tell me different).
         // Index = completedWave - 1 (so [0] is after wave 1).
@@ -1609,6 +1614,62 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// Snap a land spawn onto walkable NavMesh so HumanNPC/Scientist agents do not spam "not close enough to the NavMesh".
+        /// </summary>
+        private static bool TrySnapLandSpawnToNavMesh(ref Vector3 worldPos, BasePlayer streamerForFallback)
+        {
+            if (worldPos == Vector3.zero) return false;
+            for (float r = 1.5f; r <= 28f; r += 1.5f)
+            {
+                if (NavMesh.SamplePosition(worldPos, out NavMeshHit hit, r, NavMesh.AllAreas))
+                {
+                    worldPos = hit.position;
+                    return true;
+                }
+            }
+
+            if (streamerForFallback != null && streamerForFallback.IsValid())
+            {
+                Vector3 p = SnapLandNpcSpawnToGround(streamerForFallback.transform.position);
+                for (float r = 2f; r <= 32f; r += 2f)
+                {
+                    if (NavMesh.SamplePosition(p, out NavMeshHit hit, r, NavMesh.AllAreas))
+                    {
+                        worldPos = hit.position;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>When steering, avoid calling <see cref="BaseNavigator.PlaceOnNavMesh"/> every tick (Unity logs loudly if it fails).</summary>
+        private static bool TryWarpNavigatorOntoNavMesh(BaseNavigator nav, BaseEntity ent)
+        {
+            if (nav?.Agent == null || ent == null || ent.IsDestroyed) return false;
+            if (nav.Agent.isOnNavMesh) return true;
+            Vector3 p = ent.transform.position;
+            for (float r = 1f; r <= 22f; r += 1f)
+            {
+                if (!NavMesh.SamplePosition(p, out NavMeshHit hit, r, NavMesh.AllAreas)) continue;
+                try
+                {
+                    ent.transform.position = hit.position;
+                    if (nav.Agent.enabled)
+                        nav.Agent.Warp(hit.position);
+                    return nav.Agent.isOnNavMesh;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// If this horizontal position is in water, set <paramref name="worldPos"/>.y to the water surface (+ small offset).
         /// Crocodiles are aquatic; snapping them to terrain on dry land often spawns a dead animal.
         /// </summary>
@@ -2011,6 +2072,8 @@ namespace Oxide.Plugins
                 Vector3 pos = GetPositionWithinRadius(streamer, minRadius, maxRadius);
                 if (pos == Vector3.zero) pos = GetPositionNear(streamer);
                 pos = SnapLandNpcSpawnToGround(pos);
+                if (!TrySnapLandSpawnToNavMesh(ref pos, streamer))
+                    continue;
                 BaseEntity ent = CreateChaosWaveEnemyEntity(pos);
                 if (ent == null) continue;
                 ent.Spawn();
@@ -2245,8 +2308,8 @@ namespace Oxide.Plugins
                     var brain = humanNpc.Brain;
                     if (brain == null || brain.Navigator == null) return false;
                     var nav = brain.Navigator;
-                    if (nav.Agent != null && !nav.Agent.isOnNavMesh)
-                        nav.PlaceOnNavMesh(0f);
+                    if (nav.Agent != null && !nav.Agent.isOnNavMesh && !TryWarpNavigatorOntoNavMesh(nav, humanNpc))
+                        return false;
                     Vector3 a = humanNpc.transform.position;
                     Vector3 b = streamerPos;
                     a.y = 0f;
@@ -2273,8 +2336,8 @@ namespace Oxide.Plugins
                     var brain = scientistNpc.Brain;
                     if (brain == null || brain.Navigator == null) return false;
                     var nav = brain.Navigator;
-                    if (nav.Agent != null && !nav.Agent.isOnNavMesh)
-                        nav.PlaceOnNavMesh(0f);
+                    if (nav.Agent != null && !nav.Agent.isOnNavMesh && !TryWarpNavigatorOntoNavMesh(nav, scientistNpc))
+                        return false;
                     Vector3 a = scientistNpc.transform.position;
                     Vector3 b = streamerPos;
                     a.y = 0f;
@@ -2531,6 +2594,11 @@ namespace Oxide.Plugins
             Vector3 pos = GetSingleSpawnPosition(streamer);
             if (pos == Vector3.zero) pos = streamer.transform.position;
             pos = SnapLandNpcSpawnToGround(pos);
+            if (!TrySnapLandSpawnToNavMesh(ref pos, streamer))
+            {
+                PrintWarning($"{LogPrefix} Solo wild ({logContext}): no NavMesh near spawn, skipped.");
+                return false;
+            }
             BaseEntity entity = GameManager.server.CreateEntity(prefabPath, pos, Quaternion.identity, true);
             if (entity == null) return false;
             entity.Spawn();
@@ -2643,6 +2711,11 @@ namespace Oxide.Plugins
         {
             if (streamer == null || !streamer.IsValid() || candidates == null || candidates.Length == 0) return false;
             position = SnapLandNpcSpawnToGround(position);
+            if (!TrySnapLandSpawnToNavMesh(ref position, streamer))
+            {
+                PrintWarning($"{LogPrefix} Scientist spawn skipped: no NavMesh near target (move to open ground).");
+                return false;
+            }
             BaseEntity entity = null;
             foreach (var path in candidates)
             {
@@ -2949,7 +3022,13 @@ namespace Oxide.Plugins
             container.Add(new CuiPanel
             {
                 Image = { Color = "0.1 0.1 0.15 0.85" },
-                RectTransform = { AnchorMin = ChaosWaveHudAnchorMin, AnchorMax = ChaosWaveHudAnchorMax }
+                RectTransform =
+                {
+                    AnchorMin = ChaosWaveHudAnchorMin,
+                    AnchorMax = ChaosWaveHudAnchorMax,
+                    OffsetMin = ChaosWaveHudOffsetMin,
+                    OffsetMax = ChaosWaveHudOffsetMax
+                }
             }, "Overlay", ChaosWaveUiName);
             string text = line1;
             if (!string.IsNullOrEmpty(line2)) text += "\n" + line2;
@@ -3662,7 +3741,13 @@ namespace Oxide.Plugins
                 c.Add(new CuiPanel
                 {
                     Image = { Color = "0.14 0.1 0.08 0.9" },
-                    RectTransform = { AnchorMin = StatusFxHudAnchorMin, AnchorMax = StatusFxHudAnchorMax }
+                    RectTransform =
+                    {
+                        AnchorMin = StatusFxHudAnchorMin,
+                        AnchorMax = StatusFxHudAnchorMax,
+                        OffsetMin = StatusFxHudOffsetMin,
+                        OffsetMax = StatusFxHudOffsetMax
+                    }
                 }, "Overlay", StatusFxUiRoot);
                 c.Add(new CuiLabel
                 {
@@ -3908,6 +3993,11 @@ namespace Oxide.Plugins
         {
             if (string.IsNullOrEmpty(prefabPath) || position == Vector3.zero) return;
             position = SnapLandNpcSpawnToGround(position);
+            if (!TrySnapLandSpawnToNavMesh(ref position, null))
+            {
+                UnityEngine.Debug.LogWarning($"[RustChaos] SpawnNPC skipped: no NavMesh near {position}");
+                return;
+            }
             BaseEntity entity = GameManager.server.CreateEntity(prefabPath, position, Quaternion.identity, true);
             if (entity != null)
             {
@@ -3925,6 +4015,8 @@ namespace Oxide.Plugins
         private static bool SpawnScientist(Vector3 position)
         {
             position = SnapLandNpcSpawnToGround(position);
+            if (!TrySnapLandSpawnToNavMesh(ref position, null))
+                return false;
             foreach (string path in SingleScientistPrefabCandidates)
             {
                 BaseEntity entity = GameManager.server.CreateEntity(path, position, Quaternion.identity, true);
