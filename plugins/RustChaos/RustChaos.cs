@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.34")]
+    [Info("RustChaos", "RustMaxx", "1.15.35")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -344,6 +344,11 @@ namespace Oxide.Plugins
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
+        /// <summary>Overlay anchors (0,0 = bottom-left): centered band just above the toolbelt / hotbar.</summary>
+        private const string ChaosWaveHudAnchorMin = "0.30 0.09";
+        private const string ChaosWaveHudAnchorMax = "0.70 0.18";
+        private const string StatusFxHudAnchorMin = "0.16 0.09";
+        private const string StatusFxHudAnchorMax = "0.84 0.28";
         // Countdown seconds between waves:
         // wave 1 -> wave 2 = 20s, wave 2 -> wave 3 = 25s, and default to 30s for the rest (until you tell me different).
         // Index = completedWave - 1 (so [0] is after wave 1).
@@ -2944,13 +2949,13 @@ namespace Oxide.Plugins
             container.Add(new CuiPanel
             {
                 Image = { Color = "0.1 0.1 0.15 0.85" },
-                RectTransform = { AnchorMin = "0.02 0.78", AnchorMax = "0.38 0.99" }
+                RectTransform = { AnchorMin = ChaosWaveHudAnchorMin, AnchorMax = ChaosWaveHudAnchorMax }
             }, "Overlay", ChaosWaveUiName);
             string text = line1;
             if (!string.IsNullOrEmpty(line2)) text += "\n" + line2;
             container.Add(new CuiLabel
             {
-                Text = { Text = text, FontSize = 13, Align = TextAnchor.UpperLeft, Color = "1 0.9 0.3 1" },
+                Text = { Text = text, FontSize = 13, Align = TextAnchor.MiddleCenter, Color = "1 0.9 0.3 1" },
                 RectTransform = { AnchorMin = "0.04 0.06", AnchorMax = "0.96 0.94" }
             }, ChaosWaveUiName);
             CuiHelper.AddUi(player, container);
@@ -3657,7 +3662,7 @@ namespace Oxide.Plugins
                 c.Add(new CuiPanel
                 {
                     Image = { Color = "0.14 0.1 0.08 0.9" },
-                    RectTransform = { AnchorMin = "0.02 0.02", AnchorMax = "0.42 0.2" }
+                    RectTransform = { AnchorMin = StatusFxHudAnchorMin, AnchorMax = StatusFxHudAnchorMax }
                 }, "Overlay", StatusFxUiRoot);
                 c.Add(new CuiLabel
                 {
@@ -3665,10 +3670,10 @@ namespace Oxide.Plugins
                     {
                         Text = string.Join("\n", lines),
                         FontSize = 12,
-                        Align = TextAnchor.LowerLeft,
+                        Align = TextAnchor.MiddleCenter,
                         Color = "1 0.88 0.55 1"
                     },
-                    RectTransform = { AnchorMin = "0.04 0.08", AnchorMax = "0.96 0.94" }
+                    RectTransform = { AnchorMin = "0.03 0.06", AnchorMax = "0.97 0.94" }
                 }, StatusFxUiRoot);
                 CuiHelper.AddUi(player, c);
             }
