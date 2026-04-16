@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Reflection;
@@ -22,7 +23,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.38")]
+    [Info("RustChaos", "RustMaxx", "1.15.39")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -517,6 +518,31 @@ namespace Oxide.Plugins
 
         #region Command
 
+        /// <summary>
+        /// 4th rustchaos token (scrap for normal actions, seconds for status effects). Uses invariant float parse so
+        /// <c>45</c> / <c>45.0</c> work; <see cref="ConsoleSystem.Arg.GetInt"/> alone can mis-read some RCON payloads.
+        /// </summary>
+        private static int ParseRustChaosFourthNumericToken(ConsoleSystem.Arg arg)
+        {
+            if (arg == null || !arg.HasArgs(4)) return 0;
+            string raw = arg.GetString(3);
+            if (string.IsNullOrWhiteSpace(raw)) return 0;
+            raw = raw.Trim();
+            if (float.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out float f))
+                return Mathf.RoundToInt(f);
+            for (int i = 0; i < raw.Length; i++)
+            {
+                if (!char.IsDigit(raw[i])) continue;
+                int start = i;
+                while (i < raw.Length && char.IsDigit(raw[i])) i++;
+                if (i > start &&
+                    int.TryParse(raw.Substring(start, i - start), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v))
+                    return v;
+            }
+
+            return 0;
+        }
+
         [ConsoleCommand("rustchaos")]
         private void CmdRustChaos(ConsoleSystem.Arg arg)
         {
@@ -536,7 +562,7 @@ namespace Oxide.Plugins
             string action = arg.GetString(0).ToLowerInvariant();
             string viewerName = arg.GetString(1);
             string giftName = arg.GetString(2);
-            int scrapAmount = arg.HasArgs(4) || arg.HasArgs(5) ? arg.GetInt(3, 0) : 0;
+            int scrapAmount = arg.HasArgs(4) || arg.HasArgs(5) ? ParseRustChaosFourthNumericToken(arg) : 0;
             string customMessage = arg.HasArgs(5) ? arg.GetString(4) : null;
             if (string.IsNullOrWhiteSpace(customMessage)) customMessage = null;
 
@@ -3725,7 +3751,7 @@ namespace Oxide.Plugins
             {
                 if (s == null || now >= s.EndTime) continue;
                 if (s.BlindOverlay) blind = true;
-                int left = Mathf.Max(0, Mathf.CeilToInt(s.EndTime - now));
+                int left = Mathf.Max(0, Mathf.FloorToInt(s.EndTime - now));
                 string who = string.IsNullOrEmpty(s.ViewerName) ? "Viewer" : s.ViewerName;
                 lines.Add($"{StatusKindDisplay(s.Kind)}  {left}s  ({who})");
             }
@@ -3800,7 +3826,8 @@ namespace Oxide.Plugins
 
             if (existing != null)
             {
-                existing.EndTime = Mathf.Max(existing.EndTime, end);
+                // New trigger uses this gift's duration from *now* (do not only extend — that ignored shorter / equal re-fires).
+                existing.EndTime = end;
                 existing.BlindOverlay = blindOverlay || existing.BlindOverlay;
                 if (!string.IsNullOrEmpty(viewerName)) existing.ViewerName = viewerName;
                 if (!string.IsNullOrEmpty(giftName)) existing.GiftName = giftName;
