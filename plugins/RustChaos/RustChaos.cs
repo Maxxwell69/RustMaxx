@@ -20,7 +20,7 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.32")]
+    [Info("RustChaos", "RustMaxx", "1.15.33")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
     public class RustChaos : RustPlugin
     {
@@ -2137,11 +2137,40 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// <see cref="ScientistNPC"/> inherits <see cref="BasePlayer"/>, so the generic provoke path used to skip them entirely
+        /// (bc is BasePlayer → return). Without this, solo scientists often never enter combat.
+        /// </summary>
+        private static void TryProvokeScientistNpcCombat(ScientistNPC target, BasePlayer streamer)
+        {
+            if (target == null || streamer == null || target.IsDestroyed || !streamer.IsValid()) return;
+            try
+            {
+                HitInfo hit = new HitInfo();
+                hit.Initiator = streamer;
+                hit.HitEntity = target;
+                hit.HitPositionWorld = target.transform.position;
+                hit.damageTypes.Add(DamageType.Stab, 0.05f);
+                target.Hurt(hit);
+            }
+            catch
+            {
+                // ignore API differences
+            }
+        }
+
+        /// <summary>
         /// Provoke humans (scientists) or animals (bears/wolves) so the streamer registers as a threat.
         /// </summary>
         private static void TryProvokeChaosWaveEnemy(BaseEntity ent, BasePlayer streamer)
         {
             if (ent == null || streamer == null || !streamer.IsValid()) return;
+            var scientistNpc = ent as ScientistNPC;
+            if (scientistNpc != null)
+            {
+                TryProvokeScientistNpcCombat(scientistNpc, streamer);
+                return;
+            }
+
             var human = ent as HumanNPC;
             if (human != null)
             {
@@ -2482,7 +2511,8 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// Heavy scientist prefabs often spawn with minigun/M249/SPAS; scientistflame must always use a flamethrower.
-        /// Clears belt and equips military flamethrower when available, else handmade, with a full fuel tank.
+        /// Prefer handmade <c>flamethrower</c> first (matches many monument NPC loadouts); military second.
+        /// Handmade first also avoids some client SFX pitch spam seen when military flamethrower is forced onto NPC models.
         /// </summary>
         private void TryEquipScientistNpcFlamethrower(BaseEntity entity)
         {
@@ -2499,9 +2529,9 @@ namespace Oxide.Plugins
                     slot?.RemoveFromContainer();
                 }
 
-                Item ft = ItemManager.CreateByName("military flamethrower", 1);
+                Item ft = ItemManager.CreateByName("flamethrower", 1);
                 if (ft == null)
-                    ft = ItemManager.CreateByName("flamethrower", 1);
+                    ft = ItemManager.CreateByName("military flamethrower", 1);
                 if (ft == null) return;
 
                 if (!ft.MoveToContainer(belt, 0))
@@ -2512,6 +2542,7 @@ namespace Oxide.Plugins
 
                 scientist.UpdateActiveItem(ft.uid);
                 TrySetFlameThrowerAmmoFromItem(ft);
+                try { scientist.SendNetworkUpdate(); } catch { }
 
                 NetworkableId nid = scientist.net.ID;
                 timer.Once(0.12f, () =>
@@ -2530,6 +2561,7 @@ namespace Oxide.Plugins
                         TrySetFlameThrowerAmmoFromItem(it);
                         break;
                     }
+                    try { npc.SendNetworkUpdate(); } catch { }
                 });
             }
             catch
@@ -2575,6 +2607,17 @@ namespace Oxide.Plugins
                 if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
                 TryProvokeChaosWaveEnemy(e, s);
             });
+            // Flame loadout: provoke again after held entity + brain catch up (reduces idle / no-attack after belt swap).
+            if (equipFlamethrower)
+            {
+                timer.Once(0.45f, () =>
+                {
+                    BaseEntity e = BaseNetworkable.serverEntities.Find(nid) as BaseEntity;
+                    BasePlayer s = FindConnectedPlayerByUserId(sid);
+                    if (e == null || e.IsDestroyed || s == null || !s.IsValid()) return;
+                    TryProvokeChaosWaveEnemy(e, s);
+                });
+            }
             return true;
         }
 
