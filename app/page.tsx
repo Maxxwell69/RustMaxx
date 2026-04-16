@@ -1,32 +1,34 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
-
-export const metadata: Metadata = {
-  title: "RustMaxx – One command center for Rust servers",
-  description:
-    "Admin tools, streamer-viewer interaction, and live map intel for Rust. RCON, rewards, heatmaps. Works with Oxide/uMod.",
-  openGraph: {
-    title: "RustMaxx – One command center for Rust servers",
-    description: "Admin tools, stream interaction, and live map intel for Rust servers.",
-  },
-};
 import { TerminalCard } from "@/components/marketing/TerminalCard";
 import { LiveConsole } from "@/components/marketing/LiveConsole";
 import { DashboardFrame } from "@/components/marketing/placeholders/DashboardFrame";
+
+export const metadata: Metadata = {
+  title: "RustMaxx – For server admins, streamers & fans",
+  description:
+    "Server admins invite streamers. Streamers invite viewers. One place to run Rust servers, power live interactions, and grow your community.",
+  openGraph: {
+    title: "RustMaxx – For server admins, streamers & fans",
+    description:
+      "Invite streamers, invite viewers, and grow — RCON, TikFinity hooks, and superfan tools in one command center.",
+  },
+};
 
 function HeroSection() {
   return (
     <section className="border-b border-rust-border bg-rust-panel/50 px-4 py-16 sm:px-6 sm:py-24">
       <div className="mx-auto max-w-6xl">
         <h1 className="text-center text-3xl font-bold tracking-tight text-zinc-100 sm:text-4xl md:text-5xl">
-          One command center for Rust servers
+          Built for server admins, streamers, and fans
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-center text-lg text-zinc-400">
-          Admin tools, streamer–viewer interaction, and live map intel. Less juggling, more control.
+          Admins invite streamers. Streamers invite viewers. RustMaxx connects the chain — so your server, your channel,
+          and your community can grow together.
         </p>
         <div className="mt-10 flex justify-center">
-          <PillarTabsClient />
+          <AudienceTabs />
         </div>
         <div className="mt-12 grid gap-8 lg:grid-cols-2">
           <TerminalCard title="rcon — live">
@@ -41,30 +43,29 @@ function HeroSection() {
   );
 }
 
-function PillarTabsClient() {
-  // Server component can't use useState; use a client wrapper for tabs or keep static for hero
+function AudienceTabs() {
   return (
     <div className="flex flex-wrap justify-center gap-2">
       <Link
-        href="/#admin"
+        href="/#server-admins"
         className="rounded-lg border border-rust-border bg-rust-surface px-4 py-3 text-left transition-colors hover:border-rust-cyan"
       >
-        <span className="block font-medium text-zinc-200">Admin Tools</span>
-        <span className="block text-xs text-zinc-500">RCON, presets, roles, audit logs</span>
+        <span className="block font-medium text-zinc-200">Server admins</span>
+        <span className="block text-xs text-zinc-500">Invite streamers · RCON &amp; control</span>
       </Link>
       <Link
-        href="/streamer-interaction"
+        href="/#streamers"
         className="rounded-lg border border-rust-border bg-rust-surface px-4 py-3 text-left transition-colors hover:border-rust-cyan"
       >
-        <span className="block font-medium text-zinc-200">Stream Interaction</span>
-        <span className="block text-xs text-zinc-500">Connect Twitch, rewards, cooldowns</span>
+        <span className="block font-medium text-zinc-200">Streamers</span>
+        <span className="block text-xs text-zinc-500">Invite viewers · TikFinity &amp; hooks</span>
       </Link>
       <Link
-        href="/#map"
+        href="/#fans"
         className="rounded-lg border border-rust-border bg-rust-surface px-4 py-3 text-left transition-colors hover:border-rust-cyan"
       >
-        <span className="block font-medium text-zinc-200">Live Map Intel</span>
-        <span className="block text-xs text-zinc-500">Heatmaps, events, raid awareness</span>
+        <span className="block font-medium text-zinc-200">Fans</span>
+        <span className="block text-xs text-zinc-500">Follow streamers · superfan access</span>
       </Link>
     </div>
   );
@@ -103,57 +104,65 @@ function TrustStrip() {
   );
 }
 
-function PillarsSection() {
-  const pillars: { id: string; title: string; tagline: string; benefits: string[]; href: string }[] = [
+function AudiencesSection() {
+  const blocks: {
+    id: string;
+    title: string;
+    tagline: string;
+    benefits: string[];
+    href: string;
+    cta: string;
+  }[] = [
     {
-      id: "admin",
-      title: "Admin & Server Tools",
-      tagline: "One place for RCON, roles, and audit.",
+      id: "server-admins",
+      title: "Server admins",
+      tagline: "Bring streamers onto your server and give them the tools to shine.",
       benefits: [
-        "Live RCON console and command presets",
-        "Staff roles and permissions",
-        "Audit logs and scheduled commands",
-        "Plugin management roadmap",
+        "Invite streamers to link their channel and use TikFinity / webhooks on your Rust server",
+        "Live RCON, roles, audit — one dashboard instead of scattered tools",
+        "Help the server grow when streamers bring their audience in-game",
       ],
       href: "/features#admin",
+      cta: "Admin & server features →",
     },
     {
-      id: "stream",
-      title: "Streamer–Viewer Interaction",
-      tagline: "Engage viewers without the chaos.",
+      id: "streamers",
+      title: "Streamers",
+      tagline: "Invite viewers in and turn watch-time into moments on the server.",
       benefits: [
-        "Rewards mapping and cooldowns",
-        "Anti-abuse and rate limits",
-        "Overlays and Twitch integration",
-        "TikTok & Kick adapters (planned)",
+        "Connect TikFinity, Twitch, and rewards with clear cooldowns and anti-abuse",
+        "Invite fans to request superfan access — you approve who interacts",
+        "Grow your channel while admins help you plug into the right Rust stack",
       ],
-      href: "/features#stream",
+      href: "/streamer-interaction",
+      cta: "Streamer interaction →",
     },
     {
-      id: "map",
-      title: "Map Monitor / Live Intel",
-      tagline: "See the map, not just the chat.",
+      id: "fans",
+      title: "Fans of streamers",
+      tagline: "Get closer to the channels you love — when the streamer says yes.",
       benefits: [
-        "Live map (optional plugin)",
-        "Heatmaps and event markers",
-        "Raid alerts and movement trails",
-        "Roadmap: deeper intel features",
+        "Find streamers in the directory and request superfan access per channel",
+        "Interact with live hooks when you are approved — built for viewers, not noise",
+        "Support streamers and servers as the community grows together",
       ],
-      href: "/features#map",
+      href: "/streamers",
+      cta: "Browse streamers →",
     },
   ];
 
   return (
-    <section className="px-4 py-16 sm:px-6 sm:py-24" id="pillars">
+    <section className="px-4 py-16 sm:px-6 sm:py-24" id="audiences">
       <div className="mx-auto max-w-6xl">
         <h2 className="text-center text-2xl font-bold text-zinc-100 sm:text-3xl">
-          Three pillars. One dashboard.
+          Three audiences. One loop that helps everyone grow.
         </h2>
-        <p className="mx-auto mt-2 max-w-xl text-center text-zinc-400">
-          Built for server owners, admins, and streamers who want less tool sprawl.
+        <p className="mx-auto mt-2 max-w-2xl text-center text-zinc-400">
+          RustMaxx is the link between your server, your stream, and your viewers — invitations go both ways, and the
+          product is built to scale engagement without losing control.
         </p>
         <div className="mt-12 grid gap-8 md:grid-cols-3">
-          {pillars.map((p) => (
+          {blocks.map((p) => (
             <div
               key={p.id}
               id={p.id}
@@ -172,11 +181,15 @@ function PillarsSection() {
                 href={p.href}
                 className="mt-4 inline-block text-sm font-medium text-rust-cyan hover:underline"
               >
-                Learn more →
+                {p.cta}
               </Link>
             </div>
           ))}
         </div>
+        <p className="mx-auto mt-10 max-w-2xl text-center text-sm text-zinc-500">
+          Map intel, heatmaps, and deeper analytics stay on the roadmap — the core story is admins ↔ streamers ↔ fans,
+          growing together.
+        </p>
       </div>
     </section>
   );
@@ -209,7 +222,7 @@ function TestimonialsSection() {
   return (
     <section className="border-t border-rust-border bg-rust-panel/50 px-4 py-16 sm:px-6">
       <div className="mx-auto max-w-6xl">
-        <h2 className="text-center text-2xl font-bold text-zinc-100">What admins are saying</h2>
+        <h2 className="text-center text-2xl font-bold text-zinc-100">What the community is saying</h2>
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <blockquote
@@ -245,17 +258,17 @@ function CTASection() {
     <section className="border-t border-rust-border px-4 py-16 sm:px-6 sm:py-24">
       <div className="mx-auto max-w-2xl text-center">
         <h2 className="text-2xl font-bold text-zinc-100 sm:text-3xl">
-          Join the beta. Get early access.
+          Grow your server, your stream, and your viewers
         </h2>
         <p className="mt-3 text-zinc-400">
-          Be the first to try RustMaxx. No credit card required.
+          Join RustMaxx — whether you run the box, go live, or show up as a fan.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-4">
           <Link
             href="/register"
             className="rounded-lg bg-rust-cyan px-6 py-3 font-medium text-rust-panel shadow-rust-glow hover:opacity-90 hover:shadow-rust-glow-lg"
           >
-            Get early access
+            Get started
           </Link>
           <Link
             href="/contact"
@@ -274,7 +287,7 @@ export default function HomePage() {
     <MarketingLayout>
       <HeroSection />
       <TrustStrip />
-      <PillarsSection />
+      <AudiencesSection />
       <IntegrationsRow />
       <TestimonialsSection />
       <CTASection />
