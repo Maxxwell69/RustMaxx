@@ -1,13 +1,18 @@
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { Footer } from "./Footer";
 
+/**
+ * Sitewide marketing shell: ambient gradient, subtle grid, header + main + footer.
+ * Polished marketing pages (Crowd Control–style depth) without requiring image assets.
+ */
 export function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-screen bg-[#0a0b0c] text-zinc-100">
-      <div className="absolute inset-0 bg-grid-subtle opacity-50" aria-hidden />
-      <div className="relative">
+    <div className="marketing-shell">
+      <div className="marketing-ambient" aria-hidden />
+      <div className="marketing-grid-bg" aria-hidden />
+      <div className="relative z-10 flex min-h-screen flex-col">
         <SiteHeader />
-        <main>{children}</main>
+        <main className="flex-1">{children}</main>
         <Footer />
       </div>
     </div>

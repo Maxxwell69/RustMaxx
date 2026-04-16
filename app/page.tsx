@@ -18,12 +18,12 @@ export const metadata: Metadata = {
 
 function HeroSection() {
   return (
-    <section className="border-b border-rust-border bg-rust-panel/50 px-4 py-16 sm:px-6 sm:py-24">
-      <div className="mx-auto max-w-6xl">
-        <h1 className="text-center text-3xl font-bold tracking-tight text-zinc-100 sm:text-4xl md:text-5xl">
+    <section className="marketing-section-spotlight">
+      <div className="marketing-container">
+        <h1 className="marketing-h1 text-center">
           Built for server admins, streamers, and fans
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-center text-lg text-zinc-400">
+        <p className="marketing-lead mx-auto mt-5 max-w-2xl text-center">
           Admins invite streamers. Streamers invite viewers. RustMaxx connects the chain — so your server, your channel,
           and your community can grow together.
         </p>
@@ -34,7 +34,7 @@ function HeroSection() {
           <TerminalCard title="rcon — live">
             <LiveConsole />
           </TerminalCard>
-          <div className="rounded-lg border border-rust-border bg-rust-surface overflow-hidden">
+          <div className="overflow-hidden rounded-xl border border-rust-border bg-rust-surface/90 shadow-lg shadow-black/20">
             <HeroScreenshotPlaceholder />
           </div>
         </div>
@@ -48,21 +48,21 @@ function AudienceTabs() {
     <div className="flex flex-wrap justify-center gap-2">
       <Link
         href="/#server-admins"
-        className="rounded-lg border border-rust-border bg-rust-surface px-4 py-3 text-left transition-colors hover:border-rust-cyan"
+        className="rounded-xl border border-rust-border bg-rust-surface/90 px-4 py-3 text-left shadow-sm transition-all hover:border-rust-cyan/50 hover:shadow-rust-glow-subtle"
       >
         <span className="block font-medium text-zinc-200">Server admins</span>
         <span className="block text-xs text-zinc-500">Invite streamers · RCON &amp; control</span>
       </Link>
       <Link
         href="/#streamers"
-        className="rounded-lg border border-rust-border bg-rust-surface px-4 py-3 text-left transition-colors hover:border-rust-cyan"
+        className="rounded-xl border border-rust-border bg-rust-surface/90 px-4 py-3 text-left shadow-sm transition-all hover:border-rust-cyan/50 hover:shadow-rust-glow-subtle"
       >
         <span className="block font-medium text-zinc-200">Streamers</span>
         <span className="block text-xs text-zinc-500">Invite viewers · TikFinity &amp; hooks</span>
       </Link>
       <Link
         href="/#fans"
-        className="rounded-lg border border-rust-border bg-rust-surface px-4 py-3 text-left transition-colors hover:border-rust-cyan"
+        className="rounded-xl border border-rust-border bg-rust-surface/90 px-4 py-3 text-left shadow-sm transition-all hover:border-rust-cyan/50 hover:shadow-rust-glow-subtle"
       >
         <span className="block font-medium text-zinc-200">Fans</span>
         <span className="block text-xs text-zinc-500">Follow streamers · superfan access</span>
@@ -92,8 +92,8 @@ function HeroScreenshotPlaceholder() {
 
 function TrustStrip() {
   return (
-    <section className="border-b border-rust-border bg-rust-surface/50 px-4 py-8 sm:px-6">
-      <div className="mx-auto max-w-6xl">
+    <section className="border-b border-rust-border bg-rust-panel/30 py-8 sm:py-10">
+      <div className="marketing-container">
         <p className="text-center text-sm text-zinc-400">
           Works with <strong className="text-zinc-300">Oxide / uMod</strong> and common hosts. No
           inbound ports required—connect outbound via WebRCON. Use at your own discretion; we do not
@@ -152,9 +152,9 @@ function AudiencesSection() {
   ];
 
   return (
-    <section className="px-4 py-16 sm:px-6 sm:py-24" id="audiences">
-      <div className="mx-auto max-w-6xl">
-        <h2 className="text-center text-2xl font-bold text-zinc-100 sm:text-3xl">
+    <section className="marketing-section-muted" id="audiences">
+      <div className="marketing-container">
+        <h2 className="text-center text-2xl font-bold text-zinc-100 sm:text-3xl md:text-4xl">
           Three audiences. One loop that helps everyone grow.
         </h2>
         <p className="mx-auto mt-2 max-w-2xl text-center text-zinc-400">
@@ -166,7 +166,7 @@ function AudiencesSection() {
             <div
               key={p.id}
               id={p.id}
-              className="rounded-lg border border-rust-border bg-rust-surface p-6"
+              className="rounded-xl border border-rust-border bg-rust-surface/90 p-6 shadow-lg shadow-black/15"
             >
               <h3 className="font-semibold text-zinc-100">{p.title}</h3>
               <p className="mt-1 text-sm text-zinc-400">{p.tagline}</p>
@@ -198,8 +198,8 @@ function AudiencesSection() {
 function IntegrationsRow() {
   const items = ["Discord", "Oxide / uMod", "Carbon", "WebRCON"];
   return (
-    <section className="border-t border-rust-border px-4 py-12 sm:px-6">
-      <div className="mx-auto max-w-6xl">
+    <section className="border-b border-rust-border py-12 sm:py-14">
+      <div className="marketing-container">
         <p className="text-center text-xs uppercase tracking-wider text-zinc-500">
           Integrations
         </p>
@@ -220,14 +220,14 @@ function IntegrationsRow() {
 
 function TestimonialsSection() {
   return (
-    <section className="border-t border-rust-border bg-rust-panel/50 px-4 py-16 sm:px-6">
-      <div className="mx-auto max-w-6xl">
+    <section className="marketing-section-muted">
+      <div className="marketing-container">
         <h2 className="text-center text-2xl font-bold text-zinc-100">What the community is saying</h2>
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <blockquote
               key={i}
-              className="rounded-lg border border-rust-border bg-rust-surface p-5 text-sm text-zinc-400"
+              className="rounded-xl border border-rust-border bg-rust-surface/80 p-5 text-sm text-zinc-400 shadow-sm"
             >
               <p>Placeholder testimonial {i}. Replace with real quotes when available.</p>
               <footer className="mt-3 text-xs text-zinc-500">— Placeholder</footer>
@@ -255,27 +255,29 @@ function TestimonialsSection() {
 
 function CTASection() {
   return (
-    <section className="border-t border-rust-border px-4 py-16 sm:px-6 sm:py-24">
-      <div className="mx-auto max-w-2xl text-center">
-        <h2 className="text-2xl font-bold text-zinc-100 sm:text-3xl">
-          Grow your server, your stream, and your viewers
-        </h2>
-        <p className="mt-3 text-zinc-400">
-          Join RustMaxx — whether you run the box, go live, or show up as a fan.
-        </p>
-        <div className="mt-8 flex flex-wrap justify-center gap-4">
-          <Link
-            href="/register"
-            className="rounded-lg bg-rust-cyan px-6 py-3 font-medium text-rust-panel shadow-rust-glow hover:opacity-90 hover:shadow-rust-glow-lg"
-          >
-            Get started
-          </Link>
-          <Link
-            href="/contact"
-            className="rounded-lg border border-rust-cyan/50 bg-rust-surface px-6 py-3 font-medium text-rust-cyan hover:border-rust-cyan hover:shadow-rust-glow-subtle"
-          >
-            Contact us
-          </Link>
+    <section className="marketing-section border-t-0">
+      <div className="marketing-container">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-2xl font-bold text-zinc-100 sm:text-3xl">
+            Grow your server, your stream, and your viewers
+          </h2>
+          <p className="mt-3 text-zinc-400">
+            Join RustMaxx — whether you run the box, go live, or show up as a fan.
+          </p>
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
+            <Link
+              href="/register"
+              className="rounded-xl bg-rust-cyan px-6 py-3 font-semibold text-rust-panel shadow-rust-glow hover:opacity-90 hover:shadow-rust-glow-lg"
+            >
+              Get started
+            </Link>
+            <Link
+              href="/contact"
+              className="rounded-xl border border-rust-cyan/50 bg-rust-surface px-6 py-3 font-medium text-rust-cyan hover:border-rust-cyan hover:shadow-rust-glow-subtle"
+            >
+              Contact us
+            </Link>
+          </div>
         </div>
       </div>
     </section>

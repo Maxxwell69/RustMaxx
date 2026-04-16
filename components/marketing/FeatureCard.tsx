@@ -16,7 +16,7 @@ export function FeatureCard({
   available = true,
 }: FeatureCardProps) {
   return (
-    <div className="rounded-lg border border-rust-border bg-rust-surface p-5 transition-colors hover:border-rust-mute">
+    <div className="rounded-xl border border-rust-border bg-rust-surface/90 p-5 shadow-sm transition-all hover:border-rust-cyan/25 hover:shadow-rust-glow-subtle">
       <div className="flex items-start justify-between gap-2">
         <div className="flex gap-3">
           {icon && (

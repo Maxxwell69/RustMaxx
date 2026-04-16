@@ -118,15 +118,18 @@ export const metadata = {
 export default function FeaturesPage() {
   return (
     <MarketingLayout>
-      <div className="relative px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="text-3xl font-bold text-zinc-100">Features</h1>
-          <p className="mt-2 text-zinc-400">
+      <div className="marketing-section-spotlight border-b-0">
+        <div className="marketing-container-narrow">
+          <h1 className="marketing-h1">Features</h1>
+          <p className="marketing-lead mt-3 max-w-2xl">
             What you get with RustMaxx. We clearly mark what&apos;s available now vs. on the roadmap.
           </p>
         </div>
+      </div>
 
-        <section className="mx-auto mt-14 max-w-4xl" id="admin">
+      <div className="marketing-section border-t-0 pt-0">
+        <div className="marketing-container-narrow">
+        <section className="mt-0" id="admin">
           <h2 className="text-xl font-semibold text-zinc-100">Admin & Server Tools</h2>
           <p className="mt-1 text-sm text-zinc-400">
             Run your server from one place. Roles, audit trail, and automation.
@@ -144,7 +147,7 @@ export default function FeaturesPage() {
           </div>
         </section>
 
-        <section className="mx-auto mt-16 max-w-4xl" id="stream">
+        <section className="mt-16" id="stream">
           <h2 className="text-xl font-semibold text-zinc-100">Streamer–Viewer Interaction</h2>
           <p className="mt-1 text-sm text-zinc-400">
             Twitch EventSub and TikTok Live via TikFinity webhooks. Kick planned. Rewards, cooldowns, anti-abuse.
@@ -162,7 +165,7 @@ export default function FeaturesPage() {
           </div>
         </section>
 
-        <section className="mx-auto mt-16 max-w-4xl" id="map">
+        <section className="mt-16 pb-4" id="map">
           <h2 className="text-xl font-semibold text-zinc-100">Map Monitor / Live Intel</h2>
           <p className="mt-1 text-sm text-zinc-400">
             Live map requires an optional plugin. Heatmaps, events, and raid awareness.
@@ -179,6 +182,7 @@ export default function FeaturesPage() {
             ))}
           </div>
         </section>
+        </div>
       </div>
     </MarketingLayout>
   );
