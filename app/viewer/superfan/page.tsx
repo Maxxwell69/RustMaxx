@@ -96,7 +96,8 @@ export default function ViewerSuperfanPage() {
           <Link href="/login" className="text-rust-cyan hover:underline">
             Log in
           </Link>{" "}
-          to apply. Staff reviews your application once; then you can request access from individual streamers.
+          to apply. Fans who sign up as viewers are approved automatically; then you can request access from individual
+          streamers (each streamer still approves you).
         </p>
       </div>
     );
@@ -108,20 +109,23 @@ export default function ViewerSuperfanPage() {
     <div className="mx-auto max-w-2xl px-4 py-12">
       <h1 className="text-2xl font-semibold text-zinc-100">Viewer superfans</h1>
       <p className="mt-2 text-sm text-zinc-400">
-        Step 1: apply here so we know you are a real viewer. Step 2: open a streamer in the{" "}
+        If you registered as a fan, you are already approved here. Otherwise submit once below. Then open a streamer in
+        the{" "}
         <Link href="/streamers" className="text-rust-cyan hover:underline">
           directory
         </Link>{" "}
-        and request access. Step 3: when the streamer approves, you get an interaction page for that channel.
+        and request access. When that streamer approves, you get an interaction page for that channel.
       </p>
 
       <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
-        <h2 className="text-sm font-medium text-zinc-200">Site application</h2>
+        <h2 className="text-sm font-medium text-zinc-200">Site access</h2>
         {status === "approved" ? (
-          <p className="mt-2 text-sm text-emerald-400">You are approved. You can request streamers from their profiles.</p>
+          <p className="mt-2 text-sm text-emerald-400">
+            You can request streamers from their profiles. Each streamer approves you separately for their channel.
+          </p>
         ) : status === "pending" ? (
           <p className="mt-2 text-sm text-zinc-400">
-            Pending review. You will be able to request streamers after approval.
+            Pending staff review. You will be able to request streamers after approval.
           </p>
         ) : status === "rejected" ? (
           <p className="mt-2 text-sm text-amber-200/90">Not approved. You can submit a new message below.</p>

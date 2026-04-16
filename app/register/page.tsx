@@ -158,7 +158,8 @@ function RegisterForm() {
                 <span>
                   <span className="font-medium text-zinc-200">Fan / viewer</span>
                   <span className="mt-0.5 block text-xs text-zinc-500">
-                    Superfan tools — connect with streamers you follow and interact when they approve you.
+                    Superfan tools — you are approved on the site right away; request each streamer and they approve you
+                    per channel.
                   </span>
                 </span>
               </label>

@@ -79,12 +79,12 @@ export function StreamerSuperfanCta(props: {
     <div className="mt-8 border-t border-zinc-800 pt-6">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Superfans</h2>
       <p className="mt-2 text-sm text-zinc-400">
-        Approved viewers can send this streamer interactive actions from a dedicated page (coming soon). Request access
-        here after staff approves your{" "}
+        Approved viewers can send this streamer interactive actions from a dedicated page (coming soon). Fans who
+        registered as viewers are approved on the site automatically; everyone else completes the{" "}
         <Link href="/viewer/superfan" className="text-rust-cyan hover:underline">
-          viewer superfan application
-        </Link>
-        .
+          viewer superfan
+        </Link>{" "}
+        step first. Then request access here; this streamer still approves you for their channel.
       </p>
 
       {loggedIn === false && (

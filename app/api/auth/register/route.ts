@@ -9,6 +9,7 @@ import {
 } from "@/lib/users";
 import type { UserRole } from "@/lib/permissions";
 import { ghlSyncSignupContact, isGhlConfigured } from "@/lib/ghl";
+import { ensureApprovedSiteApplicationForFanSignup } from "@/lib/superfan";
 
 // Simple email regex for validation
 function isValidEmail(s: string): boolean {
@@ -78,6 +79,11 @@ export async function POST(request: NextRequest) {
     streamer: interestedStreamer,
     fan: interestedFan,
   });
+  if (interestedFan) {
+    await ensureApprovedSiteApplicationForFanSignup(user.id).catch((e) =>
+      console.error("[auth/register] fan site auto-approve failed:", e)
+    );
+  }
   await audit(user.id, "register", { email: user.email }).catch(() => {});
 
   if (isGhlConfigured()) {

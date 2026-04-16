@@ -35,6 +35,19 @@ export async function userIsApprovedStreamer(streamerUserId: string): Promise<bo
   return rows.length > 0;
 }
 
+/**
+ * Fans who register with "Fan / viewer" get site-wide approval immediately so they can request
+ * access from individual streamers without a staff review. Streamers still approve per channel.
+ */
+export async function ensureApprovedSiteApplicationForFanSignup(userId: string): Promise<void> {
+  await query(
+    `INSERT INTO viewer_superfan_site_applications (user_id, message, status, reviewed_at, updated_at)
+     VALUES ($1::uuid, NULL, 'approved', now(), now())
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId]
+  );
+}
+
 export async function getViewerSiteApplication(
   userId: string
 ): Promise<ViewerSuperfanSiteRow | null> {
@@ -97,7 +110,8 @@ export async function submitStreamerSuperfanRequest(
   if (!site || site.status !== "approved") {
     return {
       ok: false,
-      error: "Complete the site superfan application and wait for staff approval first.",
+      error:
+        "Complete the site superfan step first (apply from Viewer superfans if you have not yet). Fans who signed up as viewers are already approved at registration.",
     };
   }
 
