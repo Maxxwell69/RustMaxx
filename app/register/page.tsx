@@ -77,10 +77,10 @@ function RegisterForm() {
       <div className="w-full max-w-[33.6rem] rounded-xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-xl">
         <div className="mb-6 flex justify-center">
           <Logo
-            className="h-[10.8rem] w-auto"
-            width={720}
-            height={144}
-            fallbackClassName="text-3xl font-bold text-rust-cyan"
+            className="h-[16.2rem] w-auto"
+            width={1080}
+            height={216}
+            fallbackClassName="text-5xl font-bold text-rust-cyan"
           />
         </div>
         <p className="mb-6 text-sm text-zinc-400">
