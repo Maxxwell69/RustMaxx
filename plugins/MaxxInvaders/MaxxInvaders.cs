@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.40")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.41")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -3768,7 +3768,7 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// True while the main INVADERS list should hide (overlaps inventory / loot UIs). Crafting stations (workbench, mixing, etc.)
-        /// keep the list visible; player bag (Tab) hides it.
+        /// keep the list visible; player bag / Tab inventory hides it when the server exposes main/wear/belt in <see cref="PlayerLoot.containers"/>.
         /// </summary>
         private static bool ShouldHideMainInvadersHudList(BasePlayer player)
         {
@@ -3777,14 +3777,54 @@ namespace Oxide.Plugins
                 var loot = player?.inventory?.loot;
                 if (loot == null) return false;
                 var src = loot.entitySource;
-                if (src == null)
-                    return loot.containers != null && loot.containers.Count > 0;
-                return !IsCraftingStationLootEntity(src);
+
+                // Crafting UI attached to a station — keep INVADERS visible (user request).
+                if (src != null && IsCraftingStationLootEntity(src))
+                    return false;
+
+                // Tab / inventory: loot session includes the player's own containers (most reliable on live builds).
+                if (LootSessionIncludesPlayerWearMainBelt(loot, player))
+                    return true;
+
+                // Some builds attach the local player as loot source for the inventory overlay.
+                if (src is BasePlayer pSrc && pSrc.userID == player.userID)
+                    return true;
+
+                // Any other world loot (box, corpse, body, etc.)
+                if (src != null)
+                    return true;
+
+                // Fallback: generic loot panels with attached containers
+                return loot.containers != null && loot.containers.Count > 0;
             }
             catch
             {
                 return false;
             }
+        }
+
+        /// <summary>Returns true when the active loot session is showing the streamer's own backpack containers.</summary>
+        private static bool LootSessionIncludesPlayerWearMainBelt(PlayerLoot loot, BasePlayer player)
+        {
+            if (loot?.containers == null || player?.inventory == null) return false;
+            try
+            {
+                var main = player.inventory.containerMain;
+                var wear = player.inventory.containerWear;
+                var belt = player.inventory.containerBelt;
+                foreach (var c in loot.containers)
+                {
+                    if (c == null) continue;
+                    if (c == main || c == wear || c == belt)
+                        return true;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return false;
         }
 
         private static bool IsCraftingStationLootEntity(BaseEntity ent)
