@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit";
 import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
 import { findUserById } from "@/lib/users";
 import type { ServerRow } from "@/lib/db";
+import { normalizeHostedLogoUrlForStorage } from "@/lib/upload-files";
 
 type ServerWithRole = ServerRow & { myRole?: "owner" | "admin" | "moderator" };
 
@@ -96,7 +97,9 @@ export async function POST(request: NextRequest) {
   const gamePort = typeof body.game_port === "number" ? body.game_port : body.game_port != null ? Number(body.game_port) : null;
   const gamePortNum = gamePort != null && Number.isInteger(gamePort) && gamePort >= 1 && gamePort <= 65535 ? gamePort : null;
   const location = typeof body.location === "string" ? body.location.trim() || null : null;
-  const logoUrl = typeof body.logo_url === "string" ? body.logo_url.trim() || null : null;
+  const logoUrlRaw = typeof body.logo_url === "string" ? body.logo_url.trim() || null : null;
+  const logoUrl =
+    logoUrlRaw == null ? null : normalizeHostedLogoUrlForStorage(logoUrlRaw);
 
   try {
     const { rows } = await query<ServerRow>(

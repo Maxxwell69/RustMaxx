@@ -19,6 +19,7 @@ import {
   coerceServerBillingTier,
   serverTierAllowsStreamerInteraction,
 } from "@/lib/billing-tiers";
+import { normalizeHostedLogoUrlForStorage } from "@/lib/upload-files";
 
 export async function GET(
   request: NextRequest,
@@ -122,7 +123,9 @@ export async function PATCH(
   }
   if (body.logo_url !== undefined) {
     updates.push(`logo_url = $${idx++}`);
-    values.push(typeof body.logo_url === "string" ? body.logo_url.trim() || null : null);
+    const raw =
+      typeof body.logo_url === "string" ? body.logo_url.trim() || null : null;
+    values.push(raw == null ? null : normalizeHostedLogoUrlForStorage(raw));
   }
   if (body.map_preview_url !== undefined) {
     updates.push(`map_preview_url = $${idx++}`);

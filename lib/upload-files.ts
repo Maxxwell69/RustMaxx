@@ -39,3 +39,26 @@ export function isOurHostedUploadPublicPath(trimmed: string): boolean {
   }
   return false;
 }
+
+/**
+ * Store RustMaxx-hosted logos as same-origin paths (`/api/uploads/...`) so public pages always
+ * resolve on the current domain (avoids broken images when DB has `https://old-host/...` from copy-paste).
+ */
+export function normalizeHostedLogoUrlForStorage(raw: string | null | undefined): string | null {
+  const t = (raw ?? "").trim();
+  if (!t) return null;
+  if (t.startsWith("/")) return t;
+  try {
+    const u = new URL(t);
+    const path = u.pathname + (u.search || "");
+    if (isOurHostedUploadPublicPath(path)) return path;
+    return t;
+  } catch {
+    return t;
+  }
+}
+
+/** For `<img src>`: prefer relative path for our uploads so the browser hits the current origin. */
+export function logoUrlForImgSrc(raw: string | null | undefined): string | null {
+  return normalizeHostedLogoUrlForStorage(raw);
+}

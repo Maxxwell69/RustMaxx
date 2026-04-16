@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { normalizeHostedLogoUrlForStorage } from "@/lib/upload-files";
 
 function revokeBlobUrl(ref: React.MutableRefObject<string | null>) {
   if (ref.current) {
@@ -60,7 +61,7 @@ export function LogoUpload({
       if (data.url) {
         revokeBlobUrl(blobUrlRef);
         setLocalPickPreview(null);
-        onChange(data.url);
+        onChange(normalizeHostedLogoUrlForStorage(data.url) ?? data.url);
       }
     } catch {
       setError("Network error");

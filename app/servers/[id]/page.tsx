@@ -420,6 +420,16 @@ export default function ServerDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setServer((prev) => (prev ? { ...prev, ...data } : null));
+        setListingForm((f) => ({
+          ...f,
+          listed: Boolean(data.listed),
+          listing_name: data.listing_name ?? "",
+          listing_description: data.listing_description ?? "",
+          game_host: data.game_host ?? "",
+          game_port: data.game_port != null ? String(data.game_port) : "",
+          location: data.location ?? "",
+          logo_url: data.logo_url ?? "",
+        }));
       }
     } finally {
       setListingSaving(false);

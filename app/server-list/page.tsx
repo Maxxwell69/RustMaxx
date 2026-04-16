@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
+import { ServerLogo } from "@/components/marketing/ServerLogo";
 
 type ListedServer = {
   id: string;
@@ -61,7 +62,6 @@ export default function ServerListPage() {
                     ? `${s.game_host}:${s.game_port}`
                     : null;
                 const location = s.location?.trim() || null;
-                const logoUrl = s.logo_url?.trim() || null;
                 return (
                   <li key={s.id}>
                     <Link
@@ -69,20 +69,11 @@ export default function ServerListPage() {
                       className="block rounded-lg border border-rust-border bg-rust-surface p-5 transition-colors hover:border-rust-cyan/40 hover:bg-rust-surface/90"
                     >
                     <div className="flex flex-wrap items-start gap-4">
-                      {logoUrl && (
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-rust-border bg-rust-panel">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={logoUrl}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
-                        </div>
-                      )}
+                      <ServerLogo
+                        url={s.logo_url}
+                        alt=""
+                        frameClassName="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-rust-border bg-rust-panel"
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="font-semibold text-zinc-100">{displayName}</h2>

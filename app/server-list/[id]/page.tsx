@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
+import { ServerLogo } from "@/components/marketing/ServerLogo";
 
 type ServerPublic = {
   id: string;
@@ -119,20 +120,7 @@ export default function PublicServerDetailPage() {
             ← Server list
           </Link>
           <div className="mt-6 flex flex-wrap items-start gap-4">
-            {server.logo_url?.trim() ? (
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-rust-border bg-rust-panel">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={server.logo_url.trim()}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-              </div>
-            ) : null}
+            <ServerLogo url={server.logo_url} alt="" />
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-bold text-zinc-100">{displayName}</h1>
               {server.location?.trim() ? (
