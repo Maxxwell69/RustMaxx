@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.43")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.44")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1885,12 +1885,46 @@ namespace Oxide.Plugins
         private void OnPlayerCommand(BasePlayer player, string command, string[] args)
         {
             if (player == null || !CanShowInvadersStreamerUi(player) || string.IsNullOrWhiteSpace(command)) return;
-            if (!command.Equals("inventory.toggle", StringComparison.OrdinalIgnoreCase)) return;
+            if (!TryHandleInventoryUiCommand(player, command)) return;
+        }
+
+        private void OnServerCommand(ConsoleSystem.Arg arg)
+        {
+            try
+            {
+                var player = arg?.Player();
+                var cmd = arg?.cmd?.FullName;
+                if (player == null || !CanShowInvadersStreamerUi(player) || string.IsNullOrWhiteSpace(cmd)) return;
+                TryHandleInventoryUiCommand(player, cmd);
+            }
+            catch
+            {
+                // ignore command parse issues; this hook runs for every command
+            }
+        }
+
+        private bool TryHandleInventoryUiCommand(BasePlayer player, string command)
+        {
+            if (player == null || string.IsNullOrWhiteSpace(command)) return false;
+            var cmd = command.Trim().ToLowerInvariant();
+            if (!cmd.Contains("inventory.toggle") &&
+                !cmd.Contains("inventory.endloot") &&
+                !cmd.Contains("inventory.close"))
+                return false;
+
             var uid = player.userID;
-            if (_invTabInventoryOpenByUser.TryGetValue(uid, out var open))
-                _invTabInventoryOpenByUser[uid] = !open;
-            else
-                _invTabInventoryOpenByUser[uid] = true;
+            if (cmd.Contains("inventory.toggle"))
+            {
+                if (_invTabInventoryOpenByUser.TryGetValue(uid, out var open))
+                    _invTabInventoryOpenByUser[uid] = !open;
+                else
+                    _invTabInventoryOpenByUser[uid] = true;
+                return true;
+            }
+
+            // Explicit close/end commands de-sync less than pure toggle.
+            _invTabInventoryOpenByUser[uid] = false;
+            return true;
         }
 
         private static ulong ResolveBridgeAnchorSteam(InvaderRuntime r, BasePlayer issuer)
