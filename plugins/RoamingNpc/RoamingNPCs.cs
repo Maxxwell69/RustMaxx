@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.47")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.48")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3507,14 +3507,15 @@ namespace Oxide.Plugins
             if (navOk) targetXZ = nav;
 
             var mc = pet.MoveController;
-            if (mc?.Navigator?.Agent != null && !mc.Navigator.Agent.isOnNavMesh)
-            {
-                if (mc.Navigator.GetNearestNavmeshPosition(pet.transform.position, out var snapBot, 12f))
+                if (mc?.Navigator?.Agent != null && !mc.Navigator.Agent.isOnNavMesh)
                 {
-                    pet.transform.position = snapBot;
-                    mc.Navigator.Warp(snapBot);
+                    if (mc.Navigator.GetNearestNavmeshPosition(pet.transform.position, out var snapBot, 12f))
+                    {
+                        pet.transform.position = snapBot;
+                        mc.Navigator.Warp(snapBot);
+                        UnityEngine.Physics.SyncTransforms();
+                    }
                 }
-            }
 
             // Full nav speed immediately — avoids slow ramp + per-frame Move spam from SetDestination(reset speed=0).
             if (mc?.Navigator?.Agent != null && mc.Navigator.Agent.isOnNavMesh && navOk)
@@ -6827,13 +6828,12 @@ namespace Oxide.Plugins
             }
             protected void UpdateCurrentPosition(float radius = 1f)
             {
-                if (IsValid() && !navigator.Agent.isOnNavMesh)
-                {
-                    if (navigator.GetNearestNavmeshPosition(owner.transform.position, out var position, radius))
-                    {
-                        owner.transform.position = position;
-                    }
-                }
+                if (!IsValid() || navigator?.Agent == null || navigator.Agent.isOnNavMesh) return;
+                if (!navigator.GetNearestNavmeshPosition(owner.transform.position, out var position, radius))
+                    return;
+                owner.transform.position = position;
+                navigator.Warp(position);
+                UnityEngine.Physics.SyncTransforms();
             }
 
             /// <summary>
@@ -6851,6 +6851,18 @@ namespace Oxide.Plugins
                         continue;
                     owner.transform.position = snapped;
                     navigator.Warp(snapped);
+                    UnityEngine.Physics.SyncTransforms();
+                    if (navigator.Agent.isOnNavMesh) return true;
+                }
+
+                // Facepunch nearest sometimes misses; Unity sample can still find walkable hull (RustChaos-style).
+                var p = owner.transform.position;
+                for (var r = 2f; r <= 48f; r += 2f)
+                {
+                    if (!NavMesh.SamplePosition(p, out var hit, r, NavMesh.AllAreas))
+                        continue;
+                    owner.transform.position = hit.position;
+                    navigator.Warp(hit.position);
                     UnityEngine.Physics.SyncTransforms();
                     if (navigator.Agent.isOnNavMesh) return true;
                 }

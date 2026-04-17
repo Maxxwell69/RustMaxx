@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.47")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.48")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -2267,7 +2267,10 @@ namespace Oxide.Plugins
                         arrivalMeters = ReturnRunArrivalMeters;
                     if (distToAnchor > arrivalMeters)
                     {
-                        TrySetDestinationBasePlayer(r.NpcPlayer, r.AnchorPosition);
+                        // RoamingNPCs bridge bots: MoveController / BaseNavigator owns movement. Raw NavMeshAgent.SetDestination here
+                        // fights navigator.SetDestination (Resume/SetDestination spam in server console).
+                        if (!r.IsRoamingNpc)
+                            TrySetDestinationBasePlayer(r.NpcPlayer, r.AnchorPosition);
                         continue;
                     }
 
@@ -2463,9 +2466,10 @@ namespace Oxide.Plugins
             try
             {
                 var agent = bp.GetComponent<NavMeshAgent>();
-                if (agent == null || !agent.isOnNavMesh) return;
+                if (agent == null || !agent.enabled || !agent.isOnNavMesh) return;
                 if (!ResolveNavMeshPosition(worldPos, out var dest))
                     return;
+                Physics.SyncTransforms();
                 agent.SetDestination(dest);
             }
             catch
