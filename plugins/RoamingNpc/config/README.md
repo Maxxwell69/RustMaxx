@@ -22,6 +22,7 @@ Each **top-level key** under `"Bots settings"` is a **template key** you can use
 | `austin_fighter`    | Fighter preset |
 | `bunny1`            | *(Optional)* Full bot preset with bunny clothes — only if you use **`npcmaxx.spawn bunny1`**. RustMaxx **`bunny1npc`** uses **`streamer_patrol`** + wear override instead (no `bunny1` key required). |
 | `gingy`, `egg`, `vamp` | **Optional** full weapon/tool presets (AK, LR-300, bow, etc.). TikFinity actions **`gingynpc`** / **`eggnpc`** / **`vampnpc`** use **`streamer_patrol`** + wear only (like **`bunny1npc`**) — **no merge required** to spawn. Merge **`gingy-egg-vamp.merge-fragment.json`** into the server’s **`Bots settings`** if you want those loadouts with **`maxxinvaders&template=gingy`** (etc.). |
+| `snipemb` | **Sniper preset:** L96 + 8x scope, blue jumpsuit, Clatter helmet, boots, gloves; long weapon range (~120 m) in reference `RoamingNPCs.json`. Merge **`snipemb.merge-fragment.json`** into the server config if your live file does not yet include this key. **Note:** `jumpsuit.suit.blue` is a **full-body** slot in Rust — boots/gloves may not equip on top; remove those wear rows if they conflict on your server. |
 
 Set **`CREW_RNPC_TEMPLATE_KEY`** (Railway / `.env`) to **one** of these strings — exactly as written, case-sensitive.
 
