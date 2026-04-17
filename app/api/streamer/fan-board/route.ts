@@ -8,6 +8,7 @@ import { query } from "@/lib/db";
 import { listStreamerWebhooksForUser } from "@/lib/streamer-webhooks";
 import {
   getEffectiveFanBoardActionKeysForStreamer,
+  getMergedFanBoardSettings,
   isActionAllowedOnFanBoards,
   listFanBoardSlotsForStreamer,
   parseFanBoardTier,
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
   const actions = catalog.filter((a) => effective.has(a.action));
 
   const slots = await listFanBoardSlotsForStreamer(session.userId);
+  const settings = await getMergedFanBoardSettings(session.userId);
   const servers: { id: string; name: string | null }[] = [];
   for (const h of hooks) {
     const { rows } = await query<{ id: string; name: string }>(
@@ -53,6 +55,7 @@ export async function GET(request: NextRequest) {
       sort_order: s.sort_order,
       server_id: s.server_id,
     })),
+    settings,
     actions,
     servers,
   });
@@ -70,7 +73,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Approved streamer required" }, { status: 403 });
   }
 
-  let body: { tier?: unknown; actions?: unknown; server_id?: unknown };
+  let body: { tier?: unknown; actions?: unknown; server_id?: unknown; cooldown_seconds?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -90,7 +93,18 @@ export async function PUT(request: NextRequest) {
         ? serverRaw.trim()
         : null;
 
-  const result = await replaceFanBoardTierSlots(session.userId, tier as FanBoardTier, actions, serverId);
+  let cooldownSeconds: number | undefined;
+  if (body.cooldown_seconds !== undefined && body.cooldown_seconds !== null) {
+    const n = Number(body.cooldown_seconds);
+    if (!Number.isFinite(n) || n < 0 || n > 3600) {
+      return NextResponse.json({ error: "cooldown_seconds must be between 0 and 3600" }, { status: 400 });
+    }
+    cooldownSeconds = Math.trunc(n);
+  }
+
+  const result = await replaceFanBoardTierSlots(session.userId, tier as FanBoardTier, actions, serverId, {
+    cooldownSeconds,
+  });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }

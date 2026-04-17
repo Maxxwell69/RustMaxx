@@ -5,6 +5,24 @@ import { getStreamerPolicyForServer } from "@/lib/streamer-action-policy";
 
 export type FanBoardTier = "fan" | "superfan" | "mod";
 
+/** Max action buttons per board tier (mod = no numeric cap — all allowed catalog actions). */
+export const FAN_BOARD_MAX_BUTTONS: Record<FanBoardTier, number | null> = {
+  fan: 5,
+  superfan: 10,
+  mod: null,
+};
+
+/** Defaults when no row in streamer_fan_board_settings. */
+export const FAN_BOARD_DEFAULT_COOLDOWN_SECONDS: Record<FanBoardTier, number> = {
+  fan: 30,
+  superfan: 30,
+  mod: 0,
+};
+
+export function maxButtonsForTier(tier: FanBoardTier): number | null {
+  return FAN_BOARD_MAX_BUTTONS[tier];
+}
+
 /** Actions that need extra webhook/Roaming setup — excluded from fan-board picker. */
 const FAN_BOARD_EXCLUDED = new Set<string>([
   "maxxinvaders",
@@ -63,11 +81,44 @@ export async function getEffectiveFanBoardActionKeysForStreamer(streamerUserId: 
   return allow;
 }
 
+export async function getMergedFanBoardSettings(streamerUserId: string): Promise<
+  Record<FanBoardTier, { cooldown_seconds: number; max_buttons: number | null }>
+> {
+  const { rows } = await query<{ board_tier: string; cooldown_seconds: number }>(
+    `SELECT board_tier::text, cooldown_seconds FROM streamer_fan_board_settings
+     WHERE streamer_user_id = $1::uuid`,
+    [streamerUserId]
+  );
+  const byTier = new Map(
+    rows.map((r) => [r.board_tier as FanBoardTier, typeof r.cooldown_seconds === "number" ? r.cooldown_seconds : 0])
+  );
+  const tiers: FanBoardTier[] = ["fan", "superfan", "mod"];
+  const out = {} as Record<FanBoardTier, { cooldown_seconds: number; max_buttons: number | null }>;
+  for (const t of tiers) {
+    const cd = byTier.get(t);
+    out[t] = {
+      cooldown_seconds:
+        cd !== undefined && Number.isFinite(cd) ? Math.min(3600, Math.max(0, cd)) : FAN_BOARD_DEFAULT_COOLDOWN_SECONDS[t],
+      max_buttons: maxButtonsForTier(t),
+    };
+  }
+  return out;
+}
+
+export async function getCooldownSecondsForTier(
+  streamerUserId: string,
+  tier: FanBoardTier
+): Promise<number> {
+  const merged = await getMergedFanBoardSettings(streamerUserId);
+  return merged[tier].cooldown_seconds;
+}
+
 export async function replaceFanBoardTierSlots(
   streamerUserId: string,
   tier: FanBoardTier,
   actionKeys: string[],
-  defaultServerId: string | null
+  defaultServerId: string | null,
+  opts?: { cooldownSeconds?: number }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const allowedCatalog = new Set(TIKTRIGGER_ACTIONS as readonly string[]);
   const effective = await getEffectiveFanBoardActionKeysForStreamer(streamerUserId);
@@ -87,6 +138,17 @@ export async function replaceFanBoardTierSlots(
     }
     seen.add(k);
     cleaned.push(k);
+  }
+
+  const maxB = maxButtonsForTier(tier);
+  if (maxB !== null && cleaned.length > maxB) {
+    return {
+      ok: false,
+      error:
+        tier === "fan"
+          ? "Fan board allows at most 5 action buttons."
+          : "Superfan board allows at most 10 action buttons.",
+    };
   }
 
   if (defaultServerId) {
@@ -110,6 +172,15 @@ export async function replaceFanBoardTierSlots(
         `INSERT INTO streamer_fan_board_slots (streamer_user_id, board_tier, action_key, sort_order, server_id)
          VALUES ($1::uuid, $2, $3, $4, $5::uuid)`,
         [streamerUserId, tier, action_key, order++, defaultServerId]
+      );
+    }
+    if (opts?.cooldownSeconds !== undefined) {
+      const cs = Math.min(3600, Math.max(0, Math.trunc(Number(opts.cooldownSeconds))));
+      await c.query(
+        `INSERT INTO streamer_fan_board_settings (streamer_user_id, board_tier, cooldown_seconds)
+         VALUES ($1::uuid, $2, $3)
+         ON CONFLICT (streamer_user_id, board_tier) DO UPDATE SET cooldown_seconds = EXCLUDED.cooldown_seconds`,
+        [streamerUserId, tier, cs]
       );
     }
     await c.query("COMMIT");

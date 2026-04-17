@@ -4,6 +4,7 @@ import { findUserById } from "@/lib/users";
 import { getAvailableActionsForAdmin } from "@/lib/tikfinity";
 import { getFanClubMembership, userIsApprovedStreamer } from "@/lib/superfan";
 import {
+  getMergedFanBoardSettings,
   listFanBoardSlotsForStreamer,
   viewerTierCanAccessBoard,
   type FanBoardTier,
@@ -60,12 +61,14 @@ export async function GET(request: NextRequest) {
     }
     const allSlots = await listFanBoardSlotsForStreamer(streamerId);
     const boards = buildBoardsForTiers(allSlots, () => true);
+    const tier_settings = await getMergedFanBoardSettings(streamerId);
     const user = await findUserById(session.userId);
     return NextResponse.json({
       preview: true,
       club_tier: null,
       display_name: user?.display_name ?? null,
       boards,
+      tier_settings,
     });
   }
 
@@ -77,6 +80,7 @@ export async function GET(request: NextRequest) {
   const viewerTier = membership.club_tier;
   const allSlots = await listFanBoardSlotsForStreamer(streamerId);
   const boards = buildBoardsForTiers(allSlots, (t) => viewerTierCanAccessBoard(viewerTier, t));
+  const tier_settings = await getMergedFanBoardSettings(streamerId);
 
   const user = await findUserById(session.userId);
   return NextResponse.json({
@@ -84,5 +88,6 @@ export async function GET(request: NextRequest) {
     club_tier: viewerTier,
     display_name: user?.display_name ?? null,
     boards,
+    tier_settings,
   });
 }

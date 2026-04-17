@@ -5,6 +5,13 @@ import Link from "next/link";
 
 type ClubTier = "fan" | "superfan" | "mod";
 
+/** Mirrors lib/streamer-fan-board (client-safe; avoid importing server db). */
+const MAX_FAN_BOARD_BUTTONS: Record<ClubTier, number | null> = {
+  fan: 5,
+  superfan: 10,
+  mod: null,
+};
+
 type Req = {
   id: string;
   viewer_user_id: string;
@@ -51,6 +58,12 @@ export default function StreamerSuperfanIncomingPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [memberBusy, setMemberBusy] = useState<string | null>(null);
 
+  const [cooldownDraft, setCooldownDraft] = useState<Record<ClubTier, number>>({
+    fan: 30,
+    superfan: 30,
+    mod: 0,
+  });
+
   function loadRequests() {
     fetch("/api/streamer/superfan/incoming")
       .then((r) => {
@@ -75,6 +88,15 @@ export default function StreamerSuperfanIncomingPage() {
         if (Array.isArray(d.actions)) setActions(d.actions);
         if (Array.isArray(d.servers)) setServers(d.servers);
         if (Array.isArray(d.slots)) setSlots(d.slots);
+        if (d.settings && typeof d.settings === "object") {
+          const s = d.settings as Record<string, { cooldown_seconds?: number }>;
+          setCooldownDraft((prev) => ({
+            fan: typeof s.fan?.cooldown_seconds === "number" ? s.fan.cooldown_seconds : prev.fan,
+            superfan:
+              typeof s.superfan?.cooldown_seconds === "number" ? s.superfan.cooldown_seconds : prev.superfan,
+            mod: typeof s.mod?.cooldown_seconds === "number" ? s.mod.cooldown_seconds : prev.mod,
+          }));
+        }
       })
       .catch(() => {});
   }
@@ -149,6 +171,7 @@ export default function StreamerSuperfanIncomingPage() {
           tier: boardEditTier,
           actions: [...selectedActions],
           server_id: boardServerId || null,
+          cooldown_seconds: cooldownDraft[boardEditTier],
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -166,7 +189,11 @@ export default function StreamerSuperfanIncomingPage() {
     setSelectedActions((prev) => {
       const n = new Set(prev);
       if (n.has(key)) n.delete(key);
-      else n.add(key);
+      else {
+        const maxB = MAX_FAN_BOARD_BUTTONS[boardEditTier];
+        if (maxB !== null && n.size >= maxB) return prev;
+        n.add(key);
+      }
       return n;
     });
   }
@@ -369,6 +396,28 @@ export default function StreamerSuperfanIncomingPage() {
               </button>
             ))}
           </div>
+          <p className="text-xs text-zinc-500">
+            Limits: <strong className="text-zinc-400">Fan</strong> up to 5 buttons ·{" "}
+            <strong className="text-zinc-400">Superfan</strong> up to 10 ·{" "}
+            <strong className="text-zinc-400">Mod</strong> all enabled actions.
+          </p>
+          <label className="block text-sm text-zinc-300">
+            Cooldown — minimum seconds between any two button presses on this board (same viewer)
+            <input
+              type="number"
+              min={0}
+              max={3600}
+              value={cooldownDraft[boardEditTier]}
+              onChange={(e) => {
+                const v = Math.min(3600, Math.max(0, parseInt(e.target.value, 10) || 0));
+                setCooldownDraft((prev) => ({ ...prev, [boardEditTier]: v }));
+              }}
+              className="mt-1 block w-full max-w-[12rem] rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+            />
+            <span className="mt-1 block text-xs text-zinc-500">
+              Defaults: Fan 30s, Superfan 30s, Mod 0 (no wait). Saved with this board.
+            </span>
+          </label>
           {servers.length > 0 && (
             <label className="block text-xs text-zinc-400">
               RCON target server for this board

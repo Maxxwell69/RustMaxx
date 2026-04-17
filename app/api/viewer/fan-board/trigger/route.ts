@@ -5,11 +5,13 @@ import { findUserById } from "@/lib/users";
 import { executeFanBoardRustChaos, type FanBoardTriggerBody } from "@/lib/fan-board-rcon";
 import { getFanClubMembership } from "@/lib/superfan";
 import {
+  getCooldownSecondsForTier,
   getSlotForStreamerAction,
   parseFanBoardTier,
   resolveRconServerIdForSlot,
   viewerTierCanAccessBoard,
 } from "@/lib/streamer-fan-board";
+import { getFanBoardCooldownRemaining, recordFanBoardTriggerSuccess } from "@/lib/fan-board-cooldown";
 import { TIKTRIGGER_ACTIONS, type TikTriggerAction } from "@/lib/tikfinity";
 
 export const runtime = "nodejs";
@@ -72,6 +74,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const cooldownSeconds = await getCooldownSecondsForTier(streamerId, boardTier);
+  const waitSec = await getFanBoardCooldownRemaining(session.userId, streamerId, boardTier, cooldownSeconds);
+  if (waitSec > 0) {
+    return NextResponse.json(
+      {
+        error: `Wait ${waitSec}s before another action on this board.`,
+        retry_after_seconds: waitSec,
+      },
+      { status: 429, headers: { "Retry-After": String(waitSec) } }
+    );
+  }
+
   const user = await findUserById(session.userId);
   const displayName = (user?.display_name ?? user?.email ?? "Fan").trim() || "Fan";
 
@@ -99,6 +113,8 @@ export async function POST(request: NextRequest) {
       { status: 502 }
     );
   }
+
+  await recordFanBoardTriggerSuccess(session.userId, streamerId, boardTier, cooldownSeconds);
 
   await audit(session.userId, "viewer.fan_board.trigger", {
     streamerId,

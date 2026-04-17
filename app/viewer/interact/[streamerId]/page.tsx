@@ -37,6 +37,9 @@ function ViewerInteractContent() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [modMembers, setModMembers] = useState<MemberRow[]>([]);
   const [modBusy, setModBusy] = useState<string | null>(null);
+  const [tierSettings, setTierSettings] = useState<
+    Record<string, { cooldown_seconds: number; max_buttons: number | null }> | null
+  >(null);
 
   const loadBoards = useCallback(() => {
     if (!streamerId) return;
@@ -48,6 +51,9 @@ function ViewerInteractContent() {
         setPreviewMode(data.preview === true);
         setClubTier(data.club_tier ?? null);
         setBoards(typeof data.boards === "object" && data.boards ? data.boards : {});
+        setTierSettings(
+          data.tier_settings && typeof data.tier_settings === "object" ? data.tier_settings : null
+        );
       })
       .catch(() => setErr("Could not load fan boards."));
   }, [streamerId, isPreview]);
@@ -79,6 +85,9 @@ function ViewerInteractContent() {
           setPreviewMode(true);
           setClubTier(null);
           setBoards(typeof data.boards === "object" && data.boards ? data.boards : {});
+          setTierSettings(
+            data.tier_settings && typeof data.tier_settings === "object" ? data.tier_settings : null
+          );
           setState("ok");
         })
         .catch(() => {
@@ -134,6 +143,10 @@ function ViewerInteractContent() {
         body: JSON.stringify({ streamer_id: streamerId, board_tier: boardTier, action_key: actionKey }),
       });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 429) {
+        setErr(typeof data.error === "string" ? data.error : "Please wait before another action on this board.");
+        return;
+      }
       if (!res.ok) {
         setErr(typeof data.error === "string" ? data.error : "Action failed");
         return;
@@ -258,6 +271,13 @@ function ViewerInteractContent() {
           return (
             <section key={tier} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
               <h2 className="text-sm font-semibold text-zinc-200">{title}</h2>
+              {tierSettings?.[tier] ? (
+                <p className="mt-1 text-xs text-zinc-500">
+                  {tierSettings[tier]!.cooldown_seconds <= 0
+                    ? "No cooldown between button presses."
+                    : `At least ${tierSettings[tier]!.cooldown_seconds}s between button presses on this board.`}
+                </p>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 {slots.map((s) => {
                   const key = `${tier}:${s.action_key}`;
