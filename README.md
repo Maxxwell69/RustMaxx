@@ -34,6 +34,7 @@ Rust server web admin panel (RustAdmin Core MVP). Connects to Rust game servers 
    - `DATABASE_URL` – Postgres connection string (e.g. `postgresql://user:pass@localhost:5432/rustmaxx`)
    - `ADMIN_PASSWORD` – password for admin login
    - `SESSION_SECRET` – at least 16 characters (used to sign session cookie)
+   - Optional: **`GHL_PRIVATE_INTEGRATION_KEY`** + **`GHL_LOCATION_ID`** for `/contact` → GoHighLevel; **`NEXT_PUBLIC_SUPPORT_EMAIL_*`** for mailto addresses (see `.env.example` and [docs/SUPPORT_EMAILS_AND_COMMS.md](docs/SUPPORT_EMAILS_AND_COMMS.md))
 
 3. **Database**
 
@@ -143,7 +144,7 @@ The app includes a public marketing site at the root and under `/features`, `/pr
 - **Pricing** – `app/pricing/page.tsx`: tier names, prices (placeholders), features, FAQ.
 - **Docs** – `app/docs/page.tsx`: getting started steps, env and plugin config examples, security model.
 - **About** – `app/about/page.tsx`: mission, who it’s for, disclaimer.
-- **Contact** – `app/contact/page.tsx`: form labels and the `MAILTO` link (replace with your support email).
+- **Contact** – `app/contact/page.tsx`: support form + audience-specific mailto (override with `NEXT_PUBLIC_SUPPORT_EMAIL_*`). Intake: `POST /api/contact` → GHL when configured — see **[docs/SUPPORT_EMAILS_AND_COMMS.md](docs/SUPPORT_EMAILS_AND_COMMS.md)**.
 
 Shared UI lives in `components/marketing/`: `Header`, `Footer`, `TerminalCard`, `FeatureCard`, `PillarTabs`, `RoadmapChip`, `MarketingLayout`, `LiveConsole`, and placeholders in `components/marketing/placeholders/` (e.g. `DashboardFrame`, `MapFrame`).
 
@@ -165,10 +166,16 @@ Shared UI lives in `components/marketing/`: `Header`, `Footer`, `TerminalCard`, 
 - `npm run migrate` – run DB migrations in `db/migrations/`
 - `npm run cleanup` – delete logs older than 7 days (run daily via cron or manually)
 
+## Support & CRM
+
+- **Runbook:** [docs/SUPPORT_EMAILS_AND_COMMS.md](docs/SUPPORT_EMAILS_AND_COMMS.md) — inbox aliases, SLAs, GHL tags, internal vs external comms.
+- **Env:** `GHL_*` for GoHighLevel; `NEXT_PUBLIC_SUPPORT_EMAIL_*` for addresses shown on `/contact`.
+
 ## API routes
 
 | Method | Path | Description |
 |--------|------|-------------|
+| POST | `/api/contact` | Public support form JSON → GHL contact + tags + note when GHL is configured |
 | POST | `/api/auth/login` | Login (body: `{ password }`), sets session cookie |
 | POST | `/api/auth/logout` | Clears session cookie |
 | GET | `/api/servers` | List servers |

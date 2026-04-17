@@ -83,8 +83,9 @@ type GhlContactCreateInput = {
 
 /**
  * Creates a contact in GHL and optionally adds a note.
+ * Exported for support intake and other CRM flows that share the same pattern.
  */
-async function ghlCreateContactWithOptionalNote(
+export async function ghlCreateContactWithOptionalNote(
   input: GhlContactCreateInput
 ): Promise<GhlSyncResult> {
   if (!isGhlConfigured()) {
