@@ -7,6 +7,11 @@ import { getAvailableActionsForAdmin } from "@/lib/tikfinity";
 import { query } from "@/lib/db";
 import { listStreamerWebhooksForUser } from "@/lib/streamer-webhooks";
 import {
+  formatFanBoardActivitySummary,
+  listFanBoardActivityForStreamer,
+  type FanBoardActivityRow,
+} from "@/lib/fan-board-activity";
+import {
   getEffectiveFanBoardActionKeysForStreamer,
   getMergedFanBoardSettings,
   isActionAllowedOnFanBoards,
@@ -37,6 +42,12 @@ export async function GET(request: NextRequest) {
 
   const slots = await listFanBoardSlotsForStreamer(session.userId);
   const settings = await getMergedFanBoardSettings(session.userId);
+  let activityRows: FanBoardActivityRow[] = [];
+  try {
+    activityRows = await listFanBoardActivityForStreamer(session.userId, 80);
+  } catch (e) {
+    console.error("[streamer/fan-board GET] activity list failed", e);
+  }
   const servers: { id: string; name: string | null }[] = [];
   for (const h of hooks) {
     const { rows } = await query<{ id: string; name: string }>(
@@ -58,6 +69,16 @@ export async function GET(request: NextRequest) {
     settings,
     actions,
     servers,
+    activity: activityRows.map((a) => ({
+      id: a.id,
+      viewer_user_id: a.viewer_user_id,
+      viewer_label: a.viewer_label,
+      board_tier: a.board_tier,
+      action_key: a.action_key,
+      action_label: a.action_label,
+      created_at: a.created_at.toISOString(),
+      summary: formatFanBoardActivitySummary(a),
+    })),
   });
 }
 

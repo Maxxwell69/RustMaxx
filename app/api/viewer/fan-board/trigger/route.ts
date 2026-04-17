@@ -12,7 +12,8 @@ import {
   viewerTierCanAccessBoard,
 } from "@/lib/streamer-fan-board";
 import { getFanBoardCooldownRemaining, recordFanBoardTriggerSuccess } from "@/lib/fan-board-cooldown";
-import { TIKTRIGGER_ACTIONS, type TikTriggerAction } from "@/lib/tikfinity";
+import { formatFanBoardActivitySummary, recordFanBoardActivity } from "@/lib/fan-board-activity";
+import { getAvailableActionsForAdmin, TIKTRIGGER_ACTIONS, type TikTriggerAction } from "@/lib/tikfinity";
 
 export const runtime = "nodejs";
 
@@ -116,10 +117,34 @@ export async function POST(request: NextRequest) {
 
   await recordFanBoardTriggerSuccess(session.userId, streamerId, boardTier, cooldownSeconds);
 
+  const actionLabel =
+    getAvailableActionsForAdmin().find((a) => a.action === (actionRaw as TikTriggerAction))?.label ?? null;
+
+  await recordFanBoardActivity({
+    streamerUserId: streamerId,
+    viewerUserId: session.userId,
+    viewerLabel: displayName,
+    boardTier,
+    actionKey: actionRaw,
+    actionLabel,
+  }).catch((err) => {
+    console.error("[viewer.fan_board.trigger] activity insert failed", err);
+  });
+
+  const activitySummary = formatFanBoardActivitySummary({
+    viewer_label: displayName,
+    board_tier: boardTier,
+    action_key: actionRaw,
+    action_label: actionLabel,
+  });
+
   await audit(session.userId, "viewer.fan_board.trigger", {
     streamerId,
     boardTier,
     action: actionRaw,
+    actionLabel,
+    viewerLabel: displayName,
+    summary: activitySummary,
     serverId,
   }).catch(() => {});
 

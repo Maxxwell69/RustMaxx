@@ -34,6 +34,12 @@ type MemberRow = {
   club_tier: ClubTier | null;
 };
 
+type BoardActivityRow = {
+  id: string;
+  summary: string;
+  created_at: string;
+};
+
 type Tab = "requests" | "boards" | "members";
 
 export default function StreamerSuperfanIncomingPage() {
@@ -54,6 +60,7 @@ export default function StreamerSuperfanIncomingPage() {
   const [selectedActions, setSelectedActions] = useState<Set<string>>(new Set());
   const [boardServerId, setBoardServerId] = useState<string>("");
   const [boardSaving, setBoardSaving] = useState(false);
+  const [boardActivity, setBoardActivity] = useState<BoardActivityRow[]>([]);
 
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [memberBusy, setMemberBusy] = useState<string | null>(null);
@@ -92,6 +99,17 @@ export default function StreamerSuperfanIncomingPage() {
         if (Array.isArray(d.actions)) setActions(d.actions);
         if (Array.isArray(d.servers)) setServers(d.servers);
         if (Array.isArray(d.slots)) setSlots(d.slots);
+        if (Array.isArray(d.activity)) {
+          const parsed: BoardActivityRow[] = d.activity.map((x: unknown) => {
+            const o = x as Record<string, unknown>;
+            return {
+              id: typeof o.id === "string" ? o.id : "",
+              summary: typeof o.summary === "string" ? o.summary : "",
+              created_at: typeof o.created_at === "string" ? o.created_at : "",
+            };
+          });
+          setBoardActivity(parsed.filter((row) => row.id));
+        } else setBoardActivity([]);
         if (d.settings && typeof d.settings === "object") {
           const s = d.settings as Record<string, { cooldown_seconds?: number }>;
           setCooldownDraft((prev) => ({
@@ -396,6 +414,29 @@ export default function StreamerSuperfanIncomingPage() {
             Only actions enabled on your webhook server(s) appear here. Fans see buttons for each board they can
             access (Fan → fan board only; Superfan → fan + superfan; Mod → all boards + mod tools).
           </p>
+
+          <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Recent board actions</h2>
+            <p className="mt-1 text-xs text-zinc-600">
+              Each line is a successful fan button press (RCON ran). Fan name is the display name or email we send to
+              the game server.
+            </p>
+            {boardActivity.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500">Nothing yet — when fans use the Fan, Superfan, or Mod boards, it shows here.</p>
+            ) : (
+              <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto text-sm text-zinc-300">
+                {boardActivity.map((a) => (
+                  <li key={a.id} className="border-b border-zinc-800/80 pb-2 last:border-0 last:pb-0">
+                    <span className="mr-2 text-xs tabular-nums text-zinc-500">
+                      {new Date(a.created_at).toLocaleString()}
+                    </span>
+                    {a.summary}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
           <div className="flex flex-wrap gap-2">
             {(["fan", "superfan", "mod"] as ClubTier[]).map((t) => (
               <button
