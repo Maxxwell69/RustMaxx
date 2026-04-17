@@ -44,6 +44,8 @@ It must match a **key** under **`"Bots settings"`** in your RoamingNPCs JSON on 
 | `john_looter` | Looter preset |
 | `alfred_hunter` | Hunter preset |
 | `austin_fighter` | Fighter preset |
+| `snipemb` | Sniper preset (L96 + long range) — must exist in server `RoamingNPCs.json` |
+| `streamer_patrol` | Common MaxxInvaders / bridge patrol template |
 
 Wrong key or disabled bot → `npcmaxx.spawn` fails on the server.
 

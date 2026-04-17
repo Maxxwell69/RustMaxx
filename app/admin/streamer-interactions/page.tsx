@@ -15,6 +15,8 @@ const ROAMING_TEMPLATE_KEYS = [
   "john_looter",
   "alfred_hunter",
   "austin_fighter",
+  "snipemb",
+  "streamer_patrol",
 ] as const;
 
 type ActionMeta = {
