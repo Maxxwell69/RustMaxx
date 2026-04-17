@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.43")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.44")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2401,6 +2401,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public Vector3 BridgePatrolLastAnchorPos;
             /// <summary>Whether <see cref="BridgePatrolLastAnchorPos"/> has been set for this bot.</summary>
             [JsonIgnore] public bool BridgePatrolAnchorPosValid;
+            /// <summary>Throttle forced repaths when the streamer moves (avoid NavMesh spam).</summary>
+            [JsonIgnore] public float BridgePatrolAnchorChaseNextAt;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -3456,12 +3458,15 @@ namespace Oxide.Plugins
                      (string.IsNullOrEmpty(taskLow) && setup.BridgePatrol.RadiusMeters <= 14f));
                 if (anchorChaseEscort)
                 {
-                    if (!pet.Data.BridgePatrolAnchorPosValid ||
-                        (anchorPos - pet.Data.BridgePatrolLastAnchorPos).sqrMagnitude > 6.25f)
+                    var now = UnityEngine.Time.realtimeSinceStartup;
+                    if (now >= pet.Data.BridgePatrolAnchorChaseNextAt &&
+                        (!pet.Data.BridgePatrolAnchorPosValid ||
+                         (anchorPos - pet.Data.BridgePatrolLastAnchorPos).sqrMagnitude > 6.25f))
                     {
                         pet.Data.BridgePatrolLastAnchorPos = anchorPos;
                         pet.Data.BridgePatrolAnchorPosValid = true;
                         pet.Data.BridgePatrolNextMoveAt = 0f;
+                        pet.Data.BridgePatrolAnchorChaseNextAt = now + 0.35f;
                     }
                 }
 
@@ -3498,11 +3503,26 @@ namespace Oxide.Plugins
             }
 
             targetXZ.y = anchorPos.y;
-            if (pet.MoveController.Navigator.GetNearestNavmeshPosition(targetXZ, out var nav, 3f))
-                targetXZ = nav;
+            var navOk = pet.MoveController.Navigator.GetNearestNavmeshPosition(targetXZ, out var nav, 8f);
+            if (navOk) targetXZ = nav;
 
-            pet.MoveController.SetDestination(targetXZ, _ => { }, false);
-            pet.Data.BridgePatrolNextMoveAt = UnityEngine.Time.realtimeSinceStartup + Random.Range(minI, maxI);
+            var mc = pet.MoveController;
+            if (mc?.Navigator?.Agent != null && !mc.Navigator.Agent.isOnNavMesh)
+            {
+                if (mc.Navigator.GetNearestNavmeshPosition(pet.transform.position, out var snapBot, 12f))
+                {
+                    pet.transform.position = snapBot;
+                    mc.Navigator.Warp(snapBot);
+                }
+            }
+
+            if (mc?.Navigator?.Agent != null && mc.Navigator.Agent.isOnNavMesh && navOk)
+                mc.SetDestination(targetXZ, _ => { }, false);
+
+            var interval = Random.Range(minI, maxI);
+            if (!navOk || mc?.Navigator?.Agent == null || !mc.Navigator.Agent.isOnNavMesh)
+                interval = Mathf.Min(interval, 0.5f);
+            pet.Data.BridgePatrolNextMoveAt = UnityEngine.Time.realtimeSinceStartup + interval;
         }
 
         /// <summary>MaxxInvaders: valid tool cupboard for this bot (same OwnerID as anchor).</summary>
@@ -6984,7 +7004,8 @@ namespace Oxide.Plugins
                 ResetTimerVelocity();
                 target = null;
                 modeMove = ModeMove.Idle;
-                navigator?.Stop();
+                if (navigator != null && navigator.Agent != null && navigator.Agent.isOnNavMesh)
+                    navigator.Stop();
                 finishCallback = null;
             }
             protected void ResetTimerVelocity()
@@ -6994,10 +7015,29 @@ namespace Oxide.Plugins
             }
             protected bool Move(Vector3 target)
             {
-                UpdateCurrentPosition();
-                if (navigator.GetNearestNavmeshPosition(target, out var position, 2f)) target = position;
+                if (navigator == null) return false;
+                UpdateCurrentPosition(2.5f);
 
-                // navigator.SetCurrentNavigationType(BaseNavigator.NavigationType.NavMesh);
+                var agent = navigator.Agent;
+                if (agent != null && !agent.isOnNavMesh)
+                {
+                    for (var radius = 4f; radius <= 16f; radius += 4f)
+                    {
+                        if (!navigator.GetNearestNavmeshPosition(owner.transform.position, out var snapped, radius))
+                            continue;
+                        owner.transform.position = snapped;
+                        navigator.Warp(snapped);
+                        break;
+                    }
+
+                    if (!agent.isOnNavMesh)
+                        return false;
+                }
+
+                if (!navigator.GetNearestNavmeshPosition(target, out var position, 8f))
+                    return false;
+                target = position;
+
                 return navigator.SetDestination(target, (BaseNavigator.NavigationSpeed)currentSpeed);
             }
 
