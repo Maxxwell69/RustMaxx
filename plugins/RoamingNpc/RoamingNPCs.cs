@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.42")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.43")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -1477,6 +1477,17 @@ namespace Oxide.Plugins
             public int GetSpeedWater() => Mathf.Clamp(speedWater - 1, 0, 3);
 
             public float GetAccuracyOfFire() => Mathf.Clamp(AccuracyOfFire, 1f, 50f);
+
+            /// <summary>
+            /// MaxxInvaders protect/follow escort: fastest NavMesh tier and snappy control ticks so bots keep up with sprint/horse.
+            /// </summary>
+            public void SetEscortMovementSpeedMax()
+            {
+                speed = 4;
+                speedWater = 4;
+                if (timerTickController > 0.05f) timerTickController = 0.05f;
+            }
+
             public float GetScaleDamageTo(BaseEntity target)
             {
                 if (target == null) return 0f;
@@ -2386,6 +2397,10 @@ namespace Oxide.Plugins
             [JsonIgnore] public string BridgeLastAppliedTask;
             /// <summary>Prevents stacking resume timers after streamer-defense retaliation ends.</summary>
             [JsonIgnore] public bool BridgeResumeAfterDefenseScheduled;
+            /// <summary>Tight escort: last sampled anchor position — when the streamer moves, we allow an immediate patrol repath.</summary>
+            [JsonIgnore] public Vector3 BridgePatrolLastAnchorPos;
+            /// <summary>Whether <see cref="BridgePatrolLastAnchorPos"/> has been set for this bot.</summary>
+            [JsonIgnore] public bool BridgePatrolAnchorPosValid;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -2879,7 +2894,7 @@ namespace Oxide.Plugins
                 bot.Value.Init();
             }
             if (_bridgePatrolTimer != null && !_bridgePatrolTimer.Destroyed) _bridgePatrolTimer.Destroy();
-            _bridgePatrolTimer = timer.Every(2.5f, BridgePatrolTick);
+            _bridgePatrolTimer = timer.Every(1f, BridgePatrolTick);
             if (_bridgeDepositApproachTimer != null && !_bridgeDepositApproachTimer.Destroyed)
                 _bridgeDepositApproachTimer.Destroy();
             _bridgeDepositApproachTimer = timer.Every(0.25f, BridgeDepositApproachTick);
@@ -3311,8 +3326,8 @@ namespace Oxide.Plugins
                 {
                     Enable = true,
                     RadiusMeters = 24f,
-                    MinMoveIntervalSeconds = 5f,
-                    MaxMoveIntervalSeconds = 11f,
+                    MinMoveIntervalSeconds = 0.35f,
+                    MaxMoveIntervalSeconds = 0.9f,
                 };
                 clone.BattleState ??= new SetupBattle();
                 clone.BattleState._protectBridgeAnchorPlayer = true;
@@ -3433,9 +3448,34 @@ namespace Oxide.Plugins
                 var anchor = BasePlayer.FindByID(pet.Data.BridgeProtectAnchorUserId);
                 if (anchor == null || !anchor.IsAlive()) return;
                 anchorPos = anchor.transform.position;
+
+                var taskLow = (pet.Data.BridgeLastAppliedTask ?? "").Trim().ToLowerInvariant();
+                // Protect / follow / guard = stay with streamer. Gather also uses patrol+protect but must not spam repath while looting.
+                var anchorChaseEscort = setup.BattleState != null && setup.BattleState._protectBridgeAnchorPlayer &&
+                    (taskLow == "protect" || taskLow == "follow" || taskLow == "guard" ||
+                     (string.IsNullOrEmpty(taskLow) && setup.BridgePatrol.RadiusMeters <= 14f));
+                if (anchorChaseEscort)
+                {
+                    if (!pet.Data.BridgePatrolAnchorPosValid ||
+                        (anchorPos - pet.Data.BridgePatrolLastAnchorPos).sqrMagnitude > 6.25f)
+                    {
+                        pet.Data.BridgePatrolLastAnchorPos = anchorPos;
+                        pet.Data.BridgePatrolAnchorPosValid = true;
+                        pet.Data.BridgePatrolNextMoveAt = 0f;
+                    }
+                }
+
                 radius = Mathf.Clamp(setup.BridgePatrol.RadiusMeters, 8f, 80f);
-                minI = Mathf.Max(2f, setup.BridgePatrol.MinMoveIntervalSeconds);
-                maxI = Mathf.Max(minI + 0.5f, setup.BridgePatrol.MaxMoveIntervalSeconds);
+                if (anchorChaseEscort)
+                {
+                    minI = Mathf.Max(0.12f, setup.BridgePatrol.MinMoveIntervalSeconds);
+                    maxI = Mathf.Max(minI + 0.08f, setup.BridgePatrol.MaxMoveIntervalSeconds);
+                }
+                else
+                {
+                    minI = Mathf.Max(2f, setup.BridgePatrol.MinMoveIntervalSeconds);
+                    maxI = Mathf.Max(minI + 0.5f, setup.BridgePatrol.MaxMoveIntervalSeconds);
+                }
             }
 
             var petPos = pet.transform.position;
@@ -9944,6 +9984,11 @@ namespace Oxide.Plugins
                     const float protectScanMeters = 24f;
                     setup.Controller.RadiusFindEntity = protectScanMeters;
                     setup.Controller.BridgeBoostScanTimers();
+                    setup.Controller.SetEscortMovementSpeedMax();
+                    setup.BridgePatrol ??= new SetupBridgePatrol();
+                    // Default JSON uses 5–11s between patrol points — far too slow to follow a sprinting / mounted streamer.
+                    setup.BridgePatrol.MinMoveIntervalSeconds = 0.22f;
+                    setup.BridgePatrol.MaxMoveIntervalSeconds = 0.65f;
                 }
 
                 /// <summary>When a home TC is set, re-enable far patrol + wide scan after task switches that strip companion patrol.</summary>
