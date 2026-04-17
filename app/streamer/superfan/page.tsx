@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 type ClubTier = "fan" | "superfan" | "mod";
@@ -64,21 +64,25 @@ export default function StreamerSuperfanIncomingPage() {
     mod: 0,
   });
 
-  function loadRequests() {
-    fetch("/api/streamer/superfan/incoming")
-      .then((r) => {
-        if (r.status === 403) {
-          setForbidden(true);
-          return null;
-        }
-        return r.ok ? r.json() : null;
-      })
-      .then((d) => {
-        if (d?.requests) setRows(d.requests);
-        else setRows([]);
-      })
-      .catch(() => setErr("Failed to load"));
-  }
+  const loadRequests = useCallback(async () => {
+    setErr("");
+    try {
+      const r = await fetch("/api/streamer/superfan/incoming", { credentials: "same-origin" });
+      if (r.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setErr(typeof j.error === "string" ? j.error : `Could not load requests (${r.status}). Try refreshing.`);
+        return;
+      }
+      const d = await r.json();
+      setRows(Array.isArray(d?.requests) ? d.requests : []);
+    } catch {
+      setErr("Failed to load requests. Check your connection and try again.");
+    }
+  }, []);
 
   function loadFanBoard() {
     fetch("/api/streamer/fan-board")
@@ -112,8 +116,8 @@ export default function StreamerSuperfanIncomingPage() {
   }
 
   useEffect(() => {
-    loadRequests();
-  }, []);
+    if (tab === "requests") void loadRequests();
+  }, [tab, loadRequests]);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -301,7 +305,17 @@ export default function StreamerSuperfanIncomingPage() {
       {tab === "requests" && (
         <>
           {rows.length === 0 ? (
-            <p className="mt-8 text-sm text-zinc-500">No requests yet.</p>
+            <div className="mt-8 space-y-2">
+              <p className="text-sm text-zinc-500">No fan-club join requests yet.</p>
+              <p className="text-xs text-zinc-600">
+                Fans appear here after they are approved for viewer superfans on the site, then use{" "}
+                <strong className="font-medium text-zinc-500">Request superfan access</strong> on your public profile (
+                <Link href="/streamers" className="text-rust-cyan hover:underline">
+                  Streamers
+                </Link>
+                ). Server access requests from the server list go to the server owner, not this list.
+              </p>
+            </div>
           ) : (
             <ul className="mt-8 space-y-4">
               {rows.map((r) => (

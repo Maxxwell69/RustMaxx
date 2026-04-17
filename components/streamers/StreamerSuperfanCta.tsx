@@ -57,6 +57,7 @@ export function StreamerSuperfanCta(props: {
     try {
       const res = await fetch("/api/viewer/superfan/streamer-request", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ streamer_id: streamerId, message: msg.trim() || undefined }),
       });
