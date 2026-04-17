@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.45")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.46")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3473,8 +3473,8 @@ namespace Oxide.Plugins
                 radius = Mathf.Clamp(setup.BridgePatrol.RadiusMeters, 8f, 80f);
                 if (anchorChaseEscort)
                 {
-                    minI = Mathf.Max(0.12f, setup.BridgePatrol.MinMoveIntervalSeconds);
-                    maxI = Mathf.Max(minI + 0.08f, setup.BridgePatrol.MaxMoveIntervalSeconds);
+                    minI = Mathf.Max(0.28f, setup.BridgePatrol.MinMoveIntervalSeconds);
+                    maxI = Mathf.Max(minI + 0.12f, setup.BridgePatrol.MaxMoveIntervalSeconds);
                 }
                 else
                 {
@@ -3516,8 +3516,9 @@ namespace Oxide.Plugins
                 }
             }
 
+            // Full nav speed immediately — avoids slow ramp + per-frame Move spam from SetDestination(reset speed=0).
             if (mc?.Navigator?.Agent != null && mc.Navigator.Agent.isOnNavMesh && navOk)
-                mc.SetDestination(targetXZ, _ => { }, false);
+                mc.SetDestinationFast(targetXZ, _ => { }, false);
 
             var interval = Random.Range(minI, maxI);
             if (!navOk || mc?.Navigator?.Agent == null || !mc.Navigator.Agent.isOnNavMesh)
@@ -6349,18 +6350,22 @@ namespace Oxide.Plugins
                     return;
                 }
 
+                // Speed ramp: only adjust navigator speed — do NOT call Move() every ThinkUpdate or SetDestination fires
+                // every frame → path churn, visible skipping, and sluggish escort bots.
                 if (CurrentSpeed != MaxSpeed && !owner.Ducked)
                 {
                     if (CurrentSpeed < MaxSpeed) currentSpeed++;
                     else if (CurrentSpeed > MaxSpeed) currentSpeed--;
                     navigator.SetCurrentSpeed(CurrentSpeed);
-                    Move(EndPoint);
+                    if (!IsMoving)
+                        Move(EndPoint);
                 }
                 else if (owner.Ducked && currentSpeed != 1)
                 {
                     currentSpeed = 1;
                     navigator.SetCurrentSpeed(CurrentSpeed);
-                    Move(EndPoint);
+                    if (!IsMoving)
+                        Move(EndPoint);
                 }
 
                 if (HasPath)
@@ -6373,7 +6378,8 @@ namespace Oxide.Plugins
             protected virtual void UpdateControlMove(bool inWater, bool isMoving, float depth, float waterLevel)
             {
                 if (owner == null || navigator == null || navigator?.Agent == null || owner?.eyes == null) return;
-                if (!TryEnsureNavMeshAgent()) return;
+                if (navigator.Agent != null && !navigator.Agent.isOnNavMesh)
+                    TryEnsureNavMeshAgent();
 
                 Vector3 endPoint = EndPoint;
                 Vector3 agentVelocity = navigator.Agent.velocity;
@@ -10071,8 +10077,8 @@ namespace Oxide.Plugins
                     setup.Controller.SetEscortMovementSpeedMax();
                     setup.BridgePatrol ??= new SetupBridgePatrol();
                     // Default JSON uses 5–11s between patrol points — far too slow to follow a sprinting / mounted streamer.
-                    setup.BridgePatrol.MinMoveIntervalSeconds = 0.22f;
-                    setup.BridgePatrol.MaxMoveIntervalSeconds = 0.65f;
+                    setup.BridgePatrol.MinMoveIntervalSeconds = 0.38f;
+                    setup.BridgePatrol.MaxMoveIntervalSeconds = 0.95f;
                 }
 
                 /// <summary>When a home TC is set, re-enable far patrol + wide scan after task switches that strip companion patrol.</summary>
