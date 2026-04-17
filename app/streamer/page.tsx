@@ -126,6 +126,7 @@ type ItemRow = {
 
 type State = {
   user: {
+    id: string;
     email: string;
     role: string;
     steamId: string | null;
@@ -246,6 +247,7 @@ export default function StreamerDashboardPage() {
     setState({
       user: {
         ...(u as State["user"]),
+        id: typeof u?.id === "string" ? u.id : "",
         streamerTier,
         streamerWebhookLimit:
           typeof u?.streamerWebhookLimit === "number" ? u.streamerWebhookLimit : 5,
@@ -637,10 +639,22 @@ export default function StreamerDashboardPage() {
           Stripe subscription: {user.subscriptionStatus}
         </p>
         <p className="mt-2 text-[11px] text-zinc-500">
+          <span className="text-zinc-400">Fan club:</span>{" "}
           <Link href="/streamer/superfan" className="text-rust-cyan hover:underline">
-            Fan club
-          </Link>{" "}
-          — approve viewers who applied on the site.
+            Configure
+          </Link>
+          {state.user.id ? (
+            <>
+              {" · "}
+              <Link
+                href={`/viewer/interact/${state.user.id}?preview=1`}
+                className="text-rust-cyan hover:underline"
+              >
+                Preview boards
+              </Link>
+            </>
+          ) : null}{" "}
+          — requests, tiers, and action buttons fans see.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {user.streamerTier === "free" ? (
@@ -672,6 +686,17 @@ export default function StreamerDashboardPage() {
           <Link href="/pricing" className="text-sm text-rust-cyan hover:underline">
             Pricing
           </Link>
+          <Link href="/streamer/superfan" className="text-sm text-rust-cyan hover:underline">
+            Fan club
+          </Link>
+          {state.user.id ? (
+            <Link
+              href={`/viewer/interact/${state.user.id}?preview=1`}
+              className="text-sm text-rust-cyan hover:underline"
+            >
+              Preview boards
+            </Link>
+          ) : null}
           <Link href="/streamer/tiktok-live" className="text-sm text-rust-cyan hover:underline">
             TikTok Live (Direct)
           </Link>

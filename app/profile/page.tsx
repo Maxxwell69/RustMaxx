@@ -42,6 +42,12 @@ function formatRole(role: string): string {
   return role.replace(/_/g, " ");
 }
 
+const FAN_CLUB_TIER_LABEL: Record<string, string> = {
+  fan: "Fan",
+  superfan: "Superfan",
+  mod: "Mod",
+};
+
 function socialDraftFromAuthPayload(s: Record<string, string> | undefined): Record<string, string> {
   const src = s ?? {};
   const out: Record<string, string> = {};
@@ -220,6 +226,16 @@ function ProfilePageContent() {
   const [dirSaveMsg, setDirSaveMsg] = useState<string | null>(null);
   const [dirSaving, setDirSaving] = useState(false);
 
+  type FanClubRow = {
+    id: string;
+    streamer_user_id: string;
+    streamer_display_name: string | null;
+    streamer_stream_name: string | null;
+    status: string;
+    club_tier: string | null;
+  };
+  const [fanClubRows, setFanClubRows] = useState<FanClubRow[] | null>(null);
+
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => {
@@ -272,6 +288,27 @@ function ProfilePageContent() {
       .then((r) => (r.ok ? r.json() : { application: null }))
       .then((d: { application: StreamerApplicationRecord | null }) => {
         if (!cancelled) setStreamerApp(d.application ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+    let cancelled = false;
+    fetch("/api/viewer/superfan/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { streamers?: FanClubRow[] } | null) => {
+        if (cancelled) return;
+        if (!d?.streamers || !Array.isArray(d.streamers)) {
+          setFanClubRows([]);
+          return;
+        }
+        setFanClubRows(d.streamers);
+      })
+      .catch(() => {
+        if (!cancelled) setFanClubRows([]);
       });
     return () => {
       cancelled = true;
@@ -597,6 +634,53 @@ function ProfilePageContent() {
                 {new Date(profile.created_at).toLocaleDateString()}
               </dd>
             </div>
+            {fanClubRows !== null && fanClubRows.length > 0 && (
+              <div>
+                <dt className="text-sm text-zinc-500">Fan club (per streamer)</dt>
+                <dd className="mt-2 space-y-2">
+                  {fanClubRows.map((row) => {
+                    const name =
+                      row.streamer_display_name?.trim() ||
+                      row.streamer_stream_name?.trim() ||
+                      "Streamer";
+                    const tier =
+                      row.status === "approved" && row.club_tier
+                        ? FAN_CLUB_TIER_LABEL[row.club_tier] ?? row.club_tier
+                        : row.status === "pending"
+                          ? "Pending"
+                          : row.status === "revoked"
+                            ? "Removed"
+                            : row.status === "rejected"
+                              ? "Rejected"
+                              : row.status;
+                    return (
+                      <div
+                        key={row.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm"
+                      >
+                        <span className="text-zinc-200">{name}</span>
+                        <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs font-medium text-rust-cyan">
+                          {tier}
+                        </span>
+                        {row.status === "approved" ? (
+                          <Link
+                            href={`/viewer/interact/${row.streamer_user_id}`}
+                            className="text-xs text-rust-cyan hover:underline"
+                          >
+                            Open boards →
+                          </Link>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-zinc-600">
+                    <Link href="/viewer/superfan" className="text-rust-cyan hover:underline">
+                      Manage requests
+                    </Link>
+                  </p>
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-sm text-zinc-500">Last password sign-in</dt>
               <dd className="mt-0.5 text-zinc-300">

@@ -125,6 +125,7 @@ export async function GET(_request: NextRequest) {
 
   return NextResponse.json({
     user: {
+      id: user.id,
       email: user.email,
       role: user.role,
       steamId: user.steam_id,

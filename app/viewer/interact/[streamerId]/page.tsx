@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 type ClubTier = "fan" | "superfan" | "mod";
 
@@ -16,10 +16,21 @@ type MemberRow = {
   club_tier: ClubTier | null;
 };
 
-export default function ViewerInteractPage() {
+function tierLabel(t: ClubTier | null): string {
+  if (t === "mod") return "Mod";
+  if (t === "superfan") return "Superfan";
+  if (t === "fan") return "Fan";
+  return "Member";
+}
+
+function ViewerInteractContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const streamerId = typeof params.streamerId === "string" ? params.streamerId : "";
+  const isPreview = searchParams.get("preview") === "1";
+
   const [state, setState] = useState<"load" | "deny" | "ok">("load");
+  const [previewMode, setPreviewMode] = useState(false);
   const [clubTier, setClubTier] = useState<ClubTier | null>(null);
   const [boards, setBoards] = useState<Record<string, BoardSlot[]>>({});
   const [err, setErr] = useState("");
@@ -29,14 +40,17 @@ export default function ViewerInteractPage() {
 
   const loadBoards = useCallback(() => {
     if (!streamerId) return;
-    fetch(`/api/viewer/fan-board?streamer_id=${encodeURIComponent(streamerId)}`)
+    const q = new URLSearchParams({ streamer_id: streamerId });
+    if (isPreview) q.set("preview", "1");
+    fetch(`/api/viewer/fan-board?${q.toString()}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("board"))))
       .then((data) => {
+        setPreviewMode(data.preview === true);
         setClubTier(data.club_tier ?? null);
         setBoards(typeof data.boards === "object" && data.boards ? data.boards : {});
       })
       .catch(() => setErr("Could not load fan boards."));
-  }, [streamerId]);
+  }, [streamerId, isPreview]);
 
   useEffect(() => {
     if (!streamerId) {
@@ -44,6 +58,37 @@ export default function ViewerInteractPage() {
       return;
     }
     let cancelled = false;
+
+    if (isPreview) {
+      fetch(
+        `/api/viewer/fan-board?streamer_id=${encodeURIComponent(streamerId)}&preview=1`
+      )
+        .then(async (r) => {
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            if (!cancelled) {
+              setErr(typeof data.error === "string" ? data.error : "Could not load preview.");
+              setState("deny");
+            }
+            return null;
+          }
+          return data;
+        })
+        .then((data) => {
+          if (cancelled || !data) return;
+          setPreviewMode(true);
+          setClubTier(null);
+          setBoards(typeof data.boards === "object" && data.boards ? data.boards : {});
+          setState("ok");
+        })
+        .catch(() => {
+          if (!cancelled) setState("deny");
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     fetch(`/api/viewer/superfan/access?streamer_id=${encodeURIComponent(streamerId)}`)
       .then((r) => {
         if (!r.ok) {
@@ -65,19 +110,20 @@ export default function ViewerInteractPage() {
     return () => {
       cancelled = true;
     };
-  }, [streamerId, loadBoards]);
+  }, [streamerId, isPreview, loadBoards]);
 
   useEffect(() => {
-    if (state !== "ok" || clubTier !== "mod" || !streamerId) return;
+    if (state !== "ok" || clubTier !== "mod" || !streamerId || previewMode) return;
     fetch(`/api/viewer/fan-club/members?streamer_id=${encodeURIComponent(streamerId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.members) setModMembers(d.members);
       })
       .catch(() => {});
-  }, [state, clubTier, streamerId]);
+  }, [state, clubTier, streamerId, previewMode]);
 
   async function trigger(boardTier: ClubTier, actionKey: string) {
+    if (previewMode) return;
     const key = `${boardTier}:${actionKey}`;
     setBusyAction(key);
     setErr("");
@@ -132,20 +178,31 @@ export default function ViewerInteractPage() {
   if (state === "deny") {
     return (
       <div className="mx-auto max-w-2xl px-4 py-12">
-        <h1 className="text-xl font-semibold text-zinc-100">Access required</h1>
+        <h1 className="text-xl font-semibold text-zinc-100">
+          {isPreview ? "Preview unavailable" : "Access required"}
+        </h1>
         <p className="mt-2 text-sm text-zinc-400">
-          You need the streamer to approve you for their fan club. Apply from{" "}
-          <Link href="/viewer/superfan" className="text-rust-cyan hover:underline">
-            viewer superfans
-          </Link>{" "}
-          and the streamer&apos;s public profile.
+          {isPreview ? (
+            <>
+              {err ||
+                "Open Preview boards from the Streamer interactions page while logged in as an approved streamer, or check that your streamer application is approved."}{" "}
+              <Link href="/streamer" className="text-rust-cyan hover:underline">
+                Streamer setup
+              </Link>
+            </>
+          ) : (
+            <>
+              You need the streamer to approve you for their fan club. Apply from{" "}
+              <Link href="/viewer/superfan" className="text-rust-cyan hover:underline">
+                viewer superfans
+              </Link>{" "}
+              and the streamer&apos;s public profile.
+            </>
+          )}
         </p>
       </div>
     );
   }
-
-  const tierLabel =
-    clubTier === "mod" ? "Mod" : clubTier === "superfan" ? "Superfan" : clubTier === "fan" ? "Fan" : "Member";
 
   const boardOrder: { tier: ClubTier; title: string }[] = [
     { tier: "fan", title: "Fan board" },
@@ -159,20 +216,40 @@ export default function ViewerInteractPage() {
         <Link href="/viewer/superfan" className="text-rust-cyan hover:underline">
           ← Fan club home
         </Link>
+        {previewMode ? (
+          <>
+            {" · "}
+            <Link href="/streamer/superfan" className="text-rust-cyan hover:underline">
+              Edit boards
+            </Link>
+          </>
+        ) : null}
       </p>
       <h1 className="mt-4 text-2xl font-semibold text-zinc-100">Fan boards</h1>
-      <p className="mt-2 text-sm text-zinc-400">
-        Your tier: <span className="text-zinc-200">{tierLabel}</span>. Buttons run the streamer&apos;s Rust server
-        actions (RCON). Cooldowns and server rules still apply in-game.
-      </p>
+      {previewMode ? (
+        <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/95">
+          <strong className="text-amber-50">Preview</strong> — you&apos;re seeing all three boards as fans will (by
+          tier). Buttons do not send RCON. Use{" "}
+          <Link href="/streamer/superfan" className="underline hover:text-white">
+            Fan club
+          </Link>{" "}
+          to change actions.
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-zinc-400">
+          Your tier: <span className="text-zinc-200">{tierLabel(clubTier)}</span>. Buttons run the streamer&apos;s Rust
+          server actions (RCON). Cooldowns and server rules still apply in-game.
+        </p>
+      )}
 
-      {err && <p className="mt-4 text-sm text-red-400">{err}</p>}
+      {err && state === "ok" && <p className="mt-4 text-sm text-red-400">{err}</p>}
 
       <div className="mt-8 space-y-10">
         {!boardOrder.some(({ tier }) => (boards[tier]?.length ?? 0) > 0) && (
           <p className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-sm text-zinc-500">
-            This streamer has not configured fan board buttons yet, or none apply to your tier. Check back later or
-            message them.
+            {previewMode
+              ? "No buttons on your boards yet. Add actions under Fan club → Fan boards."
+              : "This streamer has not configured fan board buttons yet, or none apply to your tier. Check back later or message them."}
           </p>
         )}
         {boardOrder.map(({ tier, title }) => {
@@ -189,9 +266,10 @@ export default function ViewerInteractPage() {
                     <button
                       key={s.action_key}
                       type="button"
-                      disabled={loading}
+                      disabled={loading || previewMode}
                       onClick={() => trigger(tier, s.action_key)}
-                      className="rounded-lg border border-rust-cyan/40 bg-rust-cyan/10 px-3 py-2 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/20 disabled:opacity-50"
+                      title={previewMode ? "Preview only — not sent to server" : undefined}
+                      className="rounded-lg border border-rust-cyan/40 bg-rust-cyan/10 px-3 py-2 text-sm font-medium text-rust-cyan hover:bg-rust-cyan/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {loading ? "…" : s.label}
                     </button>
@@ -203,7 +281,7 @@ export default function ViewerInteractPage() {
         })}
       </div>
 
-      {clubTier === "mod" && (
+      {!previewMode && clubTier === "mod" && (
         <section className="mt-12 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
           <h2 className="text-sm font-semibold text-amber-100/90">Mod tools — remove fans</h2>
           <p className="mt-1 text-xs text-zinc-500">
@@ -243,5 +321,19 @@ export default function ViewerInteractPage() {
         </section>
       )}
     </div>
+  );
+}
+
+export default function ViewerInteractPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-2xl px-4 py-12">
+          <p className="text-sm text-zinc-500">Loading…</p>
+        </div>
+      }
+    >
+      <ViewerInteractContent />
+    </Suspense>
   );
 }
