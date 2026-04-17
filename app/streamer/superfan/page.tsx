@@ -418,8 +418,8 @@ export default function StreamerSuperfanIncomingPage() {
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Recent board actions</h2>
             <p className="mt-1 text-xs text-zinc-600">
-              Each line is a successful fan button press (RCON ran). Fan name is the display name or email we send to
-              the game server.
+              Each line is a successful fan button press (RCON ran): display name, catalog action name, action key in
+              parentheses, and which board — e.g. MaxxFan sent Wolf (wolf) via the Fan board.
             </p>
             {boardActivity.length === 0 ? (
               <p className="mt-3 text-sm text-zinc-500">Nothing yet — when fans use the Fan, Superfan, or Mod boards, it shows here.</p>

@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import type { FanBoardTier } from "@/lib/streamer-fan-board";
+import { ACTION_META, TIKTRIGGER_ACTIONS, type TikTriggerAction } from "@/lib/tikfinity";
 
 export function fanBoardTierDisplayName(tier: FanBoardTier): string {
   if (tier === "fan") return "Fan board";
@@ -7,14 +8,27 @@ export function fanBoardTierDisplayName(tier: FanBoardTier): string {
   return "Mod board";
 }
 
+/** Catalog label for an action key (e.g. wolf → "Wolf"); falls back to the raw key. */
+export function resolveActionLabelForKey(actionKey: string): string {
+  const k = actionKey.trim().toLowerCase();
+  if ((TIKTRIGGER_ACTIONS as readonly string[]).includes(k)) {
+    return ACTION_META[k as TikTriggerAction].label;
+  }
+  return actionKey.trim() || actionKey;
+}
+
+/**
+ * @example MaxxFan sent Wolf (wolf) via the Fan board.
+ */
 export function formatFanBoardActivitySummary(row: {
   viewer_label: string;
   board_tier: FanBoardTier;
   action_key: string;
   action_label: string | null;
 }): string {
-  const what = row.action_label?.trim() || row.action_key;
-  return `${row.viewer_label} sent ${what} from the ${fanBoardTierDisplayName(row.board_tier)}.`;
+  const key = row.action_key.trim().toLowerCase();
+  const label = row.action_label?.trim() || resolveActionLabelForKey(row.action_key);
+  return `${row.viewer_label} sent ${label} (${key}) via the ${fanBoardTierDisplayName(row.board_tier)}.`;
 }
 
 export async function recordFanBoardActivity(params: {
@@ -36,7 +50,7 @@ export async function recordFanBoardActivity(params: {
       label,
       params.boardTier,
       params.actionKey.toLowerCase(),
-      params.actionLabel?.trim() || null,
+      params.actionLabel?.trim() || resolveActionLabelForKey(params.actionKey),
     ]
   );
 }

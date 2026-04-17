@@ -12,8 +12,8 @@ import {
   viewerTierCanAccessBoard,
 } from "@/lib/streamer-fan-board";
 import { getFanBoardCooldownRemaining, recordFanBoardTriggerSuccess } from "@/lib/fan-board-cooldown";
-import { formatFanBoardActivitySummary, recordFanBoardActivity } from "@/lib/fan-board-activity";
-import { getAvailableActionsForAdmin, TIKTRIGGER_ACTIONS, type TikTriggerAction } from "@/lib/tikfinity";
+import { formatFanBoardActivitySummary, recordFanBoardActivity, resolveActionLabelForKey } from "@/lib/fan-board-activity";
+import { TIKTRIGGER_ACTIONS, type TikTriggerAction } from "@/lib/tikfinity";
 
 export const runtime = "nodejs";
 
@@ -117,8 +117,7 @@ export async function POST(request: NextRequest) {
 
   await recordFanBoardTriggerSuccess(session.userId, streamerId, boardTier, cooldownSeconds);
 
-  const actionLabel =
-    getAvailableActionsForAdmin().find((a) => a.action === (actionRaw as TikTriggerAction))?.label ?? null;
+  const actionLabel = resolveActionLabelForKey(actionRaw);
 
   await recordFanBoardActivity({
     streamerUserId: streamerId,
