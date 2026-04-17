@@ -293,6 +293,163 @@ function parseMaxxInvadersParams(
   return { tier, mode: mode.toLowerCase(), kit, roamingTemplate, outfit };
 }
 
+/**
+ * `npcmaxx.spawn` only hits NPCMaxx — no MaxxInvaders viewer registry / invader lifecycle.
+ * These Roaming template keys must use `maxxinvaders.spawn` while still accepting `?action=npcmaxx&template=…`.
+ */
+const NPCMAXX_TEMPLATES_REQUIRING_MAXXINVADERS_ENGINE = new Set<string>(["snipemb"]);
+
+async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
+  request: NextRequest,
+  body: unknown,
+  server: ServerRow,
+  connectionFromAdmin: TikfinityConnectionForWebhook | null,
+  tikfinityEventNameForLog: string | null,
+  payload: { viewerName: string; giftName: string },
+  npcTemplateKeyResolved: string,
+  tikfinitySpawnActionLabel: TikTriggerAction
+): Promise<NextResponse | null> {
+  if (!NPCMAXX_TEMPLATES_REQUIRING_MAXXINVADERS_ENGINE.has(npcTemplateKeyResolved)) {
+    return null;
+  }
+
+  const miParams = parseMaxxInvadersParams(request, body);
+  const { tier, mode, kit } = miParams;
+  const resolvedOutfit = resolveRoamingWearPipeForOutfit(miParams.outfit ?? "default");
+  const roamingWearPipe = resolvedOutfit.wearPipe;
+  const roamingBotKey = npcTemplateKeyResolved;
+
+  const viewerId =
+    extractTikTokUniqueIdFromBody(body) ??
+    `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+  const anchorSteam64 = resolveMaxxInvadersAnchorSteam(request, body, {
+    serverDefault: server.tikfinity_anchor_steam_id ?? null,
+    envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
+  });
+
+  const spawnMi = await maxxinvadersRconSpawn({
+    server,
+    viewerDisplayName: payload.viewerName,
+    viewerId,
+    tier,
+    kit,
+    mode,
+    roamingBotKey,
+    anchorSteam64,
+    roamingWearPipe,
+    connectionId: connectionFromAdmin?.id ?? null,
+    tikfinityEventName: tikfinityEventNameForLog,
+  });
+
+  if (!spawnMi.ok) {
+    console.error("[tikfinity webhook] npcmaxx→maxxinvaders RCON failed:", spawnMi.error);
+    audit("tikfinity", "webhook.failed", {
+      reason:
+        spawnMi.step === "rcon_connect"
+          ? "RCON connect failed"
+          : spawnMi.step === "rcon_reply"
+            ? "maxxinvaders.spawn rejected or timeout"
+            : "RCON send failed",
+      error: spawnMi.error,
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      action: tikfinitySpawnActionLabel,
+      serverId: server.id,
+      command: spawnMi.command,
+      templateKey: roamingBotKey,
+      route: "npcmaxx_as_maxxinvaders",
+    }).catch(() => {});
+    let replyHint =
+      spawnMi.step === "rcon_reply"
+        ? "Game replied via RCON — see rconResponse. Common: spawn_position, anchor_offline, RoamingNPCs template missing/disabled."
+        : spawnMi.step === "rcon_connect"
+          ? connectedErrorDebug(server.rcon_host)
+          : "RCON connected but command could not be sent.";
+    if (
+      spawnMi.step === "rcon_reply" &&
+      /roamingnpcs is not loaded/i.test(spawnMi.error ?? "")
+    ) {
+      replyHint =
+        "The Rust server rejected the spawn because the RoamingNPCs Oxide plugin is not loaded. On the host: add RoamingNPCs, run `oxide.reload RoamingNPCs`. See rconResponse for the exact MaxxInvaders line.";
+    }
+    if (
+      spawnMi.step === "rcon_reply" &&
+      /no bot key.*under bots settings/i.test(spawnMi.error ?? "")
+    ) {
+      replyHint =
+        "RoamingNPCs.json on the game server must include this template under `Bots settings` with `\"Enable bot?\": true`.";
+    }
+    return withCors(
+      NextResponse.json(
+        {
+          ok: false,
+          error: spawnMi.error ?? "Command send failed",
+          debug: replyHint,
+          step: spawnMi.step,
+          command: spawnMi.command,
+          rconResponse: spawnMi.step === "rcon_reply" ? spawnMi.error : undefined,
+          route: "npcmaxx_as_maxxinvaders",
+        },
+        { status: 502 }
+      )
+    );
+  }
+
+  console.log("[tikfinity webhook] OK npcmaxx→MI", {
+    command: spawnMi.command,
+    serverId: server.id,
+    roamingBotKey,
+  });
+  audit("tikfinity", "webhook.trigger", {
+    viewerName: payload.viewerName,
+    giftName: payload.giftName,
+    action: tikfinitySpawnActionLabel,
+    serverId: server.id,
+    command: spawnMi.command,
+    route: "npcmaxx_as_maxxinvaders",
+  }).catch(() => {});
+
+  fireSquawkAfterTikfinityEvent({
+    kind: "maxxinvaders",
+    action: tikfinitySpawnActionLabel,
+    viewerName: payload.viewerName,
+    giftName: payload.giftName,
+  });
+
+  const nameFallbackViewer =
+    String(payload.viewerName ?? "").trim().toLowerCase() === "viewer";
+
+  return withCors(
+    NextResponse.json({
+      ok: true,
+      action: tikfinitySpawnActionLabel,
+      spawnEngine: "maxxinvaders",
+      routedFrom: "npcmaxx",
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      viewerId,
+      tier,
+      mode,
+      kit,
+      roamingBotKey,
+      outfit: resolvedOutfit.resolvedId,
+      outfitProfileKnown: resolvedOutfit.knownProfile,
+      roamingWearPipe: roamingWearPipe ?? undefined,
+      command: spawnMi.command,
+      rconResponse: spawnMi.rconResponse,
+      anchorSteam64: anchorSteam64 ?? null,
+      ...(nameFallbackViewer
+        ? {
+            nameHint:
+              "RustMaxx did not find a viewer nickname in this webhook payload — the in-game bot may show Viewer. Add %nickname% or ?nickname= in TikFinity.",
+          }
+        : {}),
+      debug: `Roaming template "${roamingBotKey}" is spawned via MaxxInvaders (invader registry). Your webhook can stay ?action=npcmaxx&template=${roamingBotKey}; RustMaxx sends maxxinvaders.spawn. Set ?anchorSteam=765… or env TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID so the bot anchors near you.`,
+    })
+  );
+}
+
 export async function runTikfinityWebhook(
   request: NextRequest,
   body: unknown,
@@ -601,6 +758,18 @@ export async function runTikfinityWebhook(
         );
       }
     }
+
+    const miRoute = await trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
+      request,
+      body,
+      server,
+      connectionFromAdmin,
+      tikfinityEventNameForLog,
+      payload,
+      npcTemplateKeyResolved,
+      "npcmaxx"
+    );
+    if (miRoute) return miRoute;
 
     const spawn = await npcmaxxRconSpawn({
       server,
