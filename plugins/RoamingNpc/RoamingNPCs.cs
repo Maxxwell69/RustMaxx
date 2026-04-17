@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.46")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.47")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -6352,18 +6352,25 @@ namespace Oxide.Plugins
 
                 // Speed ramp: only adjust navigator speed — do NOT call Move() every ThinkUpdate or SetDestination fires
                 // every frame → path churn, visible skipping, and sluggish escort bots.
+                // SetCurrentSpeed touches NavMeshAgent; must not run while off-mesh or Unity logs SetDestination/Resume.
                 if (CurrentSpeed != MaxSpeed && !owner.Ducked)
                 {
                     if (CurrentSpeed < MaxSpeed) currentSpeed++;
                     else if (CurrentSpeed > MaxSpeed) currentSpeed--;
-                    navigator.SetCurrentSpeed(CurrentSpeed);
+                    if (navigator.Agent != null && !navigator.Agent.isOnNavMesh)
+                        TryEnsureNavMeshAgent();
+                    if (navigator.Agent != null && navigator.Agent.enabled && navigator.Agent.isOnNavMesh)
+                        navigator.SetCurrentSpeed(CurrentSpeed);
                     if (!IsMoving)
                         Move(EndPoint);
                 }
                 else if (owner.Ducked && currentSpeed != 1)
                 {
                     currentSpeed = 1;
-                    navigator.SetCurrentSpeed(CurrentSpeed);
+                    if (navigator.Agent != null && !navigator.Agent.isOnNavMesh)
+                        TryEnsureNavMeshAgent();
+                    if (navigator.Agent != null && navigator.Agent.enabled && navigator.Agent.isOnNavMesh)
+                        navigator.SetCurrentSpeed(CurrentSpeed);
                     if (!IsMoving)
                         Move(EndPoint);
                 }
@@ -6838,12 +6845,13 @@ namespace Oxide.Plugins
                 if (navigator.Agent.isOnNavMesh) return true;
                 UpdateCurrentPosition(3f);
                 if (navigator.Agent.isOnNavMesh) return true;
-                for (var radius = 4f; radius <= 28f; radius += 4f)
+                for (var radius = 4f; radius <= 40f; radius += 4f)
                 {
                     if (!navigator.GetNearestNavmeshPosition(owner.transform.position, out var snapped, radius))
                         continue;
                     owner.transform.position = snapped;
                     navigator.Warp(snapped);
+                    UnityEngine.Physics.SyncTransforms();
                     if (navigator.Agent.isOnNavMesh) return true;
                 }
 
@@ -7058,6 +7066,17 @@ namespace Oxide.Plugins
                 timeNotVelocity = 0;
                 lastPosition = CurrentPoint;
             }
+            /// <summary>Unity logs Info if <see cref="NavMeshAgent"/> is disabled, not on mesh, or transforms are stale after <see cref="BaseNavigator.Warp"/>.</summary>
+            protected bool SafeNavigatorSetDestination(Vector3 navTarget, BaseNavigator.NavigationSpeed speed)
+            {
+                if (navigator == null) return false;
+                if (!TryEnsureNavMeshAgent()) return false;
+                UnityEngine.Physics.SyncTransforms();
+                var agent = navigator.Agent;
+                if (agent == null || !agent.enabled || !agent.isOnNavMesh) return false;
+                return navigator.SetDestination(navTarget, speed);
+            }
+
             protected bool Move(Vector3 target)
             {
                 if (navigator == null) return false;
@@ -7072,6 +7091,7 @@ namespace Oxide.Plugins
                             continue;
                         owner.transform.position = snapped;
                         navigator.Warp(snapped);
+                        UnityEngine.Physics.SyncTransforms();
                         break;
                     }
 
@@ -7084,11 +7104,7 @@ namespace Oxide.Plugins
                     return false;
                 target = position;
 
-                agent = navigator.Agent;
-                if (agent == null || !agent.isOnNavMesh)
-                    return false;
-
-                return navigator.SetDestination(target, (BaseNavigator.NavigationSpeed)currentSpeed);
+                return SafeNavigatorSetDestination(target, (BaseNavigator.NavigationSpeed)currentSpeed);
             }
 
 #if DebugLog
