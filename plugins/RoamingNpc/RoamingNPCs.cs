@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.48")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.49")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -1488,6 +1488,12 @@ namespace Oxide.Plugins
                 if (timerTickController > 0.05f) timerTickController = 0.05f;
             }
 
+            /// <summary>MaxxInvaders bridge / defense: cap aim spread multiplier (lower <see cref="AccuracyOfFire"/> = tighter groups).</summary>
+            public void SetSharperShootingBridge()
+            {
+                AccuracyOfFire = Mathf.Min(AccuracyOfFire, 2.35f);
+            }
+
             public float GetScaleDamageTo(BaseEntity target)
             {
                 if (target == null) return 0f;
@@ -1707,6 +1713,21 @@ namespace Oxide.Plugins
                 ? "MaxxInvaders: защищать якорного игрока (стример)? Бот не атакует его и атакует того, кто его ранил (нужен Steam ID с моста)."
                 : "MaxxInvaders: protect anchor streamer? Bot won't attack them and fights players who damage them (requires bridge anchor Steam ID).")]
             public bool _protectBridgeAnchorPlayer = false;
+
+            [JsonProperty(RU
+                ? "Секунд \"прицеливания\" перед выстрелом (меньше — быстрее реакция; 0.05–2.5)"
+                : "Seconds of aim wind-up before firing (lower = snappier; clamped 0.05–2.5)", Order = 22)]
+            public float _aimWindupSeconds = 0.28f;
+
+            [JsonIgnore]
+            public float AimWindupSeconds
+            {
+                get
+                {
+                    var v = _aimWindupSeconds <= 0.001f ? 0.28f : _aimWindupSeconds;
+                    return Mathf.Clamp(v, 0.05f, 2.5f);
+                }
+            }
 
             [JsonIgnore] public float RadiusWeaponAttacked => Mathf.Max(5, _radiusWeaponAttacked);
             [JsonIgnore] public float RadiusMeleeAttacked => Mathf.Max(2, _radiusMeleeAttacked);
@@ -8140,7 +8161,6 @@ namespace Oxide.Plugins
             private bool isDown => owner?.IsInvoking(OnDown) == true;
             private TimeSince reloadTimer;
             private TimeSince aimingTimer;
-            private float aimingTime = 1f;
             private float radiusRunAway = 150f;
             protected bool canFire = false;
             private TimeSince lastSuccessfulEngagement = 0f;
@@ -8249,9 +8269,13 @@ namespace Oxide.Plugins
                 BowWeapon => 2,
                 _ => weapon.reloadTime,
             };
+            /// <summary>Uses <see cref="SetupBattle.AimWindupSeconds"/> (default was hardcoded 1s — sluggish vs moving targets).</summary>
+            protected float AimingWindupSeconds =>
+                owner?.Data?.Setup?.BattleState?.AimWindupSeconds ?? 0.28f;
+
             protected bool IsAiming()
             {
-                return aimingTimer < aimingTime;
+                return aimingTimer < AimingWindupSeconds;
             }
             protected bool ActivateWeapon(BaseCombatEntity target, bool priorityMelee = false)
             {
@@ -8273,6 +8297,12 @@ namespace Oxide.Plugins
                 }
                 else if (weapon.HasAttackCooldown())
                 {
+                    owner.SetAimDirectionWeapon(weapon, target);
+                    return;
+                }
+                else if (IsAiming())
+                {
+                    // Previously no updates during wind-up — moving targets caused misses and wasted bursts.
                     owner.SetAimDirectionWeapon(weapon, target);
                     return;
                 }
@@ -10139,6 +10169,11 @@ namespace Oxide.Plugins
                     setup.BattleState._ignoreRNPC = true;
                     setup.BattleState._ignorePersonalNpcBots = true;
                     setup.BattleState._ignoreRealPlayers = ignoreRealPlayersForAnimalHunt;
+                    setup.Controller ??= new ControllerSetup();
+                    setup.Controller.SetSharperShootingBridge();
+                    // Snap faster shots on bridge tasks unless explicitly tuned slower.
+                    if (setup.BattleState._aimWindupSeconds <= 0.001f || setup.BattleState._aimWindupSeconds > 0.42f)
+                        setup.BattleState._aimWindupSeconds = 0.26f;
                 }
 
                 var t = (taskName ?? "").Trim().ToLowerInvariant();
@@ -11244,7 +11279,11 @@ namespace Oxide.Plugins.RoamingNPCex
         public static Vector3 GetHeadRayToTarget(this BasePlayer player, BaseEntity target)
         {
             Vector3 pos = player.eyes.position;
-            return (target.transform.position + target.bounds.center - pos).normalized;
+            if (target is BasePlayer bp && bp != null && bp.IsValid() && bp.eyes != null)
+                return (bp.eyes.position - pos).normalized;
+            var to = target.CenterPoint() - pos;
+            if (to.sqrMagnitude < 1e-8f) return player.eyes.BodyForward();
+            return to.normalized;
         }
         public static float DistanceHorizontal(this BaseEntity source, Vector3 target)
         {
