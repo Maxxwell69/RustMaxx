@@ -638,7 +638,7 @@ export default function StreamerDashboardPage() {
         </p>
         <p className="mt-2 text-[11px] text-zinc-500">
           <Link href="/streamer/superfan" className="text-rust-cyan hover:underline">
-            Superfan requests
+            Fan club
           </Link>{" "}
           — approve viewers who applied on the site.
         </p>

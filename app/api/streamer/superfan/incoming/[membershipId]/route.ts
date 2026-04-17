@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
 import { audit } from "@/lib/audit";
+import { parseClubTier } from "@/lib/streamer-fan-board";
 import { setMembershipDecision, userIsApprovedStreamer } from "@/lib/superfan";
 
-type PatchBody = { decision?: string };
+type PatchBody = { decision?: string; initial_tier?: unknown };
 
 export async function PATCH(
   request: NextRequest,
@@ -30,11 +31,15 @@ export async function PATCH(
     return NextResponse.json({ error: 'decision must be "approve" or "reject"' }, { status: 400 });
   }
 
+  const approveOpts =
+    d === "approve" ? { initialClubTier: parseClubTier(body.initial_tier) ?? ("fan" as const) } : undefined;
+
   const result = await setMembershipDecision(
     membershipId,
     session.userId,
     d === "approve" ? "approved" : "rejected",
-    session.userId
+    session.userId,
+    approveOpts
   );
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });

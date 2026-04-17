@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       viewer_display_name: r.viewer_display_name,
       message: r.message,
       status: r.status,
+      club_tier: r.club_tier,
       reviewed_at: r.reviewed_at?.toISOString() ?? null,
       created_at: r.created_at.toISOString(),
       updated_at: r.updated_at.toISOString(),

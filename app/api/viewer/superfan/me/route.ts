@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
       streamer_stream_name: m.streamer_stream_name,
       message: m.message,
       status: m.status,
+      club_tier: m.club_tier,
       reviewed_at: m.reviewed_at?.toISOString() ?? null,
       created_at: m.created_at.toISOString(),
       updated_at: m.updated_at.toISOString(),

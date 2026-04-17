@@ -1,7 +1,10 @@
 import { query } from "@/lib/db";
+import type { FanBoardTier } from "@/lib/streamer-fan-board";
+
+export type ClubTier = FanBoardTier;
 
 export type SuperfanSiteStatus = "pending" | "approved" | "rejected";
-export type SuperfanMembershipStatus = "pending" | "approved" | "rejected";
+export type SuperfanMembershipStatus = "pending" | "approved" | "rejected" | "revoked";
 
 export type ViewerSuperfanSiteRow = {
   id: string;
@@ -20,6 +23,7 @@ export type SuperfanMembershipRow = {
   streamer_user_id: string;
   message: string | null;
   status: SuperfanMembershipStatus;
+  club_tier: ClubTier | null;
   reviewed_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -111,7 +115,7 @@ export async function submitStreamerSuperfanRequest(
     return {
       ok: false,
       error:
-        "Complete the site superfan step first (apply from Viewer superfans if you have not yet). Fans who signed up as viewers are already approved at registration.",
+        "Complete the site step first (Viewer superfans). Fans who signed up as viewers are usually already approved at registration.",
     };
   }
 
@@ -128,14 +132,15 @@ export async function submitStreamerSuperfanRequest(
   const row = existing[0];
   if (row) {
     if (row.status === "approved") {
-      return { ok: false, error: "You already have superfan access for this streamer." };
+      return { ok: false, error: "You already belong to this streamer's fan club." };
     }
     if (row.status === "pending") {
       return { ok: false, error: "You already have a pending request for this streamer." };
     }
     await query(
       `UPDATE viewer_streamer_superfan_memberships
-       SET message = $2, status = 'pending', reviewed_by = NULL, reviewed_at = NULL, updated_at = now()
+       SET message = $2, status = 'pending', reviewed_by = NULL, reviewed_at = NULL,
+           club_tier = NULL, updated_at = now()
        WHERE id = $1::uuid`,
       [row.id, message?.trim() || null]
     );
@@ -159,7 +164,7 @@ export async function listMembershipsForViewer(viewerUserId: string): Promise<
       streamer_stream_name: string | null;
     }
   >(
-    `SELECT m.id, m.viewer_user_id, m.streamer_user_id, m.message, m.status, m.reviewed_at, m.created_at, m.updated_at,
+    `SELECT m.id, m.viewer_user_id, m.streamer_user_id, m.message, m.status, m.club_tier::text, m.reviewed_at, m.created_at, m.updated_at,
             u.display_name AS streamer_display_name,
             sa.preferred_stream_name AS streamer_stream_name
      FROM viewer_streamer_superfan_memberships m
@@ -169,7 +174,10 @@ export async function listMembershipsForViewer(viewerUserId: string): Promise<
      ORDER BY m.updated_at DESC`,
     [viewerUserId]
   );
-  return rows;
+  return rows.map((r) => ({
+    ...r,
+    club_tier: (r.club_tier as ClubTier | null) ?? null,
+  }));
 }
 
 export async function listIncomingSuperfanRequests(streamerUserId: string): Promise<
@@ -178,7 +186,7 @@ export async function listIncomingSuperfanRequests(streamerUserId: string): Prom
   const { rows } = await query<
     SuperfanMembershipRow & { viewer_email: string; viewer_display_name: string | null }
   >(
-    `SELECT m.id, m.viewer_user_id, m.streamer_user_id, m.message, m.status, m.reviewed_at, m.created_at, m.updated_at,
+    `SELECT m.id, m.viewer_user_id, m.streamer_user_id, m.message, m.status, m.club_tier::text, m.reviewed_at, m.created_at, m.updated_at,
             u.email AS viewer_email, u.display_name AS viewer_display_name
      FROM viewer_streamer_superfan_memberships m
      INNER JOIN users u ON u.id = m.viewer_user_id
@@ -188,22 +196,50 @@ export async function listIncomingSuperfanRequests(streamerUserId: string): Prom
        m.created_at DESC`,
     [streamerUserId]
   );
-  return rows;
+  return rows.map((r) => ({
+    ...r,
+    club_tier: (r.club_tier as ClubTier | null) ?? null,
+  }));
 }
 
 export async function setMembershipDecision(
   membershipId: string,
   streamerUserId: string,
   decision: "approved" | "rejected",
-  reviewerUserId: string
+  reviewerUserId: string,
+  opts?: { initialClubTier?: ClubTier }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const status: SuperfanMembershipStatus = decision === "approved" ? "approved" : "rejected";
-  const { rowCount } = await query(
-    `UPDATE viewer_streamer_superfan_memberships
-     SET status = $2, reviewed_by = $3::uuid, reviewed_at = now(), updated_at = now()
-     WHERE id = $1::uuid AND streamer_user_id = $4::uuid AND status = 'pending'`,
-    [membershipId, status, reviewerUserId, streamerUserId]
-  );
+  const tier: ClubTier = opts?.initialClubTier ?? "fan";
+  if (decision === "approved" && !["fan", "superfan", "mod"].includes(tier)) {
+    return { ok: false, error: "Invalid initial club tier." };
+  }
+
+  let rowCount = 0;
+  if (decision === "approved") {
+    const r = await query(
+      `UPDATE viewer_streamer_superfan_memberships
+       SET status = 'approved',
+           club_tier = $4::text,
+           reviewed_by = $2::uuid,
+           reviewed_at = now(),
+           updated_at = now()
+       WHERE id = $1::uuid AND streamer_user_id = $3::uuid AND status = 'pending'`,
+      [membershipId, reviewerUserId, streamerUserId, tier]
+    );
+    rowCount = r.rowCount ?? 0;
+  } else {
+    const r = await query(
+      `UPDATE viewer_streamer_superfan_memberships
+       SET status = 'rejected',
+           club_tier = NULL,
+           reviewed_by = $2::uuid,
+           reviewed_at = now(),
+           updated_at = now()
+       WHERE id = $1::uuid AND streamer_user_id = $3::uuid AND status = 'pending'`,
+      [membershipId, reviewerUserId, streamerUserId]
+    );
+    rowCount = r.rowCount ?? 0;
+  }
   if (rowCount === 0) {
     return { ok: false, error: "Request not found or already decided." };
   }
@@ -220,6 +256,112 @@ export async function isApprovedSuperfanForStreamer(
     [viewerUserId, streamerUserId]
   );
   return rows.length > 0;
+}
+
+export async function getFanClubMembership(
+  viewerUserId: string,
+  streamerUserId: string
+): Promise<SuperfanMembershipRow | null> {
+  const { rows } = await query<SuperfanMembershipRow>(
+    `SELECT id, viewer_user_id, streamer_user_id, message, status, club_tier::text, reviewed_at, created_at, updated_at
+     FROM viewer_streamer_superfan_memberships
+     WHERE viewer_user_id = $1::uuid AND streamer_user_id = $2::uuid
+     LIMIT 1`,
+    [viewerUserId, streamerUserId]
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return { ...r, club_tier: (r.club_tier as ClubTier | null) ?? null };
+}
+
+export async function listApprovedFanClubMembers(streamerUserId: string): Promise<
+  (SuperfanMembershipRow & { viewer_email: string; viewer_display_name: string | null })[]
+> {
+  const { rows } = await query<
+    SuperfanMembershipRow & { viewer_email: string; viewer_display_name: string | null }
+  >(
+    `SELECT m.id, m.viewer_user_id, m.streamer_user_id, m.message, m.status, m.club_tier::text, m.reviewed_at, m.created_at, m.updated_at,
+            u.email AS viewer_email, u.display_name AS viewer_display_name
+     FROM viewer_streamer_superfan_memberships m
+     INNER JOIN users u ON u.id = m.viewer_user_id
+     WHERE m.streamer_user_id = $1::uuid AND m.status = 'approved'
+     ORDER BY CASE m.club_tier WHEN 'mod' THEN 0 WHEN 'superfan' THEN 1 WHEN 'fan' THEN 2 ELSE 3 END,
+              u.display_name NULLS LAST, u.email`,
+    [streamerUserId]
+  );
+  return rows.map((r) => ({
+    ...r,
+    club_tier: (r.club_tier as ClubTier | null) ?? null,
+  }));
+}
+
+export async function setMemberClubTier(
+  streamerUserId: string,
+  membershipId: string,
+  clubTier: ClubTier
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { rowCount } = await query(
+    `UPDATE viewer_streamer_superfan_memberships
+     SET club_tier = $3::text, updated_at = now()
+     WHERE id = $2::uuid AND streamer_user_id = $1::uuid AND status = 'approved'`,
+    [streamerUserId, membershipId, clubTier]
+  );
+  if (rowCount === 0) return { ok: false, error: "Member not found or not active." };
+  return { ok: true };
+}
+
+export async function revokeFanClubMembership(params: {
+  membershipId: string;
+  streamerUserId: string;
+  actorUserId: string;
+  actorIsStreamer: boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { rows } = await query<{
+    id: string;
+    viewer_user_id: string;
+    club_tier: string | null;
+    status: string;
+  }>(
+    `SELECT id, viewer_user_id, club_tier::text, status::text FROM viewer_streamer_superfan_memberships
+     WHERE id = $1::uuid AND streamer_user_id = $2::uuid`,
+    [params.membershipId, params.streamerUserId]
+  );
+  const m = rows[0];
+  if (!m || m.status !== "approved") {
+    return { ok: false, error: "Member not found or not active." };
+  }
+
+  if (params.actorIsStreamer) {
+    await query(
+      `UPDATE viewer_streamer_superfan_memberships
+       SET status = 'revoked', club_tier = NULL, updated_at = now() WHERE id = $1::uuid`,
+      [params.membershipId]
+    );
+    return { ok: true };
+  }
+
+  const { rows: modRows } = await query<{ ok: boolean }>(
+    `SELECT true AS ok FROM viewer_streamer_superfan_memberships
+     WHERE viewer_user_id = $1::uuid AND streamer_user_id = $2::uuid
+       AND status = 'approved' AND club_tier = 'mod' LIMIT 1`,
+    [params.actorUserId, params.streamerUserId]
+  );
+  if (modRows.length === 0) {
+    return { ok: false, error: "Only the streamer or a channel mod can remove members." };
+  }
+  if (m.club_tier === "mod") {
+    return { ok: false, error: "Mods cannot remove other mods. Ask the streamer." };
+  }
+  if (m.viewer_user_id === params.actorUserId) {
+    return { ok: false, error: "Use a different flow to leave the fan club (coming soon) or ask the streamer." };
+  }
+
+  await query(
+    `UPDATE viewer_streamer_superfan_memberships
+     SET status = 'revoked', club_tier = NULL, updated_at = now() WHERE id = $1::uuid`,
+    [params.membershipId]
+  );
+  return { ok: true };
 }
 
 /** Admin: pending site applications with user email. */

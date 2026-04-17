@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
-import { isApprovedSuperfanForStreamer } from "@/lib/superfan";
+import { getFanClubMembership, isApprovedSuperfanForStreamer } from "@/lib/superfan";
 
-/** Query: ?streamer_id=uuid — true if current user may open the superfan interaction page for that streamer. */
+/** Query: ?streamer_id=uuid — fan club access + tier for interaction / boards. */
 export async function GET(request: NextRequest) {
   const authErr = requireSession(request);
   if (authErr) return authErr;
@@ -14,5 +14,9 @@ export async function GET(request: NextRequest) {
   }
 
   const allowed = await isApprovedSuperfanForStreamer(session.userId, streamerId);
-  return NextResponse.json({ allowed });
+  const membership = allowed ? await getFanClubMembership(session.userId, streamerId) : null;
+  return NextResponse.json({
+    allowed,
+    club_tier: membership?.club_tier ?? null,
+  });
 }
