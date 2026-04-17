@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.44")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.45")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -6373,6 +6373,7 @@ namespace Oxide.Plugins
             protected virtual void UpdateControlMove(bool inWater, bool isMoving, float depth, float waterLevel)
             {
                 if (owner == null || navigator == null || navigator?.Agent == null || owner?.eyes == null) return;
+                if (!TryEnsureNavMeshAgent()) return;
 
                 Vector3 endPoint = EndPoint;
                 Vector3 agentVelocity = navigator.Agent.velocity;
@@ -6392,7 +6393,8 @@ namespace Oxide.Plugins
                     
                     if (!HasFlag(ModeMove.WaterLerpMove))
                     {
-                        navigator?.Stop();
+                        if (navigator.Agent != null && navigator.Agent.isOnNavMesh)
+                            navigator.Stop();
                         SetFlag(ModeMove.WaterLerpMove, true);
                     }
                 }
@@ -6820,6 +6822,27 @@ namespace Oxide.Plugins
                     }
                 }
             }
+
+            /// <summary>
+            /// Unity logs if <see cref="NavMeshAgent"/> Stop/SetDestination run while off-mesh — snap + Warp first (MaxxInvaders escort).
+            /// </summary>
+            protected bool TryEnsureNavMeshAgent()
+            {
+                if (navigator == null || navigator.Agent == null) return false;
+                if (navigator.Agent.isOnNavMesh) return true;
+                UpdateCurrentPosition(3f);
+                if (navigator.Agent.isOnNavMesh) return true;
+                for (var radius = 4f; radius <= 28f; radius += 4f)
+                {
+                    if (!navigator.GetNearestNavmeshPosition(owner.transform.position, out var snapped, radius))
+                        continue;
+                    owner.transform.position = snapped;
+                    navigator.Warp(snapped);
+                    if (navigator.Agent.isOnNavMesh) return true;
+                }
+
+                return false;
+            }
             protected void Finish(bool isFinish)
             {
                 if (finishCallback != null) finishCallback.Invoke(isFinish);
@@ -6850,6 +6873,11 @@ namespace Oxide.Plugins
                     if (callback != null) callback.Invoke(false);
                     return;
                 }
+                if (!TryEnsureNavMeshAgent())
+                {
+                    if (callback != null) callback.Invoke(false);
+                    return;
+                }
                 Reset();
 
                 owner.Ducked = false;
@@ -6869,6 +6897,11 @@ namespace Oxide.Plugins
             public void SetDestination(BaseEntity target, UnityAction<bool> callback, bool faceMoveTowardsTarget = true)
             {
                 if (!navigator)
+                {
+                    if (callback != null) callback.Invoke(false);
+                    return;
+                }
+                if (!TryEnsureNavMeshAgent())
                 {
                     if (callback != null) callback.Invoke(false);
                     return;
@@ -6893,6 +6926,11 @@ namespace Oxide.Plugins
             public void SetDestinationFast(Vector3 worldPos, UnityAction<bool> callback, bool faceMoveTowardsTarget = false)
             {
                 if (!navigator)
+                {
+                    if (callback != null) callback.Invoke(false);
+                    return;
+                }
+                if (!TryEnsureNavMeshAgent())
                 {
                     if (callback != null) callback.Invoke(false);
                     return;
@@ -6964,7 +7002,8 @@ namespace Oxide.Plugins
                 if (waterFactor > 0.85f) currentPos.y += 0.25f;
                 else if (waterFactor < 0.45f) currentPos.y += 0.25f;
 
-                navigator.Stop();
+                if (navigator.Agent != null && navigator.Agent.isOnNavMesh)
+                    navigator.Stop();
 
                 Vector3 currentPosFlat = new Vector3(currentPos.x, 0, currentPos.z);
                 Vector3 endPointFlat = new Vector3(endPoint.x, 0, endPoint.z);
@@ -7030,13 +7069,18 @@ namespace Oxide.Plugins
                         break;
                     }
 
-                    if (!agent.isOnNavMesh)
+                    agent = navigator.Agent;
+                    if (agent == null || !agent.isOnNavMesh)
                         return false;
                 }
 
                 if (!navigator.GetNearestNavmeshPosition(target, out var position, 8f))
                     return false;
                 target = position;
+
+                agent = navigator.Agent;
+                if (agent == null || !agent.isOnNavMesh)
+                    return false;
 
                 return navigator.SetDestination(target, (BaseNavigator.NavigationSpeed)currentSpeed);
             }
