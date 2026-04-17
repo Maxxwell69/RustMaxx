@@ -109,12 +109,12 @@ export default function ViewerSuperfanPage() {
     <div className="mx-auto max-w-2xl px-4 py-12">
       <h1 className="text-2xl font-semibold text-zinc-100">Viewer superfans</h1>
       <p className="mt-2 text-sm text-zinc-400">
-        If you registered as a fan, you are already approved here. Otherwise submit once below. Then open a streamer in
-        the{" "}
+        Submit once below (you are approved immediately — no staff wait). Fans who picked Fan / viewer at signup are
+        usually already on file. Then open a streamer in the{" "}
         <Link href="/streamers" className="text-rust-cyan hover:underline">
           directory
         </Link>{" "}
-        and request access. When that streamer approves, you get an interaction page for that channel.
+        and use Request superfan access on their profile. Each streamer still approves you for their channel.
       </p>
 
       <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
@@ -125,7 +125,8 @@ export default function ViewerSuperfanPage() {
           </p>
         ) : status === "pending" ? (
           <p className="mt-2 text-sm text-zinc-400">
-            Pending staff review. You will be able to request streamers after approval.
+            You started before auto-approval — click <strong className="text-zinc-300">Submit application</strong>{" "}
+            below once to activate; you will be approved immediately.
           </p>
         ) : status === "rejected" ? (
           <p className="mt-2 text-sm text-amber-200/90">Not approved. You can submit a new message below.</p>
@@ -138,7 +139,7 @@ export default function ViewerSuperfanPage() {
             <textarea
               className="mt-4 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600"
               rows={4}
-              placeholder="Tell us a little about you (optional but helps staff approve faster)"
+              placeholder="Optional note (for your own reference or if a streamer asks)"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
@@ -148,7 +149,7 @@ export default function ViewerSuperfanPage() {
               onClick={submitSite}
               className="mt-3 rounded bg-rust-cyan px-4 py-2 text-sm font-medium text-rust-panel shadow-rust-glow hover:opacity-95 disabled:opacity-50"
             >
-              {saving ? "…" : status === "pending" ? "Update message" : "Submit application"}
+              {saving ? "…" : status === "pending" ? "Activate access" : "Submit application"}
             </button>
           </>
         )}

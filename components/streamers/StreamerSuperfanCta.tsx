@@ -80,17 +80,16 @@ export function StreamerSuperfanCta(props: {
     <div className="mt-8 border-t border-zinc-800 pt-6">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Superfans</h2>
       <p className="mt-2 text-sm text-zinc-400">
-        After RustMaxx approves you for viewer superfans, you can request access here. This streamer then approves you
-        for their channel and you can use their{" "}
-        <Link href={`/viewer/interact/${streamerId}`} className="text-rust-cyan hover:underline">
-          fan boards
-        </Link>
-        . Fans who picked the Fan / viewer role at signup are usually approved automatically at registration;
-        everyone else applies on{" "}
+        Complete the one-time{" "}
         <Link href="/viewer/superfan" className="text-rust-cyan hover:underline">
           viewer superfans
         </Link>{" "}
-        first.
+        step (instant approval), then request access here. This streamer still approves you for their channel; then you
+        can use their{" "}
+        <Link href={`/viewer/interact/${streamerId}`} className="text-rust-cyan hover:underline">
+          fan boards
+        </Link>
+        . Fans who picked the Fan / viewer role at signup are usually already on file from registration.
       </p>
 
       {loggedIn === false && (
@@ -114,16 +113,15 @@ export function StreamerSuperfanCta(props: {
               </Link>
             </p>
           ) : siteStatus === "pending" ? (
-            <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-3 text-sm text-amber-100/95">
-              <p className="font-medium text-amber-50">Nothing has been sent to {streamerLabel} yet</p>
-              <p className="mt-2 text-amber-100/85">
-                Your viewer superfan application is waiting on RustMaxx staff. Until it is approved, you cannot submit a
-                channel request, and this streamer will not see you under Fan club → Requests.
-              </p>
-              <p className="mt-2 text-xs text-amber-200/80">
-                <Link href="/viewer/superfan" className="font-medium text-rust-cyan hover:underline">
-                  Check your application status
-                </Link>
+            <div className="rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-3 text-sm text-zinc-300">
+              <p className="font-medium text-zinc-200">Finish viewer superfans once</p>
+              <p className="mt-2 text-zinc-400">
+                Open{" "}
+                <Link href="/viewer/superfan" className="text-rust-cyan hover:underline">
+                  Viewer superfans
+                </Link>{" "}
+                and click <strong className="text-zinc-300">Activate access</strong> (or Submit) — you are approved
+                immediately, then return here to request {streamerLabel}.
               </p>
             </div>
           ) : siteStatus === "approved" && row?.status === "approved" ? (

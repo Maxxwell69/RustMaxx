@@ -308,14 +308,12 @@ export default function StreamerSuperfanIncomingPage() {
             <div className="mt-8 space-y-2">
               <p className="text-sm text-zinc-500">No fan-club join requests yet.</p>
               <p className="text-xs text-zinc-600">
-                Fans appear here only after RustMaxx has <strong className="font-medium text-zinc-500">approved</strong>{" "}
-                their viewer superfan application, then they use{" "}
+                Fans complete the one-time viewer superfans step (instant site approval), then use{" "}
                 <strong className="font-medium text-zinc-500">Request superfan access</strong> on your public profile (
                 <Link href="/streamers" className="text-rust-cyan hover:underline">
                   Streamers
                 </Link>
-                ). People still waiting on staff review are not listed here. Server access requests from the server list go
-                to the server owner, not this list.
+                ). Server access requests from the server list go to the server owner, not this list.
               </p>
             </div>
           ) : (

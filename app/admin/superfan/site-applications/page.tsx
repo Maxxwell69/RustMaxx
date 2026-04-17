@@ -67,14 +67,15 @@ export default function AdminSuperfanSiteApplicationsPage() {
     <div className="mx-auto max-w-4xl p-6">
       <h1 className="text-2xl font-semibold text-zinc-100">Viewer superfan (site) applications</h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Approve viewers so they can request individual streamers.{" "}
+        Viewer superfans are auto-approved when they submit; this list only shows any remaining pending rows (for
+        example before a DB migration cleared the old queue).{" "}
         <Link href="/admin" className="text-rust-cyan hover:underline">
           Admin home
         </Link>
       </p>
 
       {rows.length === 0 ? (
-        <p className="mt-8 text-sm text-zinc-500">No pending applications.</p>
+        <p className="mt-8 text-sm text-zinc-500">No pending site applications.</p>
       ) : (
         <ul className="mt-8 space-y-4">
           {rows.map((r) => (

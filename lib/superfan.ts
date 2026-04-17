@@ -41,7 +41,7 @@ export async function userIsApprovedStreamer(streamerUserId: string): Promise<bo
 
 /**
  * Fans who register with "Fan / viewer" get site-wide approval immediately so they can request
- * access from individual streamers without a staff review. Streamers still approve per channel.
+ * access from individual streamers without submitting the viewer superfans form. Streamers still approve per channel.
  */
 export async function ensureApprovedSiteApplicationForFanSignup(userId: string): Promise<void> {
   await query(
@@ -63,6 +63,10 @@ export async function getViewerSiteApplication(
   return rows[0] ?? null;
 }
 
+/**
+ * Site-wide viewer superfan step: auto-approved on submit (no RustMaxx staff queue).
+ * Streamers still approve each channel separately.
+ */
 export async function submitViewerSiteApplication(
   userId: string,
   message: string | null
@@ -72,11 +76,13 @@ export async function submitViewerSiteApplication(
     return { ok: false, error: "You are already approved for the viewer superfan program." };
   }
 
+  const msg = message?.trim() || null;
+
   if (!existing) {
     await query(
-      `INSERT INTO viewer_superfan_site_applications (user_id, message, status)
-       VALUES ($1::uuid, $2, 'pending')`,
-      [userId, message?.trim() || null]
+      `INSERT INTO viewer_superfan_site_applications (user_id, message, status, reviewed_at, updated_at)
+       VALUES ($1::uuid, $2, 'approved', now(), now())`,
+      [userId, msg]
     );
     return { ok: true };
   }
@@ -84,19 +90,21 @@ export async function submitViewerSiteApplication(
   if (existing.status === "pending") {
     await query(
       `UPDATE viewer_superfan_site_applications
-       SET message = $2, updated_at = now() WHERE user_id = $1::uuid AND status = 'pending'`,
-      [userId, message?.trim() || null]
+       SET message = $2, status = 'approved', reviewed_by = NULL, reviewed_at = now(),
+           admin_notes = NULL, updated_at = now()
+       WHERE user_id = $1::uuid AND status = 'pending'`,
+      [userId, msg]
     );
     return { ok: true };
   }
 
-  // rejected — allow re-apply
+  // rejected — allow re-apply (auto-approved)
   await query(
     `UPDATE viewer_superfan_site_applications
-     SET message = $2, status = 'pending', reviewed_by = NULL, reviewed_at = NULL,
+     SET message = $2, status = 'approved', reviewed_by = NULL, reviewed_at = now(),
          admin_notes = NULL, updated_at = now()
      WHERE user_id = $1::uuid AND status = 'rejected'`,
-    [userId, message?.trim() || null]
+    [userId, msg]
   );
   return { ok: true };
 }
