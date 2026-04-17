@@ -30,6 +30,7 @@ type MemberRow = {
 type Tab = "requests" | "boards" | "members";
 
 export default function StreamerSuperfanIncomingPage() {
+  const [myUserId, setMyUserId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("requests");
   const [rows, setRows] = useState<Req[]>([]);
   const [err, setErr] = useState("");
@@ -90,6 +91,15 @@ export default function StreamerSuperfanIncomingPage() {
 
   useEffect(() => {
     loadRequests();
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { id?: string } | null) => {
+        if (d && typeof d.id === "string") setMyUserId(d.id);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -229,6 +239,21 @@ export default function StreamerSuperfanIncomingPage() {
         from the fan interaction page; you can remove anyone including mods.
       </p>
 
+      {myUserId ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-rust-cyan/30 bg-rust-cyan/5 px-4 py-3">
+          <span className="text-sm text-zinc-300">See your boards as fans will (preview, no RCON):</span>
+          <Link
+            href={`/viewer/interact/${myUserId}?preview=1`}
+            className="inline-flex items-center rounded-lg bg-rust-cyan px-3 py-1.5 text-sm font-medium text-zinc-950 hover:opacity-95"
+          >
+            Open board pages
+          </Link>
+          <Link href="/streamer" className="text-sm text-zinc-500 hover:text-zinc-300">
+            ← Streamer setup
+          </Link>
+        </div>
+      ) : null}
+
       <div className="mt-6 flex flex-wrap gap-2 border-b border-zinc-800 pb-2">
         {tabs.map((t) => (
           <button
@@ -315,6 +340,17 @@ export default function StreamerSuperfanIncomingPage() {
 
       {tab === "boards" && (
         <div className="mt-8 space-y-4">
+          {myUserId ? (
+            <p className="text-sm text-zinc-300">
+              <Link
+                href={`/viewer/interact/${myUserId}?preview=1`}
+                className="font-medium text-rust-cyan hover:underline"
+              >
+                View board pages
+              </Link>{" "}
+              — same layout fans get (preview mode; buttons don&apos;t send commands).
+            </p>
+          ) : null}
           <p className="text-sm text-zinc-500">
             Only actions enabled on your webhook server(s) appear here. Fans see buttons for each board they can
             access (Fan → fan board only; Superfan → fan + superfan; Mod → all boards + mod tools).
