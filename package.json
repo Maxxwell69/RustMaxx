@@ -9,7 +9,6 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "migrate": "npx tsx scripts/migrate.ts",
-    "db:query": "npx tsx scripts/db-query.ts",
     "tiktok:worker": "npx tsx scripts/tiktok-live-worker.ts",
     "cleanup": "npx tsx scripts/cleanup.ts",
     "generate:items": "npx tsx scripts/generate-item-catalog.ts",

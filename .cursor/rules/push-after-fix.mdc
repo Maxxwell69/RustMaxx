@@ -1,0 +1,15 @@
+---
+description: After each fix or feature change, commit and push to git unless the user says otherwise.
+alwaysApply: true
+---
+
+# Push to Git After Fixes
+
+When you make a fix (e.g. fixing a build error, bug, or type error) or complete a requested change:
+
+1. **Commit** the changes with a clear message (e.g. "Fix: ..." or "Add: ...").
+2. **Push** to the current branch (e.g. `Integration` or `main`).
+
+Do not leave fixes uncommitted or unpushed unless the user explicitly asks to skip pushing.
+
+If the user has not specified a branch, push to the branch that is currently checked out.
