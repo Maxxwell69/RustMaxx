@@ -37,6 +37,11 @@ export function SiteHeader() {
   const isDashboard = pathname === "/servers" || pathname?.startsWith("/servers/");
   const isStreamersSection = pathname === "/streamers" || pathname?.startsWith("/streamers/");
   const isViewerSuperfan = pathname === "/viewer" || pathname?.startsWith("/viewer/");
+  const isHome = pathname === "/";
+  const isAppShell =
+    pathname?.startsWith("/servers") ||
+    pathname?.startsWith("/profile") ||
+    pathname?.startsWith("/admin");
 
   const navLinks = useMemo(() => {
     if (!loggedIn) return [...SITE_NAV_LINKS];
@@ -57,10 +62,20 @@ export function SiteHeader() {
         <div className="flex min-w-0 shrink items-center">
           <Link href="/" className="flex items-center" aria-label="RustMaxx home">
             <Logo
-              className="h-9 w-auto sm:h-10"
-              width={200}
-              height={40}
-              fallbackClassName="text-xl font-bold text-rust-cyan sm:text-2xl"
+              className={
+                isHome
+                  ? "h-14 w-auto sm:h-16 md:h-[4.25rem]"
+                  : isAppShell
+                    ? "h-9 w-auto sm:h-10"
+                    : "h-11 w-auto sm:h-12 md:h-14"
+              }
+              width={isHome ? 340 : isAppShell ? 200 : 280}
+              height={isHome ? 68 : isAppShell ? 40 : 54}
+              fallbackClassName={
+                isHome
+                  ? "text-2xl font-bold text-rust-cyan sm:text-3xl md:text-4xl"
+                  : "text-xl font-bold text-rust-cyan sm:text-2xl"
+              }
             />
           </Link>
         </div>

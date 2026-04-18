@@ -1,27 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-
-type Me = {
-  role: string;
-};
+import type { AuthMePayload } from "@/lib/auth-me-payload";
+import { filterDashboardFooterLinksForUser } from "@/components/layout/nav-persona";
 
 export function DashboardFooter() {
-  const [me, setMe] = useState<Me | null>(null);
+  const [me, setMe] = useState<AuthMePayload | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && typeof data.role === "string") {
-          setMe(data);
-        } else {
-          setMe(null);
-        }
+      .then((data: AuthMePayload | null) => {
+        if (data && typeof data === "object" && "email" in data) setMe(data);
+        else setMe(null);
       })
       .catch(() => setMe(null));
   }, []);
+
+  const footerLinks = useMemo(() => filterDashboardFooterLinksForUser(me), [me]);
 
   const isSuperAdmin = me?.role === "super_admin";
 
@@ -30,33 +27,19 @@ export function DashboardFooter() {
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-zinc-500">
-            RustMaxx dashboard. Manage your Rust servers from one place.
+            RustMaxx dashboard. Tools match what you signed up for — server admin, streamer, and fan
+            sections stay separate unless you chose more than one.
           </p>
           <nav className="flex flex-wrap gap-4 text-xs" aria-label="Dashboard footer">
-            <Link
-              href="/servers"
-              className="text-rust-cyan opacity-90 transition-colors hover:opacity-100"
-            >
-              Servers dashboard
-            </Link>
-            <Link
-              href="/server-list"
-              className="text-rust-cyan opacity-90 transition-colors hover:opacity-100"
-            >
-              Public server list
-            </Link>
-            <Link
-              href="/streamers"
-              className="text-rust-cyan opacity-90 transition-colors hover:opacity-100"
-            >
-              Public streamers
-            </Link>
-            <Link
-              href="/streamer-interaction"
-              className="text-rust-cyan opacity-90 transition-colors hover:opacity-100"
-            >
-              Streamer interaction
-            </Link>
+            {footerLinks.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className="text-rust-cyan opacity-90 transition-colors hover:opacity-100"
+              >
+                {label}
+              </Link>
+            ))}
             {isSuperAdmin && (
               <Link
                 href="/admin"
