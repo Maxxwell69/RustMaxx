@@ -6,6 +6,7 @@ import {
   getStreamerApplicationByUserId,
   upsertStreamerApplication,
 } from "@/lib/streamer-applications";
+import { setSignupInterestedStreamer } from "@/lib/users";
 
 function iso(d: Date | string | null | undefined): string {
   if (d == null) return new Date().toISOString();
@@ -85,6 +86,8 @@ export async function POST(request: NextRequest) {
       application_id: result.row.id,
       status: result.row.status,
     }).catch(() => {});
+
+    await setSignupInterestedStreamer(session.userId).catch(() => {});
 
     return NextResponse.json({ ok: true, application: serialize(result.row) });
   } catch (e) {

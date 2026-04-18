@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import type { FanBoardTier } from "@/lib/streamer-fan-board";
+import { setSignupInterestedFan } from "@/lib/users";
 
 export type ClubTier = FanBoardTier;
 
@@ -84,6 +85,7 @@ export async function submitViewerSiteApplication(
        VALUES ($1::uuid, $2, 'approved', now(), now())`,
       [userId, msg]
     );
+    await setSignupInterestedFan(userId).catch(() => {});
     return { ok: true };
   }
 
@@ -95,6 +97,7 @@ export async function submitViewerSiteApplication(
        WHERE user_id = $1::uuid AND status = 'pending'`,
       [userId, msg]
     );
+    await setSignupInterestedFan(userId).catch(() => {});
     return { ok: true };
   }
 
@@ -106,6 +109,7 @@ export async function submitViewerSiteApplication(
      WHERE user_id = $1::uuid AND status = 'rejected'`,
     [userId, msg]
   );
+  await setSignupInterestedFan(userId).catch(() => {});
   return { ok: true };
 }
 

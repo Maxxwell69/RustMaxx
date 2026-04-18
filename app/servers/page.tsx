@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { AuthMePayload } from "@/lib/auth-me-payload";
-import { dashboardPersonaPanels } from "@/components/layout/nav-persona";
+import {
+  activePersonaSummary,
+  dashboardPersonaPanels,
+  explorePersonaCtas,
+} from "@/components/layout/nav-persona";
 import { LogoUpload } from "./logo-upload";
 
 type Server = {
@@ -82,6 +86,13 @@ export default function ServersPage() {
     if (panels.fan) return "Fan tools";
     return "Dashboard";
   }, [panels]);
+
+  const personaSummary = useMemo(
+    () => (me != null ? activePersonaSummary(me) : null),
+    [me]
+  );
+
+  const exploreCtas = useMemo(() => (me != null ? explorePersonaCtas(me) : null), [me]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -169,6 +180,14 @@ export default function ServersPage() {
         <p className="mt-1 text-sm text-zinc-500">
           Sections match your signup choices. Multiple choices means you see each matching block below.
         </p>
+        {personaSummary && (
+          <p className="mt-2 text-sm text-zinc-400">{personaSummary}</p>
+        )}
+        {me && (
+          <p className="mt-1 text-xs text-zinc-600">
+            Signed in as <span className="text-zinc-500">{me.email}</span>
+          </p>
+        )}
       </div>
 
       {!showAnyPanel && (
@@ -487,6 +506,38 @@ export default function ServersPage() {
               </Link>
             </li>
           </ul>
+        </section>
+      )}
+
+      {exploreCtas && (exploreCtas.showStreamer || exploreCtas.showFan) && (
+        <section
+          className="rounded-xl border border-dashed border-zinc-600/70 bg-zinc-950/50 p-5"
+          aria-labelledby="dash-explore"
+        >
+          <h2 id="dash-explore" className="text-base font-medium text-zinc-200">
+            Add more to your RustMaxx
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Only if you want tools you didn&apos;t pick at registration. Submitting applies your account to that track.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            {exploreCtas.showStreamer && (
+              <Link
+                href="/streamer/register"
+                className="inline-flex items-center justify-center rounded-lg bg-rust-cyan px-4 py-2.5 text-center text-sm font-semibold text-rust-panel shadow-rust-glow hover:opacity-95"
+              >
+                Activate streamer tools
+              </Link>
+            )}
+            {exploreCtas.showFan && (
+              <Link
+                href="/viewer/superfan"
+                className="inline-flex items-center justify-center rounded-lg border border-zinc-600 bg-zinc-800/90 px-4 py-2.5 text-center text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+              >
+                Fan / superfan application
+              </Link>
+            )}
+          </div>
         </section>
       )}
     </div>

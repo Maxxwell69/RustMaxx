@@ -381,6 +381,30 @@ export async function updateUserLastLogin(userId: string): Promise<void> {
   await query(`UPDATE users SET last_login_at = now(), updated_at = now() WHERE id = $1`, [userId]);
 }
 
+/** Marks user as interested in streamer tools (dashboard / nav). Idempotent. */
+export async function setSignupInterestedStreamer(userId: string): Promise<void> {
+  try {
+    await query(
+      `UPDATE users SET signup_interested_streamer = true, updated_at = now() WHERE id = $1::uuid`,
+      [userId]
+    );
+  } catch (e) {
+    if (!isPgUndefinedColumnError(e)) throw e;
+  }
+}
+
+/** Marks user as interested in fan / viewer tools (dashboard / nav). Idempotent. */
+export async function setSignupInterestedFan(userId: string): Promise<void> {
+  try {
+    await query(
+      `UPDATE users SET signup_interested_fan = true, updated_at = now() WHERE id = $1::uuid`,
+      [userId]
+    );
+  } catch (e) {
+    if (!isPgUndefinedColumnError(e)) throw e;
+  }
+}
+
 const DISPLAY_NAME_MAX = 120;
 
 /** Updates the signed-in user’s display label (dashboard, directory fallbacks). Empty or null clears it. */
