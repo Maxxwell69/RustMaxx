@@ -69,17 +69,17 @@ export function SiteHeader() {
             <Logo
               className={
                 isHome
-                  ? "h-14 w-auto sm:h-16 md:h-[4.25rem]"
+                  ? "h-28 w-auto sm:h-32 md:h-[8.5rem]"
                   : isAppShell
-                    ? "h-9 w-auto sm:h-10"
-                    : "h-11 w-auto sm:h-12 md:h-14"
+                    ? "h-[4.5rem] w-auto sm:h-20"
+                    : "h-[5.5rem] w-auto sm:h-24 md:h-28"
               }
-              width={isHome ? 340 : isAppShell ? 200 : 280}
-              height={isHome ? 68 : isAppShell ? 40 : 54}
+              width={isHome ? 680 : isAppShell ? 400 : 560}
+              height={isHome ? 136 : isAppShell ? 80 : 108}
               fallbackClassName={
                 isHome
-                  ? "text-2xl font-bold text-rust-cyan sm:text-3xl md:text-4xl"
-                  : "text-xl font-bold text-rust-cyan sm:text-2xl"
+                  ? "text-4xl font-bold text-rust-cyan sm:text-5xl md:text-6xl"
+                  : "text-3xl font-bold text-rust-cyan sm:text-4xl"
               }
             />
           </Link>

@@ -120,7 +120,7 @@ export default function PublicServerDetailPage() {
             ← Server list
           </Link>
           <div className="mt-6 flex flex-wrap items-start gap-4">
-            <ServerLogo url={server.logo_url} alt="" />
+            <ServerLogo url={server.logo_url} alt="" fallbackLabel={displayName} />
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-bold text-zinc-100">{displayName}</h1>
               {server.location?.trim() ? (

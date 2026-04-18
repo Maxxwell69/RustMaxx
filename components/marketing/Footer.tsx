@@ -29,10 +29,10 @@ export function Footer() {
           <div className="lg:col-span-1">
             <Link href="/" className="inline-block">
               <Logo
-                className="h-8 w-auto"
-                width={160}
-                height={32}
-                fallbackClassName="text-lg font-bold text-rust-cyan"
+                className="h-16 w-auto"
+                width={320}
+                height={64}
+                fallbackClassName="text-2xl font-bold text-rust-cyan"
               />
             </Link>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-zinc-500">

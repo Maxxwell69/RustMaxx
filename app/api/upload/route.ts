@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
-import { UPLOADS_DIR } from "@/lib/upload-files";
+import { getUploadsDir } from "@/lib/upload-files";
 
 const MAX_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -37,8 +37,9 @@ export async function POST(request: NextRequest) {
 
     const ext = EXT_MAP[type] || ".jpg";
     const name = `${randomUUID()}${ext}`;
-    await mkdir(UPLOADS_DIR, { recursive: true });
-    const filePath = path.join(UPLOADS_DIR, name);
+    const uploadsDir = getUploadsDir();
+    await mkdir(uploadsDir, { recursive: true });
+    const filePath = path.join(uploadsDir, name);
     const bytes = await file.arrayBuffer();
     await writeFile(filePath, Buffer.from(bytes));
 

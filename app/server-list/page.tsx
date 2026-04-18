@@ -72,6 +72,7 @@ export default function ServerListPage() {
                       <ServerLogo
                         url={s.logo_url}
                         alt=""
+                        fallbackLabel={displayName}
                         frameClassName="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-rust-border bg-rust-panel"
                       />
                       <div className="min-w-0 flex-1">

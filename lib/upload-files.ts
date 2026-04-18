@@ -1,7 +1,15 @@
 import path from "path";
 
-/** On-disk folder used by POST /api/upload (must match GET /api/uploads/[filename]). */
-export const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
+/**
+ * Filesystem folder for POST /api/upload and GET /api/uploads/[filename].
+ * Default: `public/uploads` under the app (ephemeral on many hosts).
+ * For persistent logos on Railway etc., mount a volume and set `UPLOADS_DIR` to an absolute path.
+ */
+export function getUploadsDir(): string {
+  const fromEnv = process.env.UPLOADS_DIR?.trim();
+  if (fromEnv && path.isAbsolute(fromEnv)) return fromEnv;
+  return path.join(process.cwd(), "public", "uploads");
+}
 
 const MIME: Record<string, string> = {
   ".png": "image/png",
@@ -21,7 +29,7 @@ export function isSafeUploadBasename(filename: string): boolean {
 
 export function absolutePathForUploadBasename(filename: string): string | null {
   if (!isSafeUploadBasename(filename)) return null;
-  return path.join(UPLOADS_DIR, filename);
+  return path.join(getUploadsDir(), filename);
 }
 
 export function contentTypeForUploadBasename(filename: string): string {
