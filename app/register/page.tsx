@@ -51,19 +51,8 @@ function RegisterForm() {
         setError(data.error ?? "Registration failed");
         return;
       }
-      const owner = interestedServerOwner;
-      const streamer = interestedStreamer;
-      const fan = interestedFan;
-      const goProfile = owner || streamer;
-      const fanOnly = fan && !owner && !streamer;
-      const ownerOnly = owner && !streamer && !fan;
-      const streamerOnly = streamer && !owner && !fan;
-      let dest = "/servers";
-      if (fanOnly) dest = "/viewer/superfan";
-      else if (ownerOnly) dest = "/servers";
-      else if (streamerOnly) dest = "/profile";
-      else if (goProfile) dest = "/profile";
-      router.push(dest);
+      // Land everyone on the dashboard first; persona blocks and profile link from there.
+      router.push("/servers");
       router.refresh();
     } catch {
       setError("Network error");
