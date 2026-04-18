@@ -16,8 +16,8 @@ export const SITE_NAV_LINKS = [
   { href: "/streamers", label: "Streamers", owner: false, streamer: true, fan: true },
   { href: "/viewer/superfan", label: "Superfans", owner: false, streamer: false, fan: true },
   {
-    href: "/streamer-interaction",
-    label: "Streamer Interaction",
+    href: "/streamer",
+    label: "Streamer setup",
     owner: false,
     streamer: true,
     fan: false,
@@ -33,8 +33,8 @@ export const DASHBOARD_FOOTER_LINKS = [
   { href: "/server-list", label: "Public server list", owner: true, streamer: false, fan: false },
   { href: "/streamers", label: "Public streamers", owner: false, streamer: true, fan: true },
   {
-    href: "/streamer-interaction",
-    label: "Streamer interaction",
+    href: "/streamer",
+    label: "Streamer setup",
     owner: false,
     streamer: true,
     fan: false,
@@ -74,9 +74,9 @@ export function filterDashboardFooterLinksForUser(me: MeForPersona | null): Pers
 }
 
 export type DashboardPersonaPanels = {
-  /** Server list + RCON tools: owner signup, invited access (has servers), or staff. */
+  /** Server list + RCON: only if user signed up as server owner (not streamer-only). Staff always. */
   serverAdmin: boolean;
-  /** Add-server form: owners and staff only (not invite-only moderators). */
+  /** Add-server form: owner signup or staff only. */
   showAddServerForm: boolean;
   streamer: boolean;
   fan: boolean;
@@ -85,7 +85,7 @@ export type DashboardPersonaPanels = {
 /** Which dashboard (/servers) panels to show: isolated by signup intent; union when multiple; staff sees all. */
 export function dashboardPersonaPanels(
   me: MeForPersona | null,
-  opts: { authenticated: boolean; serverCount: number }
+  opts: { authenticated: boolean }
 ): DashboardPersonaPanels {
   if (!opts.authenticated || !me) {
     return { serverAdmin: false, showAddServerForm: false, streamer: false, fan: false };
@@ -99,12 +99,15 @@ export function dashboardPersonaPanels(
     !me.signup_interested_streamer &&
     !me.signup_interested_fan;
   if (legacyNoIntent) {
+    if (me.role === "streamer") {
+      return { serverAdmin: false, showAddServerForm: false, streamer: true, fan: false };
+    }
     return { serverAdmin: true, showAddServerForm: true, streamer: true, fan: true };
   }
 
   const ownerSignup = me.signup_interested_server_owner === true;
   return {
-    serverAdmin: ownerSignup || opts.serverCount > 0,
+    serverAdmin: ownerSignup,
     showAddServerForm: ownerSignup,
     streamer: me.signup_interested_streamer === true || me.role === "streamer",
     fan: me.signup_interested_fan === true,

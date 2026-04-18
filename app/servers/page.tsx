@@ -69,9 +69,8 @@ export default function ServersPage() {
     if (me === undefined) return null;
     return dashboardPersonaPanels(me, {
       authenticated: me !== null,
-      serverCount: servers.length,
     });
-  }, [me, servers.length]);
+  }, [me]);
 
   const pageTitle = useMemo(() => {
     if (!panels) return "Dashboard";
@@ -433,11 +432,13 @@ export default function ServersPage() {
             </li>
             <li>
               <Link
-                href="/streamer-interaction"
+                href="/streamer"
                 className="block rounded-lg border border-zinc-700 bg-zinc-950/50 px-4 py-3 transition-colors hover:border-rust-cyan/40 hover:text-rust-cyan"
               >
-                <span className="font-medium text-zinc-200">Streamer interaction</span>
-                <span className="mt-0.5 block text-xs text-zinc-500">Hooks &amp; live commands</span>
+                <span className="font-medium text-zinc-200">Streamer setup</span>
+                <span className="mt-0.5 block text-xs text-zinc-500">
+                  TikFinity webhooks, hooks &amp; live commands
+                </span>
               </Link>
             </li>
             <li className="sm:col-span-2">

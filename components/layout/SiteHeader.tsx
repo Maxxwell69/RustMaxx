@@ -36,12 +36,16 @@ export function SiteHeader() {
 
   const isDashboard = pathname === "/servers" || pathname?.startsWith("/servers/");
   const isStreamersSection = pathname === "/streamers" || pathname?.startsWith("/streamers/");
+  const isStreamerSetup =
+    pathname === "/streamer" || (pathname?.startsWith("/streamer/") ?? false);
   const isViewerSuperfan = pathname === "/viewer" || pathname?.startsWith("/viewer/");
   const isHome = pathname === "/";
   const isAppShell =
     pathname?.startsWith("/servers") ||
     pathname?.startsWith("/profile") ||
-    pathname?.startsWith("/admin");
+    pathname?.startsWith("/admin") ||
+    pathname === "/streamer" ||
+    (pathname?.startsWith("/streamer/") ?? false);
 
   const navLinks = useMemo(() => {
     if (!loggedIn) return [...SITE_NAV_LINKS];
@@ -51,6 +55,7 @@ export function SiteHeader() {
 
   function navLinkActive(href: string): boolean {
     if (href === "/servers") return isDashboard;
+    if (href === "/streamer") return isStreamerSetup;
     if (href === "/streamers") return isStreamersSection;
     if (href === "/viewer/superfan") return isViewerSuperfan;
     return pathname === href;
