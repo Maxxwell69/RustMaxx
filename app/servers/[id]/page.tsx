@@ -144,6 +144,24 @@ export default function ServerDetailPage() {
     [streamerSelectableItems]
   );
 
+  /** Put maxxinvaders first so server admins find the per-server toggle quickly. */
+  const streamerSelectableSorted = useMemo(() => {
+    const list = [...streamerSelectable];
+    list.sort((a, b) => {
+      if (a.action_key === "maxxinvaders" && b.action_key !== "maxxinvaders") return -1;
+      if (b.action_key === "maxxinvaders" && a.action_key !== "maxxinvaders") return 1;
+      return a.action_key.localeCompare(b.action_key);
+    });
+    return list;
+  }, [streamerSelectable]);
+
+  const maxxinvadersSelectableOnPlatform = useMemo(
+    () =>
+      streamerSelectable.some((o) => o.action_key === "maxxinvaders") &&
+      Boolean(platformMaxxInvaders?.envEnabled && platformMaxxInvaders?.catalogActive),
+    [streamerSelectable, platformMaxxInvaders]
+  );
+
   const scrollToBottom = useCallback(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
@@ -583,7 +601,7 @@ export default function ServerDetailPage() {
         setStreamerRequireApproval(data.streamer_join_requires_owner_approval);
       }
       setStreamerFeedback(
-        "Saved. Streamers may only trigger the actions and items you checked (platform catalog may further restrict actions)."
+        "Saved. On this server, streamers may only use the actions and items you checked (RustMaxx platform catalog must also allow each action)."
       );
     } finally {
       setStreamerSaving(false);
@@ -1230,9 +1248,13 @@ export default function ServerDetailPage() {
                 <h2 className="text-sm font-medium text-zinc-300">Streamer interactions</h2>
                 <p className="text-xs text-zinc-500">
                   Allow TikFinity streamers to target this server from{" "}
-                  <strong className="text-zinc-400">Streamer interactions</strong>. Check actions below (
-                  <strong className="text-zinc-400">maxxinvaders</strong> appears only when RustMaxx admins enable it on the
-                  platform).
+                  <strong className="text-zinc-400">Streamer interactions</strong>.{" "}
+                  <strong className="text-zinc-400">RustMaxx admins</strong> decide which actions exist platform-wide (
+                  <strong className="text-zinc-400">Admin → Streamer action catalog</strong>);{" "}
+                  <strong className="text-zinc-400">you</strong> (server owner or server admin) choose which of those
+                  actions are allowed <strong className="text-zinc-400">on this server</strong> by checking them below and
+                  saving. <strong className="text-zinc-400">maxxinvaders</strong> only appears here when it is active on the
+                  platform.
                 </p>
                 <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-2">
                   <button
@@ -1370,13 +1392,22 @@ export default function ServerDetailPage() {
                     <strong className="text-amber-50">Admin → Streamer action catalog</strong> before you can enable it here.
                   </div>
                 ) : null}
+                {maxxinvadersSelectableOnPlatform ? (
+                  <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/25 px-3 py-2 text-xs text-emerald-100/95">
+                    <strong className="text-emerald-50">Enable MaxxInvaders for streamers on this server</strong> — Turn on{" "}
+                    <strong className="text-emerald-50">Allow streamers to use this server</strong> above (if needed), check{" "}
+                    <code className="rounded bg-zinc-900 px-1">maxxinvaders</code> under <strong className="text-emerald-50">Allowed actions</strong>, then click{" "}
+                    <strong className="text-emerald-50">Save streamer settings</strong>. Only servers you configure this way
+                    accept MaxxInvaders viewer-bot webhooks; uncheck to turn it off for this server only.
+                  </div>
+                ) : null}
                 <div>
                   <p className="mb-2 text-xs font-medium text-zinc-400">Allowed actions</p>
                   {streamerSelectable.length === 0 ? (
                     <p className="text-xs text-zinc-600">Loading actions…</p>
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {streamerSelectable.map((opt) => (
+                      {streamerSelectableSorted.map((opt) => (
                         <label
                           key={opt.action_key}
                           className="flex cursor-pointer items-start gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-2 py-1.5 text-xs text-zinc-300 hover:border-zinc-700"
