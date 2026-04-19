@@ -10,6 +10,10 @@ import {
   isRustChaosStatusEffectAction,
   SOLO_SPAWN_REPEAT_MAX,
 } from "@/lib/tikfinity";
+import {
+  buildStreamerHookQueryUrl,
+  STREAMER_MAXXINVADERS_URL_PRESETS,
+} from "@/lib/streamer-maxxinvaders-urls";
 
 const LEGACY_WH_STORAGE = "rustmaxx_streamer_wh";
 const SECRET_MAP_KEY = "rustmaxx_streamer_wh_by_pub";
@@ -214,6 +218,9 @@ export default function StreamerDashboardPage() {
   const [urlCopied, setUrlCopied] = useState(false);
   const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
   const [allRulesCopied, setAllRulesCopied] = useState(false);
+  const [maxxAllServersCopied, setMaxxAllServersCopied] = useState(false);
+  const [maxxCopiedHookId, setMaxxCopiedHookId] = useState<string | null>(null);
+  const [maxxCopiedRowKey, setMaxxCopiedRowKey] = useState<string | null>(null);
   /** Shown after rotating webhook secret — rule URLs on this page already use the new token. */
   const [rotateHint, setRotateHint] = useState<string | null>(null);
   const [ruleName, setRuleName] = useState("");
@@ -401,7 +408,7 @@ export default function StreamerDashboardPage() {
         setSecretByPublicId((prev) => ({ ...prev, [publicId]: data.webhookSecret }));
       }
       setRotateHint(
-        "New secret is active. Every rule URL below now uses this token — use Copy all rule webhooks (or each Copy webhook) and paste into TikFinity to replace old URLs. RustMaxx cannot change TikFinity for you."
+        "New secret is active. Every rule URL and every MaxxInvaders URL in the section below now uses this token — use Copy all rule webhooks, Copy all MaxxInvaders URLs (per server or all servers), or each Copy button, and paste into TikFinity to replace old URLs. RustMaxx cannot change TikFinity for you."
       );
       window.setTimeout(() => setRotateHint(null), 18_000);
     }
@@ -430,6 +437,80 @@ export default function StreamerDashboardPage() {
       await navigator.clipboard.writeText(fullUrl);
       setUrlCopied(true);
       window.setTimeout(() => setUrlCopied(false), 2000);
+    } catch {
+      setErr("Could not copy to clipboard");
+    }
+  }
+
+  async function copyAllMaxxUrlsForHook(hookId: string) {
+    setErr("");
+    setRotateHint(null);
+    const h = state?.hooks.find((x) => x.id === hookId);
+    if (!h?.webhookUrl) return;
+    const token =
+      secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
+    if (!token) {
+      setErr("Reveal the webhook URL or New secret for this server first.");
+      return;
+    }
+    const lines: string[] = [];
+    lines.push(`${h.serverName ?? "Server"} — MaxxInvaders / roaming bots`);
+    lines.push("");
+    for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS) {
+      const url = buildStreamerHookQueryUrl(h.webhookUrl, token, preset.params);
+      lines.push(preset.label);
+      if (preset.hint) lines.push(`(${preset.hint})`);
+      lines.push(url);
+      lines.push("");
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join("\n").trimEnd());
+      setMaxxCopiedHookId(hookId);
+      window.setTimeout(() => setMaxxCopiedHookId(null), 2500);
+    } catch {
+      setErr("Could not copy to clipboard");
+    }
+  }
+
+  async function copyAllMaxxUrlsAllHooks() {
+    setErr("");
+    setRotateHint(null);
+    const hooksList = state?.hooks ?? [];
+    const blocks: string[] = [];
+    for (const h of hooksList) {
+      const token =
+        secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
+      if (!h.webhookUrl || !token) continue;
+      const lines: string[] = [];
+      lines.push(`=== ${h.serverName ?? h.serverId} — MaxxInvaders / roaming bots ===`);
+      lines.push("");
+      for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS) {
+        const url = buildStreamerHookQueryUrl(h.webhookUrl, token, preset.params);
+        lines.push(preset.label);
+        lines.push(url);
+        lines.push("");
+      }
+      blocks.push(lines.join("\n").trimEnd());
+    }
+    if (blocks.length === 0) {
+      setErr("Reveal webhook tokens under Game servers first (each server needs Copy webhook URL or New secret).");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(blocks.join("\n\n"));
+      setMaxxAllServersCopied(true);
+      window.setTimeout(() => setMaxxAllServersCopied(false), 2500);
+    } catch {
+      setErr("Could not copy to clipboard");
+    }
+  }
+
+  async function copyMaxxPresetUrl(fullUrl: string, rowKey: string) {
+    setErr("");
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setMaxxCopiedRowKey(rowKey);
+      window.setTimeout(() => setMaxxCopiedRowKey(null), 2000);
     } catch {
       setErr("Could not copy to clipboard");
     }
@@ -637,6 +718,11 @@ export default function StreamerDashboardPage() {
   const serversAvailableToAdd = servers.filter((s) => !serverIdsWithHooks.has(s.id));
   const serverForAdd = servers.find((s) => s.id === serverId);
   const canSubmitWebhookAdd = Boolean(serverId);
+  const maxxReadyHooks = hooks.filter((h) => {
+    const token =
+      secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
+    return Boolean(h.webhookUrl && token);
+  });
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl p-6">
@@ -941,6 +1027,119 @@ export default function StreamerDashboardPage() {
         ) : null}
       </section>
 
+      <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
+          MaxxInvaders &amp; viewer bots
+        </h2>
+        <p className="mb-3 text-xs text-zinc-500">
+          All TikFinity webhook lines below use the same{" "}
+          <code className="rounded bg-zinc-800 px-1">?token=…</code> as{" "}
+          <strong className="text-zinc-400">Game servers &amp; webhooks</strong>. When you click{" "}
+          <strong className="text-zinc-400">New secret</strong>, this page rebuilds every URL from the new token — use{" "}
+          <strong className="text-zinc-300">Copy all MaxxInvaders URLs</strong> (or copy per server / per row) and replace
+          the old lines in TikFinity.
+        </p>
+        {hooks.length === 0 ? (
+          <p className="text-sm text-zinc-500">Add a webhook under Game servers first.</p>
+        ) : (
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={maxxReadyHooks.length === 0}
+                title={
+                  maxxReadyHooks.length === 0 ? "Reveal each server’s webhook URL under Game servers first" : undefined
+                }
+                onClick={() => void copyAllMaxxUrlsAllHooks()}
+                className="rounded-lg border border-violet-800/80 bg-violet-950/40 px-3 py-2 text-xs font-medium text-violet-100 hover:bg-violet-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {maxxAllServersCopied
+                  ? "Copied all servers"
+                  : "Copy all MaxxInvaders URLs (every server)"}
+              </button>
+              <span className="text-[11px] text-zinc-600">
+                Includes every preset row for each server that has a revealed token.
+              </span>
+            </div>
+            <ul className="space-y-5">
+              {hooks.map((h) => {
+                const token =
+                  secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
+                const ready = Boolean(h.webhookUrl && token);
+                return (
+                  <li
+                    key={h.id}
+                    className="rounded-lg border border-violet-900/35 bg-zinc-950/50 p-4"
+                  >
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-zinc-200">{h.serverName ?? "Server"}</p>
+                      <button
+                        type="button"
+                        disabled={!ready}
+                        onClick={() => void copyAllMaxxUrlsForHook(h.id)}
+                        className="shrink-0 rounded-lg border border-violet-700/70 bg-violet-950/50 px-3 py-1.5 text-xs font-medium text-violet-100 hover:bg-violet-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {maxxCopiedHookId === h.id ? "Copied" : "Copy all presets (this server)"}
+                      </button>
+                    </div>
+                    {!ready ? (
+                      <p className="text-xs text-amber-200/90">
+                        Reveal this server’s webhook URL or use <strong className="text-amber-100">New secret</strong> above
+                        so this page can build the preset URLs.
+                      </p>
+                    ) : (
+                      <div className="max-h-[min(28rem,50vh)] overflow-auto rounded border border-zinc-800/80">
+                        <table className="w-full min-w-[280px] text-left text-[11px]">
+                          <thead className="sticky top-0 z-10 bg-zinc-900/95 text-zinc-500">
+                            <tr>
+                              <th className="px-2 py-1.5 font-medium">Preset</th>
+                              <th className="px-2 py-1.5 font-medium">URL</th>
+                              <th className="w-14 px-2 py-1.5 font-medium"> </th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-zinc-300">
+                            {STREAMER_MAXXINVADERS_URL_PRESETS.map((preset) => {
+                              const base = h.webhookUrl as string;
+                              const tok = token as string;
+                              const fullUrl = buildStreamerHookQueryUrl(base, tok, preset.params);
+                              const rowKey = `${h.id}:${preset.id}`;
+                              return (
+                                <tr key={preset.id} className="border-t border-zinc-800/90 align-top">
+                                  <td className="px-2 py-2 text-zinc-200">
+                                    <span className="font-medium">{preset.label}</span>
+                                    {preset.hint ? (
+                                      <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">
+                                        {preset.hint}
+                                      </span>
+                                    ) : null}
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <code className="break-all text-emerald-600/90">{fullUrl}</code>
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => void copyMaxxPresetUrl(fullUrl, rowKey)}
+                                      className="whitespace-nowrap rounded border border-zinc-600 px-2 py-1 text-[10px] text-zinc-300 hover:bg-zinc-800"
+                                    >
+                                      {maxxCopiedRowKey === rowKey ? "Copied" : "Copy"}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </section>
+
       {allowedStreamerItemsByServer.length > 0 ? (
         <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
@@ -990,8 +1189,8 @@ export default function StreamerDashboardPage() {
           <code className="rounded bg-zinc-800 px-1">statusflippers</code>) — most reliable for empty-body TikFinity posts. For
           solo animal/scientist spawns, use <code className="rounded bg-zinc-800 px-1">&amp;count=3</code> (or set count in the rule
           below) to spawn more than one per trigger.
-          After <strong className="text-zinc-300">New secret</strong>, use <strong className="text-zinc-300">Copy all rule webhooks</strong>{" "}
-          or each Copy so TikFinity gets the new token.
+          After <strong className="text-zinc-300">New secret</strong>, use <strong className="text-zinc-300">Copy all rule webhooks</strong>,{" "}
+          <strong className="text-zinc-300">Copy all MaxxInvaders URLs</strong> (section above), or each Copy so TikFinity gets the new token.
         </p>
         {rotateHint ? (
           <p className="mb-4 rounded-lg border border-emerald-900/50 bg-emerald-950/30 p-3 text-xs text-emerald-100/95">
