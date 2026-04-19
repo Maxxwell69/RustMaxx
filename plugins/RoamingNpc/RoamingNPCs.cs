@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.61")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.62")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3598,16 +3598,19 @@ namespace Oxide.Plugins
                     new ItemSetup("largebackpack", 0),
                 };
 
-                // ItemBot(..., canGiveRespawn, ...): only CanGiveRespawn items are placed in inventory on spawn (itemsGiveBot).
-                // Jackhammer must be CanGiveRespawn or it never exists in the bag — ActivatedItem then only finds pickaxe.
+                // ItemBot(canCreate, canGiveRespawn, ...): CanGiveRespawn puts items in bag on spawn.
+                // Jackhammer: both flags true so it spawns and can be recreated; pickaxe remains backup.
                 clone.ItemsMiningOre.Items = new List<ItemBot>
                 {
-                    new ItemBot(false, true, new ItemSetup("jackhammer", 0)),
+                    new ItemBot(true, true, new ItemSetup("jackhammer", 0)),
                     new ItemBot(false, false, new ItemSetup("pickaxe", 0)),
                     new ItemBot(true, true, new ItemSetup("pickaxe", 0)),
                 };
 
                 clone.ItemsMiningTree.Items = new List<ItemBot>();
+
+                // Patrol/hunter clones often carry a hunting knife — Knife and Pickaxe share belt slot index 0.
+                clone.ItemsButcher.Items = new List<ItemBot>();
 
                 clone.ItemsWeapon.CanUseAmmo = true;
                 clone.ItemsWeapon.AmountAmmo = 128;
@@ -5999,6 +6002,12 @@ namespace Oxide.Plugins
                 try
                 {
                     if(IsWounded() || IsIncapacitated()) return false;
+
+                    // Belt index 0 is shared by Pickaxe + Knife enums. Clone templates often spawn a knife + pickaxe;
+                    // foreach below hits CompareItem(slot, pickaxe) before FindItemInMain pulls jackhammer from main.
+                    if (typeItem == SlotItemTools.Pickaxe && TryPreferJackhammerOnMiningBelt())
+                        return true;
+
                     Item slot = inventory.containerBelt.GetSlot((int)typeItem);
                     Item result = null;
                     if (slot != null && slot.isBroken)
@@ -6232,6 +6241,46 @@ namespace Oxide.Plugins
                     if (result != null && result.info == def && result.skin == skin) return result;
                 }
                 return null;
+            }
+
+            /// <summary>
+            /// If a jackhammer exists in main, move it to the mining belt slot before the generic tool loop.
+            /// Otherwise pickaxe already on slot 0 wins CompareItem and the bot never switches to jackhammer.
+            /// </summary>
+            private bool TryPreferJackhammerOnMiningBelt()
+            {
+                try
+                {
+                    var jackDef = ItemManager.FindItemDefinition("jackhammer");
+                    if (jackDef == null) return false;
+                    var beltIdx = (int)SlotItemTools.Pickaxe;
+                    var slotNow = inventory.containerBelt.GetSlot(beltIdx);
+                    if (slotNow != null && slotNow.info == jackDef && slotNow.skin == 0UL)
+                    {
+                        UpdateActiveItem(slotNow.uid);
+                        return GetActiveItem() == slotNow;
+                    }
+
+                    var jack = FindItemInMain(inventory.containerMain, jackDef, 0UL);
+                    if (jack == null || !jack.IsValid()) return false;
+
+                    slotNow?.RemoveFromContainer();
+                    if (!jack.MoveToContainer(inventory.containerBelt, beltIdx))
+                    {
+                        if (slotNow != null && !slotNow.MoveToContainer(inventory.containerMain))
+                            slotNow.Drop(GetDropPosition(), GetDropVelocity());
+                        return false;
+                    }
+
+                    if (slotNow != null && !slotNow.MoveToContainer(inventory.containerMain))
+                        slotNow.Drop(GetDropPosition(), GetDropVelocity());
+                    UpdateActiveItem(jack.uid);
+                    return GetActiveItem() == jack;
+                }
+                catch
+                {
+                    return false;
+                }
             }
             private bool CanGetItemInMain(ItemDefinition def, ulong skin, AmmoTypes ammoType = 0)
             {
