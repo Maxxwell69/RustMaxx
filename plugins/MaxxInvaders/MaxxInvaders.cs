@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.51")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.52")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1029,7 +1029,8 @@ namespace Oxide.Plugins
             anchorPlayer = ResolveAnchorForSpawn(anchorPlayer);
 
             if (!TryFindSpawnPosition(anchorPlayer, out var pos))
-                return SpawnResult.Fail("spawn_position");
+                return SpawnResult.Fail("spawn_position",
+                    "Could not sample a navmesh-backed point (no players→bad 0,0 anchor; rocky/cliff/monument blocks; relax BlockSpawn*, increase SpawnAttempts/DefaultSpawnRadius, set DefaultAnchorSteamId for webhook).");
 
             BasePlayer npcPlayer = null;
             var isRoaming = false;
@@ -1263,7 +1264,8 @@ namespace Oxide.Plugins
         /// Snaps a world position onto walkable NavMesh. Terrain height alone is often a few meters off the mesh,
         /// which triggers "Failed to create agent because it is not close enough to the NavMesh" on NPC spawn.
         /// </summary>
-        private static readonly float[] NavMeshResolveRadii = { 4f, 8f, 12f, 16f, 22f, 28f };
+        private static readonly float[] NavMeshResolveRadii =
+            { 4f, 8f, 12f, 16f, 22f, 28f, 36f, 44f, 52f, 60f };
 
         private static bool ResolveNavMeshPosition(Vector3 approximate, out Vector3 onMesh, float maxSearch = 28f)
         {
@@ -1432,13 +1434,77 @@ namespace Oxide.Plugins
                 return true;
             }
 
+            // Strict pass failed (common on cliffs / mesh edges). Accept navmesh-only without slope polish.
+            for (var i = 0; i < Mathf.Min(64, _cfg.SpawnAttempts + 28); i++)
+            {
+                var flat = Random.insideUnitSphere;
+                flat.y = 0;
+                flat.Normalize();
+                var minRadius = Mathf.Clamp(_cfg.MinimumSpawnRadiusFromAnchor, 0f, _cfg.DefaultSpawnRadius);
+                var maxRadius = Mathf.Max(minRadius + 0.1f, _cfg.DefaultSpawnRadius);
+                var tryPos = anchor + flat * Random.Range(minRadius, maxRadius);
+                tryPos.y = TerrainMeta.HeightMap.GetHeight(tryPos);
+
+                if (_cfg.BlockSpawnInMonuments && InMonumentArea(tryPos)) continue;
+                if (_cfg.BlockSpawnInSafeZones && InSafeZone(tryPos)) continue;
+                if (WaterLevel.Test(tryPos, true, true)) continue;
+                if (!ResolveNavMeshPosition(tryPos, out tryPos, 60f)) continue;
+
+                ulong excludeAnchor = 0UL;
+                if (anchorPlayer != null && anchorPlayer.IsValid())
+                    excludeAnchor = anchorPlayer.userID;
+                if (TooCloseToPlayers(tryPos, _cfg.MinimumDistanceFromPlayers, excludeAnchor)) continue;
+
+                pos = tryPos;
+                return true;
+            }
+
             return false;
         }
 
-        private static Vector3 GetWorldAnchor()
+        /// <summary>
+        /// TikFinity / RCON often have no explicit anchor: never use (0,0,0) — scan sleepers then random mainland navmesh.
+        /// </summary>
+        private Vector3 GetWorldAnchor()
         {
-            var p = BasePlayer.activePlayerList.FirstOrDefault();
-            return p != null ? p.transform.position : Vector3.zero;
+            foreach (var p in BasePlayer.activePlayerList)
+                if (p != null && !p.IsNpc && p.IsValid())
+                    return p.transform.position;
+
+            foreach (var p in BasePlayer.sleepingPlayerList)
+                if (p != null && !p.IsNpc && p.IsValid())
+                    return p.transform.position;
+
+            return SampleMainlandFallbackAnchor();
+        }
+
+        /// <summary>Deterministic-ish mainland point when no bodies exist for anchor (empty server webhook).</summary>
+        private Vector3 SampleMainlandFallbackAnchor()
+        {
+            var sx = TerrainMeta.Size.x;
+            var sz = TerrainMeta.Size.z;
+            var hx = sx * 0.46f;
+            var hz = sz * 0.46f;
+
+            for (var attempt = 0; attempt < 72; attempt++)
+            {
+                var rx = Random.Range(-hx, hx);
+                var rz = Random.Range(-hz, hz);
+                var tryPos = new Vector3(rx, 0f, rz);
+                tryPos.y = TerrainMeta.HeightMap.GetHeight(tryPos);
+
+                if (WaterLevel.Test(tryPos, true, true)) continue;
+                if (InMonumentArea(tryPos)) continue;
+                if (InSafeZone(tryPos)) continue;
+                if (!ResolveNavMeshPosition(tryPos, out tryPos, 72f)) continue;
+
+                return tryPos;
+            }
+
+            var fb = new Vector3(Random.Range(-sx * 0.12f, sx * 0.12f), 0f, Random.Range(-sz * 0.12f, sz * 0.12f));
+            fb.y = TerrainMeta.HeightMap.GetHeight(fb);
+            ResolveNavMeshPosition(fb, out fb, 80f);
+            return fb;
         }
 
         /// <summary>RCON/webhook anchor: online player or sleeping body so spawn + leash use their position.</summary>
