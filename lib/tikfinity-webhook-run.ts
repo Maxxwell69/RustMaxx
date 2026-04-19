@@ -149,9 +149,23 @@ function spawnPositionReplyHint(
     return null;
   }
   if (!hasValidAnchorSteam64(anchorSteam64)) {
-    return "spawn_position: RustMaxx did not resolve a 17-digit anchor — set **Servers → TikFinity patrol anchor**, **Streamer dashboard → Steam64** (same as Profile), add **?anchorSteam=76561198…** to the webhook URL, or **DefaultAnchorSteamId** in MaxxInvaders.json (or `/maxxinvaders anchor`). Full plugin text is in rconResponse.";
+    return "spawn_position: RustMaxx did not resolve a 17-digit anchor. Save Steam64 on Streamer dashboard, add ?anchorSteam=76561198… to the URL, set Servers→TikFinity patrol anchor, or DefaultAnchorSteamId in MaxxInvaders.json. Details: rconResponse.";
   }
-  return "spawn_position: anchor was sent but the game could not place on navmesh — ensure that Steam user is **online or sleeping** on this map, stand on open ground, or raise **DefaultSpawnRadius** / **SpawnAttempts** and relax **BlockSpawn*** in MaxxInvaders.json. Full plugin text is in rconResponse.";
+  return "spawn_position: Anchor reached the game server but MaxxInvaders could not sample navmesh near that player. Join this Rust server with that Steam account (online or sleeping on this wipe), move to open ground away from cliffs/monuments, or ask the host to raise DefaultSpawnRadius/SpawnAttempts in oxide/config/MaxxInvaders.json. Details: rconResponse.";
+}
+
+/** One-line explanation for TikFinity / HTTP clients (502 JSON body). */
+function spawnPosition502Summary(
+  spawnMi: Extract<MaxxinvadersRconResult, { ok: false }>,
+  anchorSteam64: string | null | undefined
+): string | undefined {
+  if (spawnMi.step !== "rcon_reply" || !/spawn_position/i.test(spawnMi.error ?? "")) {
+    return undefined;
+  }
+  if (!hasValidAnchorSteam64(anchorSteam64)) {
+    return "Fix your anchor first (Streamer Steam64 or ?anchorSteam= on the URL). RustMaxx did not send a valid Steam anchor to the game.";
+  }
+  return "RustMaxx and RCON succeeded. The Rust game server rejected spawn placement (spawn_position): join THIS server’s map with your anchor Steam account—online or sleeping—or ask the host to widen spawn radius in MaxxInvaders.json.";
 }
 
 /**
@@ -480,11 +494,13 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
       replyHint =
         "RoamingNPCs.json on the game server must include this template under `Bots settings` with `\"Enable bot?\": true`.";
     }
+    const spawnSummary = spawnPosition502Summary(spawnMi, anchorSteam64);
     return withCors(
       NextResponse.json(
         {
           ok: false,
           error: spawnMi.error ?? "Command send failed",
+          ...(spawnSummary ? { summary: spawnSummary } : {}),
           debug: replyHint,
           step: spawnMi.step,
           command: spawnMi.command,
@@ -1090,14 +1106,16 @@ export async function runTikfinityWebhook(
         spawnMi.step === "rcon_reply" &&
         /no bot key.*under bots settings/i.test(spawnMi.error ?? "")
       ) {
-        replyHint =
-          "The game server’s RoamingNPCs config does not include that bot template key. For `gingynpc` / `eggnpc` / `vampnpc`, copy the `gingy`, `egg`, and `vamp` entries from the RustMaxx repo (`plugins/RoamingNpc/config/gingy-egg-vamp.merge-fragment.json`) into `oxide/config/RoamingNPCs.json` under `Bots settings`, then run `oxide.reload RoamingNPCs`. Each block needs `\"Enable bot?\": true`.";
+      replyHint =
+        "The game server’s RoamingNPCs config does not include that bot template key. For `gingynpc` / `eggnpc` / `vampnpc`, copy the `gingy`, `egg`, and `vamp` entries from the RustMaxx repo (`plugins/RoamingNpc/config/gingy-egg-vamp.merge-fragment.json`) into `oxide/config/RoamingNPCs.json` under `Bots settings`, then run `oxide.reload RoamingNPCs`. Each block needs `\"Enable bot?\": true`.";
       }
+      const spawnSummaryMi = spawnPosition502Summary(spawnMi, anchorSteam64);
       return withCors(
         NextResponse.json(
           {
             ok: false,
             error: spawnMi.error ?? "Command send failed",
+            ...(spawnSummaryMi ? { summary: spawnSummaryMi } : {}),
             debug: replyHint,
             step: spawnMi.step,
             command: spawnMi.command,

@@ -1071,6 +1071,12 @@ export default function StreamerDashboardPage() {
             spawns without extra query params.
           </p>
         )}
+        <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">
+          <strong className="text-zinc-400">502 / spawn_position is usually the game server, not your URL.</strong> RustMaxx only
+          forwards the spawn to your host over RCON. You must be on <strong className="text-zinc-400">that same Rust server’s map</strong>{" "}
+          with the anchor Steam account (online or in a sleeping bag/bed). Cliffs and monuments often fail until you move to open
+          ground or the host widens spawn radius in MaxxInvaders.json.
+        </p>
         {hooks.length === 0 ? (
           <p className="text-sm text-zinc-500">Add a webhook under Game servers first.</p>
         ) : (
