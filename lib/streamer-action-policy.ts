@@ -49,6 +49,16 @@ export function isBaseStreamerAction(key: string): boolean {
   return BASE_SET.has(key);
 }
 
+/**
+ * Ops override: set `RUSTMAXX_PLATFORM_MAXXINVADERS_ENABLED=false` to hide MaxxInvaders from all streamer UIs and webhooks
+ * without editing the DB (Railway / hosting env). Default: enabled; catalog + per-server toggles still apply when enabled.
+ */
+export function isPlatformMaxxInvadersEnvEnabled(): boolean {
+  const v = process.env.RUSTMAXX_PLATFORM_MAXXINVADERS_ENABLED?.trim().toLowerCase();
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return true;
+}
+
 export type StreamerServerPolicy = {
   enabled: boolean;
   /** Actions a streamer may run on this server (intersection: owner selection ∩ platform catalog ∩ base list). */
@@ -79,13 +89,9 @@ export async function getStreamerPolicyForServer(
     : [];
   const effective: string[] = [];
   for (const key of owner) {
-    if (
-      typeof key === "string" &&
-      isBaseStreamerAction(key) &&
-      platform.has(key)
-    ) {
-      effective.push(key);
-    }
+    if (typeof key !== "string" || !isBaseStreamerAction(key) || !platform.has(key)) continue;
+    if (key === "maxxinvaders" && !isPlatformMaxxInvadersEnvEnabled()) continue;
+    effective.push(key);
   }
   effective.sort();
   return { enabled: true, effectiveActions: effective };
@@ -110,13 +116,23 @@ export async function getSelectableStreamerActionsForServer(): Promise<
      WHERE c.is_active = true
      ORDER BY c.action_key ASC`
   );
-  return rows.filter((r) => isBaseStreamerAction(r.action_key));
+  let list = rows.filter((r) => isBaseStreamerAction(r.action_key));
+  if (!isPlatformMaxxInvadersEnvEnabled()) {
+    list = list.filter((r) => r.action_key !== "maxxinvaders");
+  }
+  return list;
 }
 
 export async function assertOwnerActionsAllowedByCatalog(
   keys: string[]
 ): Promise<{ ok: true } | { error: string }> {
   if (keys.length === 0) return { ok: true };
+  if (keys.includes("maxxinvaders") && !isPlatformMaxxInvadersEnvEnabled()) {
+    return {
+      error:
+        "MaxxInvaders is disabled platform-wide (RUSTMAXX_PLATFORM_MAXXINVADERS_ENABLED). Contact RustMaxx operators.",
+    };
+  }
   const { rows } = await query<{ action_key: string }>(
     `SELECT action_key FROM streamer_platform_action_catalog
      WHERE is_active = true AND action_key = ANY($1::text[])`,
@@ -146,6 +162,12 @@ export function validateAllowedActionsPayload(
     if (!isBaseStreamerAction(t)) {
       return {
         error: `Action "${t}" is not in the streamer action allowlist (RustChaos / social / maxxinvaders — see RustMaxx docs).`,
+      };
+    }
+    if (t === "maxxinvaders" && !isPlatformMaxxInvadersEnvEnabled()) {
+      return {
+        error:
+          "MaxxInvaders is disabled platform-wide (RUSTMAXX_PLATFORM_MAXXINVADERS_ENABLED).",
       };
     }
     if (!out.includes(t)) out.push(t);

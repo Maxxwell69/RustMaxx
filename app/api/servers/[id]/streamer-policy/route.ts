@@ -3,6 +3,7 @@ import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
 import { getServerWithRole, canEditServer } from "@/lib/server-access";
 import {
   getSelectableStreamerActionsForServer,
+  isPlatformMaxxInvadersEnvEnabled,
 } from "@/lib/streamer-action-policy";
 import { getSelectablePlatformStreamerItems } from "@/lib/streamer-item-policy";
 import { query } from "@/lib/db";
@@ -35,6 +36,9 @@ export async function GET(
   const row = rows[0];
   const selectable = await getSelectableStreamerActionsForServer();
   const selectableItems = await getSelectablePlatformStreamerItems();
+  const { rows: mxCat } = await query<{ is_active: boolean }>(
+    `SELECT is_active FROM streamer_platform_action_catalog WHERE action_key = 'maxxinvaders' LIMIT 1`
+  );
   return NextResponse.json({
     streamer_interactions_enabled: row?.streamer_interactions_enabled ?? false,
     streamer_join_requires_owner_approval: row?.streamer_join_requires_owner_approval ?? false,
@@ -46,5 +50,9 @@ export async function GET(
       : [],
     selectable,
     selectableItems,
+    platform_maxxinvaders: {
+      envEnabled: isPlatformMaxxInvadersEnvEnabled(),
+      catalogActive: mxCat[0]?.is_active ?? false,
+    },
   });
 }

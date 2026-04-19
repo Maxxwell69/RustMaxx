@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type CatalogRow = {
@@ -24,6 +24,17 @@ export default function AdminStreamerActionsPage() {
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [platformEnv, setPlatformEnv] = useState<{ maxxInvadersEnabled: boolean } | null>(null);
+
+  const catalogSorted = useMemo(() => {
+    const list = [...catalog];
+    list.sort((a, b) => {
+      const pri = (k: string) => (k === "maxxinvaders" ? 0 : 1);
+      const d = pri(a.action_key) - pri(b.action_key);
+      return d !== 0 ? d : a.action_key.localeCompare(b.action_key);
+    });
+    return list;
+  }, [catalog]);
 
   useEffect(() => {
     Promise.all([
@@ -38,6 +49,9 @@ export default function AdminStreamerActionsPage() {
     ])
       .then(([c, s]) => {
         if (c?.catalog) setCatalog(c.catalog);
+        if (c?.platformEnv && typeof c.platformEnv.maxxInvadersEnabled === "boolean") {
+          setPlatformEnv({ maxxInvadersEnabled: c.platformEnv.maxxInvadersEnabled });
+        }
         setServers(Array.isArray(s) ? s : []);
       })
       .catch(() => setForbidden(true))
@@ -81,6 +95,9 @@ export default function AdminStreamerActionsPage() {
       );
       const c = await fetch("/api/admin/streamer-actions").then((r) => (r.ok ? r.json() : null));
       if (c?.catalog) setCatalog(c.catalog);
+      if (c?.platformEnv && typeof c.platformEnv.maxxInvadersEnabled === "boolean") {
+        setPlatformEnv({ maxxInvadersEnabled: c.platformEnv.maxxInvadersEnabled });
+      }
     } finally {
       setSyncBusy(false);
     }
@@ -147,10 +164,28 @@ export default function AdminStreamerActionsPage() {
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
         <h2 className="mb-2 text-lg font-medium text-zinc-200">Platform actions</h2>
         <p className="mb-4 text-sm text-zinc-500">
-          The list follows <strong className="text-zinc-400">STREAMER_BASE_ACTION_KEYS</strong> in code (RustChaos /
-          social). Toggle which actions streamers can be offered. Server owners still choose a subset per server under{" "}
+          RustMaxx administrators control which TikFinity actions exist on the platform. The list follows{" "}
+          <strong className="text-zinc-400">STREAMER_BASE_ACTION_KEYS</strong> in code. Toggle{" "}
+          <strong className="text-zinc-300">Active</strong> so server owners can offer that action under{" "}
           <strong className="text-zinc-400">Servers → Streamer interactions</strong>.
         </p>
+        <div className="mb-4 rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100/95">
+          <p className="font-medium text-emerald-200">MaxxInvaders (viewer bots)</p>
+          <p className="mt-1 text-emerald-100/85">
+            Find <code className="rounded bg-zinc-900 px-1">maxxinvaders</code> below. When{" "}
+            <strong className="text-emerald-100">Active</strong>, hosts can allow{" "}
+            <code className="rounded bg-zinc-900 px-1">maxxinvaders.spawn</code> for streamers (requires MaxxInvaders +
+            RoamingNPCs on the Rust server). When inactive, TikFinity webhooks with{" "}
+            <code className="rounded bg-zinc-900 px-1">?action=maxxinvaders</code> are rejected for every server until you
+            turn it back on.
+          </p>
+          {platformEnv && !platformEnv.maxxInvadersEnabled ? (
+            <p className="mt-2 text-amber-200/95">
+              <strong>Environment override:</strong> <code className="rounded bg-zinc-900 px-1">RUSTMAXX_PLATFORM_MAXXINVADERS_ENABLED=false</code>{" "}
+              — MaxxInvaders is hidden from all streamer flows until this is removed or set to true (ops kill-switch).
+            </p>
+          ) : null}
+        </div>
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -166,7 +201,7 @@ export default function AdminStreamerActionsPage() {
         </div>
         {syncMsg && <p className="mb-4 text-sm text-emerald-400/90">{syncMsg}</p>}
         <ul className="space-y-2">
-          {catalog.map((row) => (
+          {catalogSorted.map((row) => (
             <li
               key={row.action_key}
               className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm"

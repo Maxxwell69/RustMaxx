@@ -114,6 +114,10 @@ export default function ServerDetailPage() {
   const [streamerKickBusyUserId, setStreamerKickBusyUserId] = useState<string | null>(null);
   const [serverCheckoutTier, setServerCheckoutTier] = useState<"pro" | "analytics" | null>(null);
   const [serverCheckoutErr, setServerCheckoutErr] = useState<string | null>(null);
+  const [platformMaxxInvaders, setPlatformMaxxInvaders] = useState<{
+    envEnabled: boolean;
+    catalogActive: boolean;
+  } | null>(null);
   const [streamerSelectableItems, setStreamerSelectableItems] = useState<
     {
       shortname: string;
@@ -203,6 +207,15 @@ export default function ServerDetailPage() {
         }
         if (typeof d.streamer_join_requires_owner_approval === "boolean") {
           setStreamerRequireApproval(d.streamer_join_requires_owner_approval);
+        }
+        if (
+          d.platform_maxxinvaders &&
+          typeof d.platform_maxxinvaders === "object"
+        ) {
+          setPlatformMaxxInvaders({
+            envEnabled: Boolean(d.platform_maxxinvaders.envEnabled),
+            catalogActive: Boolean(d.platform_maxxinvaders.catalogActive),
+          });
         }
       })
       .catch(() => {});
@@ -570,7 +583,7 @@ export default function ServerDetailPage() {
         setStreamerRequireApproval(data.streamer_join_requires_owner_approval);
       }
       setStreamerFeedback(
-        "Saved. Streamers can only use checked actions and items you allow; MaxxInvaders / NPC roaming are not included."
+        "Saved. Streamers may only trigger the actions and items you checked (platform catalog may further restrict actions)."
       );
     } finally {
       setStreamerSaving(false);
@@ -1217,8 +1230,9 @@ export default function ServerDetailPage() {
                 <h2 className="text-sm font-medium text-zinc-300">Streamer interactions</h2>
                 <p className="text-xs text-zinc-500">
                   Allow TikFinity streamers to target this server from{" "}
-                  <strong className="text-zinc-400">Streamer interactions</strong>. Only RustChaos-style commands and TikTok
-                  social announcements (no MaxxInvaders, Roaming NPC, or chaos-wave bundles).
+                  <strong className="text-zinc-400">Streamer interactions</strong>. Check actions below (
+                  <strong className="text-zinc-400">maxxinvaders</strong> appears only when RustMaxx admins enable it on the
+                  platform).
                 </p>
                 <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-2">
                   <button
@@ -1338,6 +1352,23 @@ export default function ServerDetailPage() {
                   <p className="text-xs text-amber-200/90">
                     Turn on at least one action below, or streamers&apos; webhooks will be rejected until you add some.
                   </p>
+                ) : null}
+                {streamerEnabled && platformMaxxInvaders && !platformMaxxInvaders.envEnabled ? (
+                  <div className="rounded-lg border border-amber-800/50 bg-amber-950/40 px-3 py-2 text-xs text-amber-100/95">
+                    <strong className="text-amber-50">MaxxInvaders unavailable</strong> — RustMaxx operators disabled it
+                    platform-wide (<code className="rounded bg-zinc-900 px-1">RUSTMAXX_PLATFORM_MAXXINVADERS_ENABLED=false</code>
+                    ). Viewer-bot webhooks cannot run until that is lifted.
+                  </div>
+                ) : null}
+                {streamerEnabled &&
+                platformMaxxInvaders?.envEnabled &&
+                !platformMaxxInvaders.catalogActive ? (
+                  <div className="rounded-lg border border-amber-800/50 bg-amber-950/40 px-3 py-2 text-xs text-amber-100/95">
+                    <strong className="text-amber-50">MaxxInvaders not on the platform catalog</strong> — A RustMaxx
+                    super admin must set <code className="rounded bg-zinc-900 px-1">maxxinvaders</code> to{" "}
+                    <strong className="text-amber-50">Active</strong> under{" "}
+                    <strong className="text-amber-50">Admin → Streamer action catalog</strong> before you can enable it here.
+                  </div>
                 ) : null}
                 <div>
                   <p className="mb-2 text-xs font-medium text-zinc-400">Allowed actions</p>

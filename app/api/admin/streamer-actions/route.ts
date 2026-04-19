@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCanManageAdmins } from "@/lib/api-auth";
 import { query } from "@/lib/db";
-import { isBaseStreamerAction } from "@/lib/streamer-action-policy";
+import {
+  isBaseStreamerAction,
+  isPlatformMaxxInvadersEnvEnabled,
+} from "@/lib/streamer-action-policy";
 import {
   labelForStreamerCatalogKey,
   mergeStreamerCatalogWithCodebase,
@@ -20,6 +23,10 @@ export async function GET(request: NextRequest) {
   );
   return NextResponse.json({
     catalog: mergeStreamerCatalogWithCodebase(rows),
+    platformEnv: {
+      /** When false, maxxinvaders is hidden from all streamer flows (set RUSTMAXX_PLATFORM_MAXXINVADERS_ENABLED=false). */
+      maxxInvadersEnabled: isPlatformMaxxInvadersEnvEnabled(),
+    },
   });
 }
 
