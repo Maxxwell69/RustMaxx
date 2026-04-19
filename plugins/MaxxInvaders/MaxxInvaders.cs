@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.48")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.49")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1038,6 +1038,9 @@ namespace Oxide.Plugins
                         var teleportPos = pos;
                         if (ResolveNavMeshPosition(pos, out var snapped))
                             teleportPos = snapped;
+                        var refinedBridge = teleportPos;
+                        if (TryRefineGroundNotSteepCliff(ref refinedBridge))
+                            teleportPos = refinedBridge;
                         try
                         {
                             npcPlayer.Teleport(teleportPos);
@@ -1260,6 +1263,25 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// Down-ray + slope check so spawns / TP ALL do not land on cliff rock faces that still have NavMesh strips.
+        /// </summary>
+        private static bool TryRefineGroundNotSteepCliff(ref Vector3 pos)
+        {
+            var from = pos + new Vector3(0f, 40f, 0f);
+            var mask = LayerMask.GetMask("Terrain", "World", "Construction", "Deployed");
+            if (!Physics.Raycast(from, Vector3.down, out var hit, 140f, mask, QueryTriggerInteraction.Ignore))
+                return true;
+            if (Vector3.Angle(hit.normal, Vector3.up) > 58f)
+                return false;
+            var dx = hit.point.x - pos.x;
+            var dz = hit.point.z - pos.z;
+            if (dx * dx + dz * dz > 36f)
+                return false;
+            pos = hit.point;
+            return ResolveNavMeshPosition(pos, out pos);
+        }
+
+        /// <summary>
         /// Teleport an invader NPC to a horizontal ring around the admin (navmesh-safe). Used by GUI TP / TP ALL.
         /// </summary>
         private static bool TryTeleportNpcToAdmin(BasePlayer npcPlayer, BasePlayer admin, float radiusMeters,
@@ -1276,6 +1298,8 @@ namespace Oxide.Plugins
                 tryPos.y = TerrainMeta.HeightMap.GetHeight(tryPos);
                 if (!ResolveNavMeshPosition(tryPos, out tryPos)) return false;
             }
+
+            if (!TryRefineGroundNotSteepCliff(ref tryPos)) return false;
 
             try
             {
@@ -1378,6 +1402,7 @@ namespace Oxide.Plugins
                 if (_cfg.BlockSpawnInSafeZones && InSafeZone(tryPos)) continue;
                 if (WaterLevel.Test(tryPos, true, true)) continue;
                 if (!ResolveNavMeshPosition(tryPos, out tryPos)) continue;
+                if (!TryRefineGroundNotSteepCliff(ref tryPos)) continue;
 
                 ulong excludeAnchor = 0UL;
                 if (anchorPlayer != null && anchorPlayer.IsValid())
@@ -6830,7 +6855,8 @@ namespace Oxide.Plugins
         {
             var player = arg.Connection?.player as BasePlayer;
             if (player == null) return;
-            if (!CanAdmin(player)) return;
+            // Approved streamers see the same Invaders GUI but are not oxide admins — must allow GUI actions (TP ALL, follow, etc.).
+            if (!CanShowInvadersStreamerUi(player)) return;
 
             var args = arg.Args;
             if (args == null || args.Length == 0) return;
