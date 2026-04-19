@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.55")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.56")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -75,6 +75,11 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, ulong> _bridgeLootPetNetByLooter = new();
 
         private readonly Dictionary<ulong, float> _roamingLootUseDebounce = new();
+
+        /// <summary>After bridge medic <see cref="BasePlayer.RecoverFromWounded"/>: block residual fall hits + re-clear bleed/poison/radiation ticks (RustChaos revivechaos pattern).</summary>
+        private readonly Dictionary<ulong, float> _bridgeMedicReviveStabilizeUntil = new();
+
+        private const float BridgeMedicReviveStabilizeSeconds = 12f;
 
         #region Configuration
         public class Configuration
@@ -3014,6 +3019,7 @@ namespace Oxide.Plugins
             }
             _roamingInventoryLootProxies.Clear();
             _roamingLootUseDebounce.Clear();
+            _bridgeMedicReviveStabilizeUntil.Clear();
             SaveBots();
             KillBotsUnload();
             PluginEntityComponent.UnloadPlugin();
@@ -3227,6 +3233,7 @@ namespace Oxide.Plugins
             _roamingInventoryLootProxies.Remove(player.userID);
             _bridgeLootPetNetByLooter.Remove(player.userID);
             _roamingLootUseDebounce.Remove(player.userID);
+            _bridgeMedicReviveStabilizeUntil.Remove(player.userID);
         }
 
         [ChatCommand("lootnpc")]
@@ -3288,8 +3295,23 @@ namespace Oxide.Plugins
                 player.inventory.containerBelt.SetLocked(false);
             }
         }
-        private void OnEntityTakeDamage(BaseCombatEntity target, HitInfo info)
+        private object OnEntityTakeDamage(BaseCombatEntity target, HitInfo info)
         {
+            if (target is BasePlayer bp && bp.userID.IsSteamId() && !bp.IsNpc &&
+                _bridgeMedicReviveStabilizeUntil.TryGetValue(bp.userID, out var protUntil) &&
+                UnityEngine.Time.realtimeSinceStartup <= protUntil)
+            {
+                try
+                {
+                    if (info?.damageTypes != null && info.damageTypes.Get(DamageType.Fall) > 0f)
+                        return true;
+                }
+                catch
+                {
+                    /* ignored */
+                }
+            }
+
             if (target && info?.InitiatorPlayer is CustomPet customPet && !(target is BaseCorpse))
             {
                 if (customPet != target)
@@ -3304,6 +3326,30 @@ namespace Oxide.Plugins
 
             TryAssignBridgeProtectorRetaliation(target, info);
             TryAssignBridgeSelfDefenseAgainstAnimal(target, info);
+            return null;
+        }
+
+        /// <summary>Bleed/poison/radiation ticks can kill the same tick as metabolize — repeat stabilize while window active.</summary>
+        private void OnPlayerMetabolize(PlayerMetabolism metabolism, BaseCombatEntity ownerEntity, float delta)
+        {
+            if (metabolism == null || ownerEntity is not BasePlayer bp || bp.IsNpc || !bp.userID.IsSteamId())
+                return;
+            if (!_bridgeMedicReviveStabilizeUntil.TryGetValue(bp.userID, out var until)) return;
+            if (UnityEngine.Time.realtimeSinceStartup > until)
+            {
+                _bridgeMedicReviveStabilizeUntil.Remove(bp.userID);
+                return;
+            }
+
+            BridgeMedicHarmfulMetabolismReflectiveReset(metabolism);
+            try
+            {
+                bp.Heal(99999f);
+            }
+            catch
+            {
+                /* ignored */
+            }
         }
 
         /// <summary>MaxxInvaders bridge bot damaged by an animal — retaliate (same HunterState path as streamer defense).</summary>
@@ -3613,64 +3659,88 @@ namespace Oxide.Plugins
             return agent.velocity.sqrMagnitude > 0.018f;
         }
 
-        /// <summary>Clears bleeding-like metabolism channels after <see cref="BasePlayer.RecoverFromWounded"/>.</summary>
-        private static void BridgeMedicTryClearBleed(PlayerMetabolism metabolism)
+        /// <summary>
+        /// Mirrors RustChaos <c>TryTopUpGodModeMetabolism</c>: bleed/poison/radiation/wetness/temperature ticks often survive <see cref="BasePlayer.RecoverFromWounded"/> and kill seconds later.
+        /// </summary>
+        private static void BridgeMedicHarmfulMetabolismReflectiveReset(PlayerMetabolism metabolism)
         {
             if (metabolism == null) return;
             try
             {
-                if (metabolism.bleeding != null)
-                    metabolism.bleeding.value = 0f;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                foreach (PropertyInfo prop in metabolism.GetType()
-                             .GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                foreach (var prop in metabolism.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
                 {
-                    if (prop.Name.IndexOf("bleed", StringComparison.OrdinalIgnoreCase) < 0) continue;
                     object obj = prop.GetValue(metabolism, null);
                     if (obj == null) continue;
                     PropertyInfo valueProp =
                         obj.GetType().GetProperty("value", BindingFlags.Public | BindingFlags.Instance);
-                    if (valueProp != null && valueProp.PropertyType == typeof(float))
-                        valueProp.SetValue(obj, 0f, null);
+                    PropertyInfo minProp =
+                        obj.GetType().GetProperty("min", BindingFlags.Public | BindingFlags.Instance);
+                    PropertyInfo maxProp =
+                        obj.GetType().GetProperty("max", BindingFlags.Public | BindingFlags.Instance);
+                    if (valueProp == null || valueProp.PropertyType != typeof(float)) continue;
+
+                    string n = prop.Name.ToLowerInvariant();
+                    if (!(n.Contains("bleed") || n.Contains("poison") || n.Contains("radiation") ||
+                          n.Contains("calorie") || n.Contains("hydration") || n.Contains("wetness") ||
+                          n.Contains("temperature") || n.Contains("cold") || n.Contains("heat")))
+                        continue;
+
+                    float next = 0f;
+                    if (n.Contains("calorie") || n.Contains("hydration"))
+                    {
+                        if (maxProp != null && maxProp.PropertyType == typeof(float))
+                            next = (float)maxProp.GetValue(obj, null);
+                    }
+                    else if (minProp != null && minProp.PropertyType == typeof(float))
+                        next = (float)minProp.GetValue(obj, null);
+
+                    valueProp.SetValue(obj, next, null);
                 }
             }
             catch
             {
+                /* ignored */
+            }
+
+            try
+            {
+                metabolism.SendChangesToClient();
+            }
+            catch
+            {
+                /* ignored */
             }
         }
 
-        /// <summary>
-        /// <see cref="BasePlayer.RecoverFromWounded"/> restores posture/HP logic but not thirst/hunger — empty bars while crawling mean instant thirst death seconds after standing.
-        /// </summary>
-        private static void BridgeMedicReplenishSurvivalAfterRevive(BasePlayer anchor)
+        private void BridgeMedicRegisterReviveStabilizeWindow(BasePlayer anchor)
         {
-            if (anchor?.metabolism == null) return;
+            if (anchor == null || !anchor.userID.IsSteamId()) return;
+            var uid = anchor.userID;
+            _bridgeMedicReviveStabilizeUntil[uid] =
+                UnityEngine.Time.realtimeSinceStartup + BridgeMedicReviveStabilizeSeconds;
+
+            NextTick(() =>
+            {
+                var p = BasePlayer.FindByID(uid);
+                if (p == null || !p.IsValid()) return;
+                TryResyncRevivedAnchorPosition(p);
+            });
+            timer.Once(0.12f, () =>
+            {
+                var p = BasePlayer.FindByID(uid);
+                if (p == null || !p.IsValid()) return;
+                TryResyncRevivedAnchorPosition(p);
+            });
+        }
+
+        /// <summary>Clears stale fall / velocity state after wounded recovery (RustChaos-style).</summary>
+        private static void TryResyncRevivedAnchorPosition(BasePlayer anchor)
+        {
+            if (anchor == null || !anchor.IsValid()) return;
             try
             {
-                var m = anchor.metabolism;
-                const float hydrateGoalFrac = 0.78f;
-                const float caloriesGoalFrac = 0.62f;
-                if (m.hydration != null && m.hydration.max > 1f)
-                {
-                    var target = m.hydration.max * hydrateGoalFrac;
-                    if (m.hydration.value < target)
-                        m.hydration.value = Mathf.Min(target, m.hydration.max);
-                }
-
-                if (m.calories != null && m.calories.max > 1f)
-                {
-                    var target = m.calories.max * caloriesGoalFrac;
-                    if (m.calories.value < target)
-                        m.calories.value = Mathf.Min(target, m.calories.max);
-                }
-
-                anchor.SendNetworkUpdate();
+                var p = anchor.transform.position;
+                anchor.Teleport(p);
             }
             catch
             {
@@ -9166,9 +9236,9 @@ namespace Oxide.Plugins
                                         anchor.HasPlayerFlag(BasePlayer.PlayerFlags.Incapacitated);
                             if (down)
                                 anchor.RecoverFromWounded();
-                            BridgeMedicTryClearBleed(anchor.metabolism);
-                            BridgeMedicReplenishSurvivalAfterRevive(anchor);
+                            BridgeMedicHarmfulMetabolismReflectiveReset(anchor.metabolism);
                             anchor.Heal(99999f);
+                            instance.BridgeMedicRegisterReviveStabilizeWindow(anchor);
                         }
                         else
                         {
