@@ -5,6 +5,13 @@ import { getRawActionNameFromPayload } from "@/lib/tikfinity";
  * Stable TikTok viewer id for deduping crew registrations (not display name).
  * TikFinity payloads vary; we check common flat and nested keys.
  */
+/** TikFinity sometimes sends literal 0 when no viewer id — must not reuse as stable id (shared cooldown / duplicate bots). */
+function normalizeTikTokUniqueIdString(raw: string): string | null {
+  const t = raw.trim();
+  if (!t || t === "0") return null;
+  return t;
+}
+
 export function extractTikTokUniqueIdFromBody(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
@@ -20,7 +27,14 @@ export function extractTikTokUniqueIdFromBody(body: unknown): string | null {
   ];
   for (const k of directKeys) {
     const v = o[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "string") {
+      const norm = normalizeTikTokUniqueIdString(v);
+      if (norm) return norm;
+    }
+    if (typeof v === "number" && Number.isFinite(v)) {
+      const n = Math.trunc(v);
+      if (n !== 0) return String(n);
+    }
   }
   const nestedKeys = ["user", "viewer", "sender", "author", "data", "event", "payload"];
   for (const nk of nestedKeys) {

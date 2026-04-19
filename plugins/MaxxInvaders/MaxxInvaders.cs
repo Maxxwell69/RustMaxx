@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.49")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.50")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -595,6 +595,22 @@ namespace Oxide.Plugins
         private static string ViewerProfileKey(string viewerId) =>
             string.IsNullOrWhiteSpace(viewerId) ? "" : viewerId.Trim().ToLowerInvariant();
 
+        /// <summary>
+        /// TikFinity / webhooks often send <c>userId: 0</c> or missing id when the action is not configured to pass
+        /// a stable viewer id. Every spawn would then use the same <see cref="_viewerCooldownUntil"/> key and look
+        /// like a single-user cooldown for the whole server.
+        /// </summary>
+        private static bool IsUnreliableViewerIdForSharedCooldown(string viewerId)
+        {
+            if (string.IsNullOrWhiteSpace(viewerId)) return true;
+            var t = viewerId.Trim();
+            if (t == "0") return true;
+            if (t.Equals("anonymous", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.Equals("null", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.Equals("undefined", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         private void LoadDataFile()
         {
             try
@@ -997,6 +1013,7 @@ namespace Oxide.Plugins
             }
 
             if (_cfg.PerViewerCooldownSeconds > 0 &&
+                !IsUnreliableViewerIdForSharedCooldown(viewerId) &&
                 _viewerCooldownUntil.TryGetValue(viewerId, out var until) &&
                 DateTime.UtcNow < until)
             {
@@ -1178,7 +1195,7 @@ namespace Oxide.Plugins
                     TryRoamingApplyBridgeTask(runtime.EntityId, runtime.AnchorSteamId, "protect", runtime);
             }
 
-            if (_cfg.PerViewerCooldownSeconds > 0)
+            if (_cfg.PerViewerCooldownSeconds > 0 && !IsUnreliableViewerIdForSharedCooldown(viewerId))
                 _viewerCooldownUntil[viewerId] = DateTime.UtcNow.AddSeconds(_cfg.PerViewerCooldownSeconds);
 
             if (!isRoaming)
