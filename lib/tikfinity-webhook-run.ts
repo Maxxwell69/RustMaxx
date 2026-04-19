@@ -41,7 +41,10 @@ import {
 import {
   resolveRoamingWearPipeForOutfit,
 } from "@/lib/maxxinvaders-outfit-profiles";
-import { resolveMaxxInvadersAnchorSteam } from "@/lib/maxxinvaders-anchor-steam";
+import {
+  resolveMaxxInvadersAnchorSteam,
+  type MaxxInvadersAnchorOptions,
+} from "@/lib/maxxinvaders-anchor-steam";
 import { fireSquawkAfterTikfinityEvent } from "@/lib/squawk-notify";
 import type { TikfinityConnectionForWebhook } from "@/lib/tikfinity-connections";
 
@@ -59,8 +62,21 @@ export type TikfinityWebhookRunContext = {
    */
   streamerProfileSteam64?: string | null;
 };
+
 const TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID =
   process.env.TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID?.trim() ?? undefined;
+
+/** Single source for MaxxInvaders anchor resolution on every path (npcmaxx→MI, maxxinvaders, crew). */
+function buildAnchorResolveOptions(
+  server: Pick<ServerRow, "tikfinity_anchor_steam_id">,
+  ctx: TikfinityWebhookRunContext
+): MaxxInvadersAnchorOptions {
+  return {
+    serverDefault: server.tikfinity_anchor_steam_id ?? null,
+    streamerProfileSteam64: ctx.streamerProfileSteam64 ?? null,
+    envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
+  };
+}
 
 const CREW_RNPC_TEMPLATE_KEY = process.env.CREW_RNPC_TEMPLATE_KEY?.trim() ?? null;
 const NPCMAXX_REQUIRE_CREW_REGISTRY =
@@ -94,20 +110,31 @@ function hasValidAnchorSteam64(v: string | null | undefined): boolean {
 function logMaxxInvadersSpawnFailure(
   route: "maxxinvaders" | "npcmaxx_as_maxxinvaders",
   spawnMi: Extract<MaxxinvadersRconResult, { ok: false }>,
-  meta: { serverId: string; anchorSteam64: string | null | undefined }
+  meta: {
+    serverId: string;
+    anchorSteam64: string | null | undefined;
+    /** True when webhook ctx included a valid 17-digit Profile Steam (per-streamer hooks only). */
+    profileSteamOnCtx?: boolean;
+  }
 ): void {
   const err = spawnMi.error ?? "";
   const anchored = hasValidAnchorSteam64(meta.anchorSteam64);
   const spawnPos = /spawn_position/i.test(err);
+  const ctxHint =
+    spawnPos &&
+    !anchored &&
+    meta.profileSteamOnCtx === false
+      ? " [Profile Steam not on this webhook — use per-streamer URL /api/tikfinity/hooks/{uuid}?token=… and save Steam64 on Streamer; admin TIKFINITY webhook has no profile]"
+      : "";
   const hint =
     spawnPos && !anchored
-      ? " — set RustMaxx Servers→TikFinity patrol anchor, webhook ?anchorSteam=765…, or oxide DefaultAnchorSteamId /maxxinvaders anchor"
+      ? " — set RustMaxx Servers→TikFinity patrol anchor, webhook ?anchorSteam=765…, Streamer dashboard Steam64, or oxide DefaultAnchorSteamId /maxxinvaders anchor"
       : spawnPos && anchored
         ? " — anchor Steam must be online/sleeping on map; try open ground or DefaultSpawnRadius/SpawnAttempts in MaxxInvaders.json"
         : "";
   const head = `[tikfinity webhook] ${route} ${spawnMi.step} server=${meta.serverId} anchor=${anchored ? "set" : "MISSING"}`;
   if (spawnPos) {
-    console.warn(`${head}${hint}`);
+    console.warn(`${head}${hint}${ctxHint}`);
   } else {
     console.error(head, err);
   }
@@ -135,7 +162,7 @@ async function handleCrewRnpcJoin(
   request: NextRequest,
   body: unknown,
   crewServerId: string | null,
-  streamerProfileSteam64?: string | null
+  ctx: TikfinityWebhookRunContext
 ): Promise<NextResponse | null> {
   if (!isStreamJoinEvent(request, body)) return null;
 
@@ -233,11 +260,11 @@ async function handleCrewRnpcJoin(
             kit: "-",
             mode: "roaming",
             roamingBotKey: parsedCrewTemplate,
-            anchorSteam64: resolveMaxxInvadersAnchorSteam(request, body, {
-              serverDefault: srv.tikfinity_anchor_steam_id ?? null,
-              streamerProfileSteam64: streamerProfileSteam64 ?? null,
-              envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
-            }),
+            anchorSteam64: resolveMaxxInvadersAnchorSteam(
+              request,
+              body,
+              buildAnchorResolveOptions(srv, ctx)
+            ),
             roamingWearPipe: null,
             connectionId: null,
             tikfinityEventName: "join",
@@ -373,7 +400,7 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
   payload: { viewerName: string; giftName: string },
   npcTemplateKeyResolved: string,
   tikfinitySpawnActionLabel: TikTriggerAction,
-  streamerProfileSteam64?: string | null
+  ctx: TikfinityWebhookRunContext
 ): Promise<NextResponse | null> {
   if (!npcmaxxTemplateRequiresMaxxInvadersEngine(npcTemplateKeyResolved)) {
     return null;
@@ -389,11 +416,11 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
     extractTikTokUniqueIdFromBody(body) ??
     `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 
-  const anchorSteam64 = resolveMaxxInvadersAnchorSteam(request, body, {
-    serverDefault: server.tikfinity_anchor_steam_id ?? null,
-    streamerProfileSteam64: streamerProfileSteam64 ?? null,
-    envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
-  });
+  const anchorSteam64 = resolveMaxxInvadersAnchorSteam(
+    request,
+    body,
+    buildAnchorResolveOptions(server, ctx)
+  );
 
   const spawnMi = await maxxinvadersRconSpawn({
     server,
@@ -413,6 +440,7 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
     logMaxxInvadersSpawnFailure("npcmaxx_as_maxxinvaders", spawnMi, {
       serverId: server.id,
       anchorSteam64,
+      profileSteamOnCtx: hasValidAnchorSteam64(ctx.streamerProfileSteam64),
     });
     audit("tikfinity", "webhook.failed", {
       reason:
@@ -529,12 +557,7 @@ export async function runTikfinityWebhook(
 ) {
   const viewerFromBody = () => extractViewerNameFromWebhookBody(body) ?? "Viewer";
 
-  const crewJoinResponse = await handleCrewRnpcJoin(
-    request,
-    body,
-    ctx.serverId,
-    ctx.streamerProfileSteam64 ?? null
-  );
+  const crewJoinResponse = await handleCrewRnpcJoin(request, body, ctx.serverId, ctx);
   if (crewJoinResponse) return crewJoinResponse;
 
   // Action from URL query — TikFinity presets vary:
@@ -845,7 +868,7 @@ export async function runTikfinityWebhook(
       payload,
       npcTemplateKeyResolved,
       "npcmaxx",
-      ctx.streamerProfileSteam64 ?? null
+      ctx
     );
     if (miRoute) return miRoute;
 
@@ -968,11 +991,11 @@ export async function runTikfinityWebhook(
     const viewerId =
       extractTikTokUniqueIdFromBody(body) ??
       `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-    const anchorSteam64 = resolveMaxxInvadersAnchorSteam(request, body, {
-      serverDefault: server.tikfinity_anchor_steam_id ?? null,
-      streamerProfileSteam64: ctx.streamerProfileSteam64 ?? null,
-      envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
-    });
+    const anchorSteam64 = resolveMaxxInvadersAnchorSteam(
+      request,
+      body,
+      buildAnchorResolveOptions(server, ctx)
+    );
 
     if (NPCMAXX_REQUIRE_CREW_REGISTRY) {
       const uid = extractTikTokUniqueIdFromBody(body);
@@ -1032,6 +1055,7 @@ export async function runTikfinityWebhook(
       logMaxxInvadersSpawnFailure("maxxinvaders", spawnMi, {
         serverId: server.id,
         anchorSteam64,
+        profileSteamOnCtx: hasValidAnchorSteam64(ctx.streamerProfileSteam64),
       });
       audit("tikfinity", "webhook.failed", {
         reason:
