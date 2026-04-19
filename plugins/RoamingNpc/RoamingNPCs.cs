@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.49")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.50")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -47,6 +47,9 @@ namespace Oxide.Plugins
         private const float BridgeHomeRoamMinFindRadius = 110f;
         /// <summary><see cref="ApplyBridgeTask"/> mixed: wider Vis/collectible scan for cloth, drops, corpses, barrels.</summary>
         private const float BridgeMixedTaskMinFindRadius = 130f;
+        /// <summary>Protect idle-hold (MaxxInvaders): if anchor moves less than this between patrol moves, treat as stationary.</summary>
+        private const float BridgeProtectIdleAnchorStationarySqr = 0.81f;
+
         public Configuration config;
         public DataBots Data;
         public List<string> NicknamesData;
@@ -2424,6 +2427,10 @@ namespace Oxide.Plugins
             [JsonIgnore] public bool BridgePatrolAnchorPosValid;
             /// <summary>Throttle forced repaths when the streamer moves (avoid NavMesh spam).</summary>
             [JsonIgnore] public float BridgePatrolAnchorChaseNextAt;
+            /// <summary>Previous anchor sample for MaxxInvaders protect idle-hold (stay still near stationary streamer).</summary>
+            [JsonIgnore] public Vector3 BridgeProtectAnchorIdlePrevSample;
+            /// <summary>Whether <see cref="BridgeProtectAnchorIdlePrevSample"/> has been initialized for idle detection.</summary>
+            [JsonIgnore] public bool BridgeProtectAnchorIdlePrevValid;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -3455,9 +3462,12 @@ namespace Oxide.Plugins
             float maxI;
             float minFrac = 0.22f;
             float maxFrac = 0.9f;
+            var taskLow = "";
+            var anchorChaseEscort = false;
 
             if (useHomeCupboard)
             {
+                pet.Data.BridgeProtectAnchorIdlePrevValid = false;
                 anchorPos = homePos;
                 var hr = setup.BridgePatrol.HomeRoamRadiusMeters > 5f ? setup.BridgePatrol.HomeRoamRadiusMeters : 160f;
                 radius = Mathf.Clamp(hr, 80f, 500f);
@@ -3472,9 +3482,9 @@ namespace Oxide.Plugins
                 if (anchor == null || !anchor.IsAlive()) return;
                 anchorPos = anchor.transform.position;
 
-                var taskLow = (pet.Data.BridgeLastAppliedTask ?? "").Trim().ToLowerInvariant();
+                taskLow = (pet.Data.BridgeLastAppliedTask ?? "").Trim().ToLowerInvariant();
                 // Protect / follow / guard = stay with streamer. Gather also uses patrol+protect but must not spam repath while looting.
-                var anchorChaseEscort = setup.BattleState != null && setup.BattleState._protectBridgeAnchorPlayer &&
+                anchorChaseEscort = setup.BattleState != null && setup.BattleState._protectBridgeAnchorPlayer &&
                     (taskLow == "protect" || taskLow == "follow" || taskLow == "guard" ||
                      (string.IsNullOrEmpty(taskLow) && setup.BridgePatrol.RadiusMeters <= 14f));
                 if (anchorChaseEscort)
@@ -3507,6 +3517,37 @@ namespace Oxide.Plugins
             var petPos = pet.transform.position;
             petPos.y = anchorPos.y;
             float dist = Vector3.Distance(petPos, anchorPos);
+
+            // MaxxInvaders bridge task "protect": once close to the streamer, stand still while the streamer stands still;
+            // when the streamer moves, normal patrol resumes (follow escort).
+            if (!useHomeCupboard && anchorChaseEscort && taskLow == "protect")
+            {
+                var anchorStill = pet.Data.BridgeProtectAnchorIdlePrevValid &&
+                                    (anchorPos - pet.Data.BridgeProtectAnchorIdlePrevSample).sqrMagnitude <=
+                                    BridgeProtectIdleAnchorStationarySqr;
+                pet.Data.BridgeProtectAnchorIdlePrevSample = anchorPos;
+                pet.Data.BridgeProtectAnchorIdlePrevValid = true;
+
+                if (anchorStill && dist <= radius * 0.92f)
+                {
+                    try
+                    {
+                        pet.MoveController?.Navigator?.Stop();
+                    }
+                    catch
+                    {
+                        /* ignored */
+                    }
+
+                    pet.Data.BridgePatrolNextMoveAt =
+                        UnityEngine.Time.realtimeSinceStartup + Mathf.Max(0.28f, minI * 0.4f);
+                    return;
+                }
+            }
+            else if (!useHomeCupboard)
+            {
+                pet.Data.BridgeProtectAnchorIdlePrevValid = false;
+            }
 
             Vector3 targetXZ;
             if (dist > radius * 0.97f)
