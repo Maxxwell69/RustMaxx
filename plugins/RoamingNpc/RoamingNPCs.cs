@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.50")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.51")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -1254,6 +1254,11 @@ namespace Oxide.Plugins
                 : "MaxxInvaders: patrol near streamer anchor (use dedicated bot key e.g. streamer_patrol)")]
             public SetupBridgePatrol BridgePatrol = new();
 
+            [JsonProperty(RU
+                ? "MaxxInvaders: поднимать и лечить якорного игрока (шаблон streamer_medic)"
+                : "MaxxInvaders: revive & heal anchor player (streamer_medic bot key)")]
+            public SetupBridgeMedic BridgeMedic = new();
+
             [JsonProperty(RU ? "Настройка охоты на животных" : "Animal hunting")]
             public SetupHunting HunterState = new();
 
@@ -1755,6 +1760,25 @@ namespace Oxide.Plugins
                 ? "Радиус дальнего патруля от дома (шкаф) — только если задан MaxxInvaders home TC"
                 : "Home TC roam radius (m) — used when bridge home cupboard is assigned; large = explore farther before deposit recall")]
             public float HomeRoamRadiusMeters = 160f;
+        }
+
+        /// <summary>MaxxInvaders bridge: bot runs to anchor and revives/heals using game APIs (requires <see cref="SetupBridgeMedic.Enable"/>).</summary>
+        public class SetupBridgeMedic
+        {
+            [JsonProperty(RU ? "Включить медика для якорного игрока" : "Enable revive/heal support for anchor player")]
+            public bool Enable = false;
+
+            [JsonProperty(RU ? "Лечить если доля здоровья ниже (0–1)" : "Heal when anchor health fraction is below (0–1)")]
+            public float HealBelowHealthFraction = 0.5f;
+
+            [JsonProperty(RU ? "Поднимать при ранении / crawling" : "Revive when anchor is wounded or incapacitated")]
+            public bool ReviveWhenWounded = true;
+
+            [JsonProperty(RU ? "Дистанция действия (м)" : "Max distance to apply revive/heal (m)")]
+            public float ActionDistanceMeters = 3.5f;
+
+            [JsonProperty(RU ? "Пауза между обычными лечениями (с)" : "Cooldown between heal pulses (seconds)")]
+            public float CooldownSeconds = 4f;
         }
 
         public class SetupMining
@@ -2431,6 +2455,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public Vector3 BridgeProtectAnchorIdlePrevSample;
             /// <summary>Whether <see cref="BridgeProtectAnchorIdlePrevSample"/> has been initialized for idle detection.</summary>
             [JsonIgnore] public bool BridgeProtectAnchorIdlePrevValid;
+            /// <summary>Throttle <see cref="BridgeAnchorMedicState"/> heals (revive ignores cooldown).</summary>
+            [JsonIgnore] public float BridgeMedicLastActionRealtime;
             [JsonIgnore] public bool IsInitMemory => CustomMemory != null && CustomMemory.IsInit;
             [JsonIgnore] public bool CanLockWear => Setup.Wear?.CanLock ?? false;
             [JsonIgnore] public bool CanDropBeltInventory => Setup?.CanDropBeltInventory ?? true;
@@ -2919,6 +2945,7 @@ namespace Oxide.Plugins
             CollectibleHelper.InitPlugin();
             monuments = new();
             EnsureStreamerPatrolTemplate();
+            EnsureStreamerMedicTemplate();
             foreach (var bot in config.bots)
             {
                 bot.Value.Init();
@@ -3372,6 +3399,107 @@ namespace Oxide.Plugins
             catch (Exception ex)
             {
                 PrintWarning($"[RoamingNPCs] Could not add streamer_patrol template: {ex.Message}");
+            }
+        }
+
+        /// <summary>Creates <c>streamer_medic</c> once — patrol + revive/heal anchor + revolver/scrubs/syringes/medkits.</summary>
+        private void EnsureStreamerMedicTemplate()
+        {
+            if (config?.bots == null) return;
+            const string medicKey = "streamer_medic";
+            if (config.bots.ContainsKey(medicKey)) return;
+            if (!config.bots.TryGetValue("streamer_patrol", out var src) || src == null)
+            {
+                if (!config.bots.TryGetValue("alfred_hunter", out src) || src == null) return;
+            }
+
+            try
+            {
+                var json = JsonConvert.SerializeObject(src, settingsSerializer);
+                var clone = JsonConvert.DeserializeObject<BotSetup>(json, settingsSerializer);
+                if (clone == null) return;
+
+                clone.Name = "Doc";
+                clone.Personality = PersonalityBot.Friendly;
+                clone.HunterState.CanHunt = false;
+
+                clone.BridgeMedic = new SetupBridgeMedic
+                {
+                    Enable = true,
+                    HealBelowHealthFraction = 0.5f,
+                    ReviveWhenWounded = true,
+                    ActionDistanceMeters = 3.5f,
+                    CooldownSeconds = 4f,
+                };
+
+                clone.BattleState ??= new SetupBattle();
+                clone.BattleState._protectBridgeAnchorPlayer = true;
+
+                clone.BridgePatrol ??= new SetupBridgePatrol();
+                clone.BridgePatrol.Enable = true;
+                clone.BridgePatrol.RadiusMeters = Mathf.Max(clone.BridgePatrol.RadiusMeters, 22f);
+
+                clone.FullState ??= new SetupFullInventory();
+                clone.FullState.BridgeUseAnchorOwnedStorage = true;
+                clone.FullState.BridgeAnchorStorageSearchRadius = 18f;
+                clone.AllowPlayerLootInventoryWhileAlive = true;
+
+                clone.Wear.items = new List<ItemSetup> { new ItemSetup("halloween.surgeonsuit", 0) };
+
+                clone.ItemsWeapon.CanUseAmmo = true;
+                clone.ItemsWeapon.AmountAmmo = 128;
+                clone.ItemsWeapon.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, true, new ItemSetup("pistol.revolver", 0)) { ammoShortname = "ammo.pistol" },
+                };
+
+                clone.ItemsMedical.Items = new List<AmountItemBot>
+                {
+                    new AmountItemBot(false, true, 40, new ItemSetup("syringe.medical", 0)),
+                    new AmountItemBot(false, true, 2, new ItemSetup("largemedkit", 0)),
+                };
+
+                clone.Init();
+                config.bots[medicKey] = clone;
+                SaveConfig();
+                PrintWarning(
+                    "[RoamingNPCs] Added default bot template 'streamer_medic' (field medic — revives/heals anchor). Use MaxxInvaders ViewerRoamingTemplateKey or ?template=streamer_medic.");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[RoamingNPCs] Could not add streamer_medic template: {ex.Message}");
+            }
+        }
+
+        /// <summary>Clears bleeding-like metabolism channels after <see cref="BasePlayer.RecoverFromWounded"/>.</summary>
+        private static void BridgeMedicTryClearBleed(PlayerMetabolism metabolism)
+        {
+            if (metabolism == null) return;
+            try
+            {
+                if (metabolism.bleeding != null)
+                    metabolism.bleeding.value = 0f;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                foreach (PropertyInfo prop in metabolism.GetType()
+                             .GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (prop.Name.IndexOf("bleed", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    object obj = prop.GetValue(metabolism, null);
+                    if (obj == null) continue;
+                    PropertyInfo valueProp =
+                        obj.GetType().GetProperty("value", BindingFlags.Public | BindingFlags.Instance);
+                    if (valueProp != null && valueProp.PropertyType == typeof(float))
+                        valueProp.SetValue(obj, 0f, null);
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -3905,7 +4033,7 @@ namespace Oxide.Plugins
         {
             var cs = pet?.CustomBrain?.currentState;
             if (cs == null) return false;
-            return cs is MinerState or MedicalState or DroppedState or ResearcherState;
+            return cs is MinerState or MedicalState or DroppedState or ResearcherState or BridgeAnchorMedicState;
         }
 
         /// <summary>After defending the streamer, re-apply <see cref="DataBot.BridgeLastAppliedTask"/> so gather/hunt/etc. resumes.</summary>
@@ -5860,6 +5988,7 @@ namespace Oxide.Plugins
             private const bool canUseResearcherState = true;
             private const bool canUseAttackerState = true;
             private const bool canUseMedicalState = true;
+            private const bool canUseBridgeAnchorMedicState = true;
             private const bool canUseDroppedState = true;
             private bool hasStateAddonBuilder = false;
 
@@ -5886,6 +6015,7 @@ namespace Oxide.Plugins
             private ResearcherState researcherState;
             private AttackerState attackerState;
             private MedicalState medicalState;
+            private BridgeAnchorMedicState bridgeAnchorMedicState;
             private DroppedState droppedState;
             public float RadiusFindEntity => owner?.Data?.Setup?.Controller?.RadiusFindEntity ?? 30f;
             public IBotState currentState { get; private set; }
@@ -5901,6 +6031,7 @@ namespace Oxide.Plugins
                 Pool.Free(ref researcherState);
                 Pool.Free(ref attackerState);
                 Pool.Free(ref medicalState);
+                Pool.Free(ref bridgeAnchorMedicState);
                 Pool.Free(ref droppedState);
                 Pool.FreeUnmanaged(ref bufferEntity);
                 Pool.FreeUnmanaged(ref ignores);
@@ -5917,6 +6048,7 @@ namespace Oxide.Plugins
                 researcherState = Pool.Get<ResearcherState>();
                 attackerState = Pool.Get<AttackerState>();
                 medicalState = Pool.Get<MedicalState>();
+                bridgeAnchorMedicState = Pool.Get<BridgeAnchorMedicState>();
                 droppedState = Pool.Get<DroppedState>();
                 base.LeavePool();
             }
@@ -5932,6 +6064,8 @@ namespace Oxide.Plugins
                 attackerState?.Start();
                 medicalState?.Init<MedicalState>(owner);
                 medicalState?.Start();
+                bridgeAnchorMedicState?.Init<BridgeAnchorMedicState>(owner);
+                bridgeAnchorMedicState?.Start();
                 droppedState?.Init<DroppedState>(owner);
                 droppedState?.Start();
                 owner.StartCoroutine(CheckStateCoroutine());
@@ -6207,6 +6341,16 @@ namespace Oxide.Plugins
                     if(!IsValid()) yield break;
 
                     if(owner.IsWounded() || owner.IsIncapacitated()) goto End;
+
+                    if (canUseBridgeAnchorMedicState && bridgeAnchorMedicState.CanEnterState)
+                    {
+                        if (!IsActive(bridgeAnchorMedicState)) ChangeState(bridgeAnchorMedicState);
+
+                        yield return currentState.routine;
+                        goto End;
+                    }
+
+                    else if (IsActive(bridgeAnchorMedicState)) ChangeState(null);
 
                     if (canUseAttackerState && attackerState.CanEnterState)
                     {
@@ -8742,6 +8886,115 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>MaxxInvaders bridge: path to anchor and apply revive/full heal or partial heal when low.</summary>
+        public class BridgeAnchorMedicState : BotState
+        {
+            public override bool CanEnterState
+            {
+                get
+                {
+                    if (owner?.Data?.SpawnedFromMaxxInvadersBridge != true) return false;
+                    if (owner.Data.BridgeProtectAnchorUserId == 0UL) return false;
+                    var setup = owner.Data.Setup?.BridgeMedic;
+                    if (setup == null || !setup.Enable) return false;
+                    var anchor = BasePlayer.FindByID(owner.Data.BridgeProtectAnchorUserId);
+                    if (anchor == null || !anchor.IsAlive()) return false;
+                    return AnchorNeedsHelp(anchor, setup);
+                }
+            }
+
+            public override IEnumerator routine => Job();
+
+            private static bool AnchorNeedsHelp(BasePlayer anchor, SetupBridgeMedic setup)
+            {
+                if (setup.ReviveWhenWounded &&
+                    (anchor.IsWounded() || anchor.HasPlayerFlag(BasePlayer.PlayerFlags.Incapacitated)))
+                    return true;
+                float mh = anchor.MaxHealth();
+                if (mh <= 0f) return false;
+                return anchor.Health() / mh < Mathf.Clamp01(setup.HealBelowHealthFraction);
+            }
+
+            public override void LeavePool()
+            {
+                state = State.BridgeAnchorMedic;
+                base.LeavePool();
+            }
+
+            public override void EnterPool()
+            {
+                state = State.BridgeAnchorMedic;
+                base.EnterPool();
+            }
+
+            private IEnumerator Job()
+            {
+                while (IsValid())
+                {
+                    yield return CoroutineEx.waitForSeconds(WaitBrain);
+                    if (!IsValid()) yield break;
+
+                    var setup = owner.Data.Setup?.BridgeMedic;
+                    if (setup == null || !setup.Enable) yield break;
+
+                    var anchor = BasePlayer.FindByID(owner.Data.BridgeProtectAnchorUserId);
+                    if (anchor == null || !anchor.IsAlive()) yield break;
+
+                    if (!AnchorNeedsHelp(anchor, setup))
+                        yield break;
+
+                    bool urgent = setup.ReviveWhenWounded &&
+                                  (anchor.IsWounded() ||
+                                   anchor.HasPlayerFlag(BasePlayer.PlayerFlags.Incapacitated));
+                    if (!urgent && owner.Data.BridgeMedicLastActionRealtime > 0f &&
+                        UnityEngine.Time.realtimeSinceStartup <
+                        owner.Data.BridgeMedicLastActionRealtime +
+                        Mathf.Max(0.5f, setup.CooldownSeconds))
+                        continue;
+
+                    float actionDist = Mathf.Clamp(setup.ActionDistanceMeters, 1.5f, 12f);
+                    if (owner.Distance(anchor) > actionDist)
+                    {
+                        StartMove(anchor);
+                        yield return CoroutineEx.waitForSeconds(WaitBrain);
+                        continue;
+                    }
+
+                    StopMove();
+
+                    try
+                    {
+                        if (urgent)
+                        {
+                            bool down = anchor.IsWounded() ||
+                                        anchor.HasPlayerFlag(BasePlayer.PlayerFlags.Incapacitated);
+                            if (down)
+                                anchor.RecoverFromWounded();
+                            BridgeMedicTryClearBleed(anchor.metabolism);
+                            anchor.Heal(99999f);
+                        }
+                        else
+                        {
+                            float mh = anchor.MaxHealth();
+                            float targetFrac = Mathf.Clamp01(setup.HealBelowHealthFraction + 0.08f);
+                            float targetHp = mh * Mathf.Max(targetFrac, setup.HealBelowHealthFraction + 0.02f);
+                            float need = Mathf.Clamp(targetHp - anchor.Health(), 8f, 150f);
+                            if (need > 3f)
+                                anchor.Heal(need);
+                        }
+
+                        owner.Data.BridgeMedicLastActionRealtime = UnityEngine.Time.realtimeSinceStartup;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[RoamingNPCs] BridgeAnchorMedic: action failed: {ex.Message}");
+                    }
+
+                    yield return CoroutineEx.waitForSeconds(Mathf.Max(0.25f, WaitBrain * 0.5f));
+                }
+            }
+        }
+
         public class DroppedState : BotState
         {
             private Vector3 positionStash = Vector3.zero;
@@ -9446,7 +9699,17 @@ namespace Oxide.Plugins
 
             public enum State
             {
-                Miner = 1, Hunter, Battle, Researcher, Medical, Dropped, InitBuild, Build, DroppedLoot, AntiRaidBuild
+                Miner = 1,
+                Hunter,
+                Battle,
+                Researcher,
+                Medical,
+                Dropped,
+                InitBuild,
+                Build,
+                DroppedLoot,
+                AntiRaidBuild,
+                BridgeAnchorMedic,
             }
             public enum MoveMode
             {
