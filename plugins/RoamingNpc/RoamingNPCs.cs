@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.59")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.60")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3600,6 +3600,7 @@ namespace Oxide.Plugins
 
                 clone.ItemsMiningOre.Items = new List<ItemBot>
                 {
+                    new ItemBot(false, false, new ItemSetup("jackhammer", 0)),
                     new ItemBot(false, false, new ItemSetup("pickaxe", 0)),
                     new ItemBot(true, true, new ItemSetup("pickaxe", 0)),
                 };
