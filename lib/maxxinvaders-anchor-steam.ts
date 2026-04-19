@@ -9,13 +9,16 @@ export function parseSteam64Anchor(raw: string | null | undefined): string | nul
 }
 
 export type MaxxInvadersAnchorOptions = {
-  /** Per-server default from dashboard (TIKFINITY_SERVER_ID row). */
+  /** Per-server default from dashboard (Servers → TikFinity patrol anchor). */
   serverDefault?: string | null;
+  /** Streamer's RustMaxx Profile Steam64 when patrol anchor is unset (per-hook webhooks only). */
+  streamerProfileSteam64?: string | null;
   envFallback?: string | undefined;
 };
 
 /**
- * Resolve anchor Steam64 for maxxinvaders webhook: body → ?anchorSteam= → server default → env.
+ * Resolve anchor Steam64 for maxxinvaders webhook:
+ * body → ?anchorSteam= → server patrol anchor → streamer Profile Steam64 → env.
  */
 export function resolveMaxxInvadersAnchorSteam(
   request: { nextUrl: URL },
@@ -46,5 +49,7 @@ export function resolveMaxxInvadersAnchorSteam(
   if (fromQuery) return fromQuery;
   const fromServer = parseSteam64Anchor(opts.serverDefault ?? null);
   if (fromServer) return fromServer;
+  const fromProfile = parseSteam64Anchor(opts.streamerProfileSteam64 ?? null);
+  if (fromProfile) return fromProfile;
   return parseSteam64Anchor(opts.envFallback ?? null);
 }

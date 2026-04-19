@@ -829,7 +829,9 @@ export default function StreamerDashboardPage() {
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Steam</h2>
         <p className="mb-3 text-sm text-zinc-400">
-          Use the same Steam64 as in-game (TikFinity anchor / patrol). You can also set this on{" "}
+          Use the same Steam64 as in-game. RustMaxx uses it as the MaxxInvaders patrol anchor when your webhook URL does not
+          include <code className="rounded bg-zinc-800 px-1">anchorSteam</code> and the server owner has not set a separate
+          TikFinity patrol anchor for that server. You can also set this on{" "}
           <Link href="/profile#steam" className="text-rust-cyan hover:underline">
             Profile
           </Link>

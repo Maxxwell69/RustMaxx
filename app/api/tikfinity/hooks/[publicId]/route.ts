@@ -136,5 +136,6 @@ async function handleHook(
     resolveConnectionByEventName: (name) =>
       getStreamerRuleByEventName(hook.id, name),
     streamerAllowedActions: policy.effectiveActions,
+    streamerProfileSteam64: user.steam_id,
   });
 }

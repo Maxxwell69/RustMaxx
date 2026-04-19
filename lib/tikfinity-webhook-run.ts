@@ -53,6 +53,11 @@ export type TikfinityWebhookRunContext = {
   ) => Promise<TikfinityConnectionForWebhook | null>;
   /** Per-streamer hooks: restrict to these action keys (server owner + platform catalog). */
   streamerAllowedActions?: string[] | null;
+  /**
+   * Per-hook webhooks only: streamer's Profile Steam64 (`users.steam_id`) used as MaxxInvaders
+   * anchor when URL/body omit anchor and server patrol anchor is unset.
+   */
+  streamerProfileSteam64?: string | null;
 };
 const TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID =
   process.env.TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID?.trim() ?? undefined;
@@ -117,7 +122,7 @@ function spawnPositionReplyHint(
     return null;
   }
   if (!hasValidAnchorSteam64(anchorSteam64)) {
-    return "spawn_position: RustMaxx did not send a 17-digit anchor — set **Servers → TikFinity patrol anchor**, add **?anchorSteam=76561198…** to the webhook URL, or set **DefaultAnchorSteamId** in oxide/config/MaxxInvaders.json (or `/maxxinvaders anchor`). Full plugin text is in rconResponse.";
+    return "spawn_position: RustMaxx did not resolve a 17-digit anchor — set **Servers → TikFinity patrol anchor**, **Streamer dashboard → Steam64** (same as Profile), add **?anchorSteam=76561198…** to the webhook URL, or **DefaultAnchorSteamId** in MaxxInvaders.json (or `/maxxinvaders anchor`). Full plugin text is in rconResponse.";
   }
   return "spawn_position: anchor was sent but the game could not place on navmesh — ensure that Steam user is **online or sleeping** on this map, stand on open ground, or raise **DefaultSpawnRadius** / **SpawnAttempts** and relax **BlockSpawn*** in MaxxInvaders.json. Full plugin text is in rconResponse.";
 }
@@ -129,7 +134,8 @@ function spawnPositionReplyHint(
 async function handleCrewRnpcJoin(
   request: NextRequest,
   body: unknown,
-  crewServerId: string | null
+  crewServerId: string | null,
+  streamerProfileSteam64?: string | null
 ): Promise<NextResponse | null> {
   if (!isStreamJoinEvent(request, body)) return null;
 
@@ -229,6 +235,7 @@ async function handleCrewRnpcJoin(
             roamingBotKey: parsedCrewTemplate,
             anchorSteam64: resolveMaxxInvadersAnchorSteam(request, body, {
               serverDefault: srv.tikfinity_anchor_steam_id ?? null,
+              streamerProfileSteam64: streamerProfileSteam64 ?? null,
               envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
             }),
             roamingWearPipe: null,
@@ -365,7 +372,8 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
   tikfinityEventNameForLog: string | null,
   payload: { viewerName: string; giftName: string },
   npcTemplateKeyResolved: string,
-  tikfinitySpawnActionLabel: TikTriggerAction
+  tikfinitySpawnActionLabel: TikTriggerAction,
+  streamerProfileSteam64?: string | null
 ): Promise<NextResponse | null> {
   if (!npcmaxxTemplateRequiresMaxxInvadersEngine(npcTemplateKeyResolved)) {
     return null;
@@ -383,6 +391,7 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
 
   const anchorSteam64 = resolveMaxxInvadersAnchorSteam(request, body, {
     serverDefault: server.tikfinity_anchor_steam_id ?? null,
+    streamerProfileSteam64: streamerProfileSteam64 ?? null,
     envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
   });
 
@@ -520,7 +529,12 @@ export async function runTikfinityWebhook(
 ) {
   const viewerFromBody = () => extractViewerNameFromWebhookBody(body) ?? "Viewer";
 
-  const crewJoinResponse = await handleCrewRnpcJoin(request, body, ctx.serverId);
+  const crewJoinResponse = await handleCrewRnpcJoin(
+    request,
+    body,
+    ctx.serverId,
+    ctx.streamerProfileSteam64 ?? null
+  );
   if (crewJoinResponse) return crewJoinResponse;
 
   // Action from URL query — TikFinity presets vary:
@@ -830,7 +844,8 @@ export async function runTikfinityWebhook(
       tikfinityEventNameForLog,
       payload,
       npcTemplateKeyResolved,
-      "npcmaxx"
+      "npcmaxx",
+      ctx.streamerProfileSteam64 ?? null
     );
     if (miRoute) return miRoute;
 
@@ -955,6 +970,7 @@ export async function runTikfinityWebhook(
       `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
     const anchorSteam64 = resolveMaxxInvadersAnchorSteam(request, body, {
       serverDefault: server.tikfinity_anchor_steam_id ?? null,
+      streamerProfileSteam64: ctx.streamerProfileSteam64 ?? null,
       envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
     });
 
