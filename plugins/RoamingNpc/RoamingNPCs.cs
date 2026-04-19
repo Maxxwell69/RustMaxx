@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.52")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.53")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -85,6 +85,10 @@ namespace Oxide.Plugins
             /// <summary>One-time migration: rocky-terrain controller hints on streamer_patrol / streamer_medic.</summary>
             [JsonProperty("RustMaxx streamer rocky bridge nav applied", Order = 5)]
             public bool StreamerRockyTerrainBridgeApplied { get; set; }
+
+            /// <summary>One-time migration: streamer_medic Friendly → Defensive for anchor escort behavior.</summary>
+            [JsonProperty("RustMaxx streamer medic escort personality applied", Order = 6)]
+            public bool StreamerMedicEscortPersonalityApplied { get; set; }
 
             [JsonProperty(RU ? "Укажите для генератора ID ботов (от 8 - 15)" : "Specify the ID of the bot generator (8 - 15)")]
             private int digits = 9;
@@ -2447,6 +2451,8 @@ namespace Oxide.Plugins
             [JsonIgnore] public ulong BridgeRetaliationAnimalNetId;
             [JsonIgnore] public float BridgeRetaliationExpireTime;
             [JsonIgnore] public float BridgePatrolNextMoveAt;
+            /// <summary>Throttle <see cref="RoamingNPCs.TrySnapBridgeNpcFeetToVisualGround"/> while idle.</summary>
+            [JsonIgnore] public float BridgeGroundSnapNextAt;
             /// <summary>MaxxInvaders: optional <see cref="StorageContainer"/> net ID for <c>deposit</c> (OwnerID must match anchor).</summary>
             [JsonIgnore] public ulong BridgeDepositContainerNetId;
             /// <summary>MaxxInvaders: optional tool cupboard (<see cref="BuildingPrivlidge"/>) net ID — roam center + far patrol; return to deposit only when deposit is called.</summary>
@@ -2964,6 +2970,7 @@ namespace Oxide.Plugins
             EnsureStreamerPatrolTemplate();
             EnsureStreamerMedicTemplate();
             MigrateStreamerRockyTerrainBridgeHintsOnce();
+            MigrateStreamerMedicEscortPersonalityOnce();
             foreach (var bot in config.bots)
             {
                 bot.Value.Init();
@@ -3440,7 +3447,7 @@ namespace Oxide.Plugins
                 if (clone == null) return;
 
                 clone.Name = "Doc";
-                clone.Personality = PersonalityBot.Friendly;
+                clone.Personality = PersonalityBot.Defensive;
                 clone.HunterState.CanHunt = false;
 
                 clone.BridgeMedic = new SetupBridgeMedic
@@ -3508,6 +3515,73 @@ namespace Oxide.Plugins
             SaveConfig();
             PrintWarning(
                 "[RoamingNPCs] Applied rocky-terrain navigation hints to streamer_patrol / streamer_medic Controller (NavMesh relaxed, obstacle timer faster). Toggle \"Use only NavMesh\" back on in JSON if undesired.");
+        }
+
+        /// <summary>Existing servers: streamer_medic used Friendly — anchor escort could stall; Defensive matches bridge escort.</summary>
+        private void MigrateStreamerMedicEscortPersonalityOnce()
+        {
+            if (config?.bots == null) return;
+            if (config.StreamerMedicEscortPersonalityApplied) return;
+            if (!config.bots.TryGetValue("streamer_medic", out var medic) || medic == null)
+            {
+                config.StreamerMedicEscortPersonalityApplied = true;
+                SaveConfig();
+                return;
+            }
+
+            var changed = false;
+            if (medic.Personality == PersonalityBot.Friendly && medic.BridgeMedic != null && medic.BridgeMedic.Enable)
+            {
+                medic.Personality = PersonalityBot.Defensive;
+                changed = true;
+            }
+
+            config.StreamerMedicEscortPersonalityApplied = true;
+            SaveConfig();
+            if (changed)
+                PrintWarning(
+                    "[RoamingNPCs] streamer_medic: Friendly → Defensive when bridge medic is enabled (better anchor follow / escort). Revert in RoamingNPCs.json if you relied on Friendly.");
+        }
+
+        /// <summary>
+        /// NavMesh hull can sit slightly above roads/asphalt — raycast down and Warp to nearest walkable near the visual surface (bridge idle / Stop).
+        /// </summary>
+        private static void TrySnapBridgeNpcFeetToVisualGround(CustomPet pet)
+        {
+            if (pet?.MoveController?.Navigator == null || pet.IsDestroyed) return;
+            try
+            {
+                var navigator = pet.MoveController.Navigator;
+                var agent = navigator.Agent;
+                if (agent == null || !agent.isOnNavMesh) return;
+
+                var pos = pet.transform.position;
+                var mask = LayerMask.GetMask("Terrain", "World", "Default", "Construction", "Deployed");
+                if (!Physics.Raycast(pos + Vector3.up * 14f, Vector3.down, out var hit, 52f, mask,
+                        QueryTriggerInteraction.Ignore))
+                    return;
+
+                var groundY = hit.point.y;
+                var dy = groundY - pos.y;
+                if (dy >= -2.95f && dy <= -0.045f)
+                {
+                    var probe = new Vector3(pos.x, groundY + 0.12f, pos.z);
+                    if (navigator.GetNearestNavmeshPosition(probe, out var snapped, 7f))
+                    {
+                        var adj = snapped.y - pos.y;
+                        if (adj >= -2.95f && adj <= -0.025f)
+                        {
+                            pet.transform.position = snapped;
+                            navigator.Warp(snapped);
+                            UnityEngine.Physics.SyncTransforms();
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                /* ignored */
+            }
         }
 
         /// <summary>Clears bleeding-like metabolism channels after <see cref="BasePlayer.RecoverFromWounded"/>.</summary>
@@ -3617,6 +3691,15 @@ namespace Oxide.Plugins
             if (IsBotInCombat(pet)) return;
             if (ShouldSkipBridgePatrolForTaskBrainState(pet)) return;
             if (pet.MoveController?.Navigator == null) return;
+
+            var idleAgent = pet.MoveController.Navigator.Agent;
+            if (idleAgent != null && idleAgent.isOnNavMesh && idleAgent.velocity.sqrMagnitude < 0.025f &&
+                UnityEngine.Time.realtimeSinceStartup >= pet.Data.BridgeGroundSnapNextAt)
+            {
+                pet.Data.BridgeGroundSnapNextAt = UnityEngine.Time.realtimeSinceStartup + 1.35f;
+                TrySnapBridgeNpcFeetToVisualGround(pet);
+            }
+
             if (UnityEngine.Time.realtimeSinceStartup < pet.Data.BridgePatrolNextMoveAt) return;
 
             Vector3 homePos = default;
@@ -3631,6 +3714,7 @@ namespace Oxide.Plugins
             float maxFrac = 0.9f;
             var taskLow = "";
             var anchorChaseEscort = false;
+            var medicEscort = setup.BridgeMedic != null && setup.BridgeMedic.Enable;
 
             if (useHomeCupboard)
             {
@@ -3650,9 +3734,9 @@ namespace Oxide.Plugins
                 anchorPos = anchor.transform.position;
 
                 taskLow = (pet.Data.BridgeLastAppliedTask ?? "").Trim().ToLowerInvariant();
-                // Protect / follow / guard = stay with streamer. Gather also uses patrol+protect but must not spam repath while looting.
+                // Protect / follow / guard = stay with streamer. Medic uses a wide patrol radius — still escort when BridgeMedic is on.
                 anchorChaseEscort = setup.BattleState != null && setup.BattleState._protectBridgeAnchorPlayer &&
-                    (taskLow == "protect" || taskLow == "follow" || taskLow == "guard" ||
+                    (taskLow == "protect" || taskLow == "follow" || taskLow == "guard" || medicEscort ||
                      (string.IsNullOrEmpty(taskLow) && setup.BridgePatrol.RadiusMeters <= 14f));
                 if (anchorChaseEscort)
                 {
@@ -3687,7 +3771,7 @@ namespace Oxide.Plugins
 
             // MaxxInvaders bridge task "protect": once close to the streamer, stand still while the streamer stands still;
             // when the streamer moves, normal patrol resumes (follow escort).
-            if (!useHomeCupboard && anchorChaseEscort && taskLow == "protect")
+            if (!useHomeCupboard && anchorChaseEscort && (taskLow == "protect" || medicEscort))
             {
                 var anchorStill = pet.Data.BridgeProtectAnchorIdlePrevValid &&
                                     (anchorPos - pet.Data.BridgeProtectAnchorIdlePrevSample).sqrMagnitude <=
@@ -3705,6 +3789,8 @@ namespace Oxide.Plugins
                     {
                         /* ignored */
                     }
+
+                    TrySnapBridgeNpcFeetToVisualGround(pet);
 
                     pet.Data.BridgePatrolNextMoveAt =
                         UnityEngine.Time.realtimeSinceStartup + Mathf.Max(0.28f, minI * 0.4f);
