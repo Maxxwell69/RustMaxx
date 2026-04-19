@@ -16,6 +16,9 @@ import {
   isTikTokSocialOnlyAction,
   isRustChaosStatusEffectAction,
   parseRustChaosStatusDurationSeconds,
+  isRustChaosSoloScrapSpawnAction,
+  parseSoloSpawnRepeatCount,
+  clampSoloSpawnRepeatCount,
 } from "@/lib/tikfinity";
 import { parseNpcTemplateKey } from "@/lib/tikfinity-connections";
 import { ensureConnection, runAndWait } from "@/lib/rcon-manager";
@@ -52,20 +55,6 @@ export type TikfinityWebhookRunContext = {
 };
 const TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID =
   process.env.TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID?.trim() ?? undefined;
-
-/** RustChaos solo spawns: max 10 scrap from webhook; if TikFinity sends 0 coins, still grant 10 (matches previous built-in tip). */
-const RUSTCHAOS_TEN_SCRAP_SPAWN_ACTIONS = new Set<string>([
-  "scientist",
-  "scientistflame",
-  "wolf",
-  "bear",
-  "tiger",
-  "panther",
-  "crocodile",
-  "shark",
-  "pig",
-  "chicken",
-]);
 
 const CREW_RNPC_TEMPLATE_KEY = process.env.CREW_RNPC_TEMPLATE_KEY?.trim() ?? null;
 const NPCMAXX_REQUIRE_CREW_REGISTRY =
@@ -657,7 +646,7 @@ export async function runTikfinityWebhook(
       ? Math.trunc(rawValue)
       : Number.parseInt(String(rawValue), 10);
   let giftValue = Math.min(10000, Math.max(0, Number.isFinite(rawNum) ? rawNum : 0));
-  if (RUSTCHAOS_TEN_SCRAP_SPAWN_ACTIONS.has(action)) {
+  if (isRustChaosSoloScrapSpawnAction(action)) {
     giftValue = giftValue > 0 ? Math.min(giftValue, 10) : 10;
   }
   const ruleDefaultDuration =
@@ -1099,9 +1088,25 @@ export async function runTikfinityWebhook(
       );
     }
 
+  const ruleSpawnDefault =
+    connectionFromAdmin?.spawn_count != null &&
+    typeof connectionFromAdmin.spawn_count === "number"
+      ? clampSoloSpawnRepeatCount(connectionFromAdmin.spawn_count)
+      : 1;
+  const soloSpawnRepeats = isRustChaosSoloScrapSpawnAction(action)
+    ? parseSoloSpawnRepeatCount(q, body, ruleSpawnDefault)
+    : 1;
+
   let rconResponse = "";
   try {
-    rconResponse = (await runAndWait(server.id, command, 15000)).trim();
+    for (let iter = 0; iter < soloSpawnRepeats; iter++) {
+      rconResponse = (await runAndWait(server.id, command, 15000)).trim();
+      const chunkFailed =
+        /^FAILED:/i.test(rconResponse) ||
+        /^Unknown action:/i.test(rconResponse) ||
+        /^Error:/i.test(rconResponse);
+      if (chunkFailed) break;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[tikfinity webhook] RCON run failed:", msg);
@@ -1151,6 +1156,7 @@ export async function runTikfinityWebhook(
         viewerName: payload.viewerName,
         giftName: payload.giftName,
         command,
+        spawnRepeats: soloSpawnRepeats > 1 ? soloSpawnRepeats : undefined,
         scrapAmount: isRustChaosStatusEffectAction(action)
           ? undefined
           : giftValue > 0
@@ -1166,7 +1172,13 @@ export async function runTikfinityWebhook(
     );
   }
 
-  console.log("[tikfinity webhook] OK", { action, command, serverId: server.id, rconResponse });
+  console.log("[tikfinity webhook] OK", {
+    action,
+    command,
+    serverId: server.id,
+    rconResponse,
+    spawnRepeats: soloSpawnRepeats,
+  });
   audit("tikfinity", "webhook.trigger", {
     viewerName: payload.viewerName,
     giftName: payload.giftName,
@@ -1198,6 +1210,7 @@ export async function runTikfinityWebhook(
       viewerName: payload.viewerName,
       giftName: payload.giftName,
       command,
+      spawnRepeats: soloSpawnRepeats > 1 ? soloSpawnRepeats : undefined,
       scrapAmount: isRustChaosStatusEffectAction(action)
         ? undefined
         : giftValue > 0
@@ -1208,7 +1221,9 @@ export async function runTikfinityWebhook(
         : undefined,
       rconResponse: rconResponse || undefined,
       debug:
-        "RCON OK. If an expected effect or NPC did not appear, check streamer online + RustChaos.json StreamerName + server console [RustChaos].",
+        soloSpawnRepeats > 1
+          ? `RCON OK (${soloSpawnRepeats}× same command for solo spawns). If fewer animals appeared, check RustChaos delays and server load. Also check StreamerName in RustChaos.json.`
+          : "RCON OK. If an expected effect or NPC did not appear, check streamer online + RustChaos.json StreamerName + server console [RustChaos].",
     })
   );
 }

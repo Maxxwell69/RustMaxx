@@ -5,7 +5,11 @@ import Link from "next/link";
 import { Logo } from "@/components/marketing/Logo";
 import { SteamIdForm } from "@/components/profile/SteamIdForm";
 import { STREAMER_SPAWN_PRESETS } from "@/lib/streamer-spawn-presets";
-import { isRustChaosStatusEffectAction } from "@/lib/tikfinity";
+import {
+  isRustChaosSoloScrapSpawnAction,
+  isRustChaosStatusEffectAction,
+  SOLO_SPAWN_REPEAT_MAX,
+} from "@/lib/tikfinity";
 
 const LEGACY_WH_STORAGE = "rustmaxx_streamer_wh";
 const SECRET_MAP_KEY = "rustmaxx_streamer_wh_by_pub";
@@ -84,11 +88,19 @@ function readSecretForPublicId(
 function fullRuleWebhookUrl(
   webhookBase: string | null,
   secret: string | null,
-  serverAction: string
+  serverAction: string,
+  spawnCount?: number
 ): string | null {
   const name = serverAction.trim();
   if (!webhookBase || !secret || !name) return null;
-  return `${webhookBase}?token=${encodeURIComponent(secret)}&action=${encodeURIComponent(name)}`;
+  const base = `${webhookBase}?token=${encodeURIComponent(secret)}&action=${encodeURIComponent(name)}`;
+  const c =
+    typeof spawnCount === "number" &&
+    Number.isFinite(spawnCount) &&
+    spawnCount > 1
+      ? Math.min(SOLO_SPAWN_REPEAT_MAX, Math.trunc(spawnCount))
+      : 0;
+  return c > 1 ? `${base}&count=${c}` : base;
 }
 
 type HookSummary = {
@@ -110,6 +122,7 @@ type RuleRow = {
   message: string | null;
   scrap_amount: number;
   duration_seconds: number;
+  spawn_count: number;
   npc_template_key: string | null;
   created_at: string;
 };
@@ -207,6 +220,9 @@ export default function StreamerDashboardPage() {
   const [ruleAction, setRuleAction] = useState("");
   const [npcTemplate, setNpcTemplate] = useState("");
   const [ruleDurationSeconds, setRuleDurationSeconds] = useState("10");
+  /** Solo RustChaos spawns (wolf, bear, scientist, …): times to fire `rustchaos` per webhook (1–15). */
+  const [ruleSpawnCount, setRuleSpawnCount] = useState("1");
+  const [quickPresetSpawnCount, setQuickPresetSpawnCount] = useState("1");
   const [quickAdding, setQuickAdding] = useState<string | null>(null);
 
   const groupedActions = useMemo(() => {
@@ -430,7 +446,12 @@ export default function StreamerDashboardPage() {
           ? secretByPublicId[wh.publicId] ??
             readSecretForPublicId(wh.publicId, wh.webhookUpdatedAt)
           : null;
-      const u = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.server_action);
+      const u = fullRuleWebhookUrl(
+        wh?.webhookUrl ?? null,
+        sec ?? null,
+        r.server_action,
+        r.spawn_count
+      );
       if (u) {
         lines.push(`${r.name} (${r.server_action})`, u, "");
       }
@@ -478,6 +499,12 @@ export default function StreamerDashboardPage() {
       const n = parseInt(ruleDurationSeconds.trim(), 10);
       body.durationSeconds = Number.isFinite(n) ? Math.min(120, Math.max(1, n)) : 10;
     }
+    if (isRustChaosSoloScrapSpawnAction(ruleAction)) {
+      const n = parseInt(ruleSpawnCount.trim(), 10);
+      body.spawnCount = Number.isFinite(n)
+        ? Math.min(SOLO_SPAWN_REPEAT_MAX, Math.max(1, n))
+        : 1;
+    }
     const res = await fetch("/api/streamer/rules", {
       method: "POST",
       credentials: "same-origin",
@@ -491,6 +518,7 @@ export default function StreamerDashboardPage() {
     }
     setRuleName("");
     setRuleDurationSeconds("10");
+    setRuleSpawnCount("1");
     await load();
   }
 
@@ -510,6 +538,12 @@ export default function StreamerDashboardPage() {
           hookId: ruleTargetHookId,
           name: preset.ruleName,
           serverAction: preset.serverAction,
+          spawnCount: (() => {
+            const n = parseInt(quickPresetSpawnCount.trim(), 10);
+            return Number.isFinite(n)
+              ? Math.min(SOLO_SPAWN_REPEAT_MAX, Math.max(1, n))
+              : 1;
+          })(),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -953,7 +987,9 @@ export default function StreamerDashboardPage() {
           alias/label; <strong className="font-medium text-zinc-300">Server action</strong> is the in-game action key.{" "}
           <strong className="font-medium text-zinc-300">Copy webhook</strong> builds{" "}
           <code className="rounded bg-zinc-800 px-1">?token=…&amp;action=server_action</code> (e.g.{" "}
-          <code className="rounded bg-zinc-800 px-1">statusflippers</code>) — most reliable for empty-body TikFinity posts.
+          <code className="rounded bg-zinc-800 px-1">statusflippers</code>) — most reliable for empty-body TikFinity posts. For
+          solo animal/scientist spawns, use <code className="rounded bg-zinc-800 px-1">&amp;count=3</code> (or set count in the rule
+          below) to spawn more than one per trigger.
           After <strong className="text-zinc-300">New secret</strong>, use <strong className="text-zinc-300">Copy all rule webhooks</strong>{" "}
           or each Copy so TikFinity gets the new token.
         </p>
@@ -1007,6 +1043,19 @@ export default function StreamerDashboardPage() {
             , <code className="rounded bg-zinc-800 px-1">scientist</code>) or use{" "}
             <code className="rounded bg-zinc-800 px-1">?action=bear</code> on your webhook URL.
           </p>
+          <div className="mb-3 flex max-w-xs flex-col gap-1">
+            <label className="text-xs text-zinc-500">
+              How many animals / scientists per trigger (1–{SOLO_SPAWN_REPEAT_MAX})
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={SOLO_SPAWN_REPEAT_MAX}
+              value={quickPresetSpawnCount}
+              onChange={(e) => setQuickPresetSpawnCount(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100"
+            />
+          </div>
           <div className="grid gap-2 sm:grid-cols-3">
             {STREAMER_SPAWN_PRESETS.map((p) => (
               <button
@@ -1084,6 +1133,23 @@ export default function StreamerDashboardPage() {
               <p className="mt-1 text-[11px] text-zinc-600">1–120. Applies to poison, thirst, hunger, bleed, and dart HUD effects.</p>
             </div>
           ) : null}
+          {isRustChaosSoloScrapSpawnAction(ruleAction) ? (
+            <div>
+              <label className="mb-1 block text-xs text-zinc-500">Spawn count (per webhook)</label>
+              <input
+                type="number"
+                min={1}
+                max={SOLO_SPAWN_REPEAT_MAX}
+                value={ruleSpawnCount}
+                onChange={(e) => setRuleSpawnCount(e.target.value)}
+                className="w-full max-w-[10rem] rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-zinc-600">
+                RustChaos spawns one entity per command; RustMaxx runs the same RCON line this many times. Override anytime with{" "}
+                <code className="rounded bg-zinc-900 px-0.5">&amp;count=</code> on the URL.
+              </p>
+            </div>
+          ) : null}
           <div className="sm:col-span-2">
             <button
               type="submit"
@@ -1101,7 +1167,12 @@ export default function StreamerDashboardPage() {
                 ? secretByPublicId[wh.publicId] ??
                   readSecretForPublicId(wh.publicId, wh.webhookUpdatedAt)
                 : null;
-            const ruleUrl = fullRuleWebhookUrl(wh?.webhookUrl ?? null, sec ?? null, r.server_action);
+            const ruleUrl = fullRuleWebhookUrl(
+              wh?.webhookUrl ?? null,
+              sec ?? null,
+              r.server_action,
+              r.spawn_count
+            );
             return (
               <li
                 key={r.id}
@@ -1115,6 +1186,9 @@ export default function StreamerDashboardPage() {
                   <code className="text-zinc-300">{r.server_action}</code>
                   {isRustChaosStatusEffectAction(r.server_action) ? (
                     <span className="text-zinc-500"> · {r.duration_seconds ?? 10}s</span>
+                  ) : null}
+                  {isRustChaosSoloScrapSpawnAction(r.server_action) && (r.spawn_count ?? 1) > 1 ? (
+                    <span className="text-zinc-500"> · ×{r.spawn_count}</span>
                   ) : null}
                 </span>
                 <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">

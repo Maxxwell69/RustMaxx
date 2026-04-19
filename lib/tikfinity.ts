@@ -882,6 +882,99 @@ export function isRustChaosStatusEffectAction(action: string): boolean {
   return RUSTCHAOS_STATUS_EFFECT_ACTION_SET.has(action);
 }
 
+/** RustChaos actions where the 4th RCON token is scrap (tip); streamer rules may set spawn_count to repeat the command. */
+export const RUSTCHAOS_SOLO_SCRAP_SPAWN_ACTION_KEYS = [
+  "scientist",
+  "scientistflame",
+  "wolf",
+  "bear",
+  "tiger",
+  "panther",
+  "crocodile",
+  "shark",
+  "pig",
+  "chicken",
+] as const;
+
+const RUSTCHAOS_SOLO_SCRAP_SPAWN_SET = new Set<string>(
+  RUSTCHAOS_SOLO_SCRAP_SPAWN_ACTION_KEYS
+);
+
+export function isRustChaosSoloScrapSpawnAction(action: string): boolean {
+  return RUSTCHAOS_SOLO_SCRAP_SPAWN_SET.has(action);
+}
+
+/** Max simultaneous solo spawns per webhook invocation (RustChaos runs one entity per `rustchaos` line). */
+export const SOLO_SPAWN_REPEAT_MAX = 15;
+
+export function clampSoloSpawnRepeatCount(n: number): number {
+  if (!Number.isFinite(n)) return 1;
+  const t = Math.trunc(n);
+  if (t < 1) return 1;
+  if (t > SOLO_SPAWN_REPEAT_MAX) return SOLO_SPAWN_REPEAT_MAX;
+  return t;
+}
+
+/**
+ * How many times to fire `rustchaos` for solo scrap spawns. Query/body overrides rule default.
+ * Checks `spawnCount`, `count`, `spawn_count`, `quantity`, etc.
+ */
+export function parseSoloSpawnRepeatCount(
+  searchParams: URLSearchParams,
+  body: unknown,
+  ruleDefault: number
+): number {
+  const def = clampSoloSpawnRepeatCount(ruleDefault);
+  for (const key of [
+    "spawnCount",
+    "count",
+    "spawn_count",
+    "quantity",
+    "qty",
+    "animals",
+  ] as const) {
+    const raw = searchParams.get(key)?.trim();
+    if (raw != null && raw !== "") {
+      const n = Math.trunc(Number(raw));
+      if (Number.isFinite(n) && n >= 1) return clampSoloSpawnRepeatCount(n);
+    }
+  }
+  const fromObj = (o: Record<string, unknown>): number | null => {
+    for (const k of [
+      "spawnCount",
+      "spawn_count",
+      "quantity",
+      "qty",
+      "animals",
+      "count",
+    ] as const) {
+      const v = o[k];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        const n = Math.trunc(v);
+        if (n >= 1) return clampSoloSpawnRepeatCount(n);
+      }
+      if (typeof v === "string" && v.trim()) {
+        const n = Math.trunc(Number(v));
+        if (Number.isFinite(n) && n >= 1) return clampSoloSpawnRepeatCount(n);
+      }
+    }
+    return null;
+  };
+  if (body && typeof body === "object") {
+    const o = body as Record<string, unknown>;
+    const flat = fromObj(o);
+    if (flat != null) return flat;
+    for (const nestKey of ["data", "event", "payload"] as const) {
+      const nested = o[nestKey];
+      if (nested && typeof nested === "object") {
+        const inner = fromObj(nested as Record<string, unknown>);
+        if (inner != null) return inner;
+      }
+    }
+  }
+  return def;
+}
+
 /**
  * Duration for status-effect RCON: query `duration` / `seconds` / `timer`, or JSON fields of the same names,
  * else TikTok coin/scrap integer when &gt; 0, else **10** seconds (max **120**).

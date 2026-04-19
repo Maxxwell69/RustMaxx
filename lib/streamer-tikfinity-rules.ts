@@ -7,6 +7,8 @@ import {
   TIKTRIGGER_ACTIONS,
   type TikTriggerAction,
   isRustChaosStatusEffectAction,
+  isRustChaosSoloScrapSpawnAction,
+  clampSoloSpawnRepeatCount,
 } from "@/lib/tikfinity";
 import {
   parseNpcTemplateKey,
@@ -21,6 +23,7 @@ export type StreamerTikfinityRuleRow = {
   message: string | null;
   scrap_amount: number;
   duration_seconds: number;
+  spawn_count: number;
   npc_template_key: string | null;
   created_at: Date;
 };
@@ -44,7 +47,7 @@ export async function getStreamerRuleByEventName(
   if (!key) return null;
   const { rows } = await query<StreamerTikfinityRuleRow>(
     `SELECT id, streamer_webhook_id, name, server_action, COALESCE(scrap_amount, 0) AS scrap_amount,
-            COALESCE(duration_seconds, 10) AS duration_seconds, message, npc_template_key
+            COALESCE(duration_seconds, 10) AS duration_seconds, COALESCE(spawn_count, 1) AS spawn_count, message, npc_template_key
      FROM streamer_tikfinity_rules
      WHERE streamer_webhook_id = $1
        AND (
@@ -61,6 +64,7 @@ export async function getStreamerRuleByEventName(
   )
     return null;
   const dur = Number(row.duration_seconds);
+  const sp = Number(row.spawn_count);
   return {
     id: row.id,
     server_action: row.server_action as TikTriggerAction,
@@ -69,6 +73,8 @@ export async function getStreamerRuleByEventName(
     npc_template_key: row.npc_template_key ?? null,
     duration_seconds:
       Number.isFinite(dur) && dur >= 1 && dur <= 120 ? Math.trunc(dur) : 10,
+    spawn_count:
+      Number.isFinite(sp) && sp >= 1 ? clampSoloSpawnRepeatCount(sp) : 1,
   };
 }
 
@@ -77,13 +83,14 @@ export async function listStreamerRules(
 ): Promise<StreamerTikfinityRuleRow[]> {
   const { rows } = await query<StreamerTikfinityRuleRow>(
     `SELECT id, streamer_webhook_id, name, server_action, message, COALESCE(scrap_amount, 0) AS scrap_amount,
-            COALESCE(duration_seconds, 10) AS duration_seconds, npc_template_key, created_at
+            COALESCE(duration_seconds, 10) AS duration_seconds, COALESCE(spawn_count, 1) AS spawn_count, npc_template_key, created_at
      FROM streamer_tikfinity_rules WHERE streamer_webhook_id = $1 ORDER BY created_at DESC`,
     [streamerWebhookId]
   );
   return rows.map((r) => ({
     ...r,
     scrap_amount: Number(r.scrap_amount) || 0,
+    spawn_count: clampSoloSpawnRepeatCount(Number(r.spawn_count) || 1),
     duration_seconds: (() => {
       const d = Number(r.duration_seconds);
       return Number.isFinite(d) && d >= 1 && d <= 120 ? Math.trunc(d) : 10;
@@ -100,6 +107,7 @@ export async function createStreamerRule(
     scrapAmount?: number;
     durationSeconds?: number;
     npcTemplateKey?: string | null;
+    spawnCount?: number;
   } = {}
 ): Promise<{ id: string } | { error: string }> {
   const trimmed = name.trim();
@@ -111,6 +119,8 @@ export async function createStreamerRule(
   if (!Number.isFinite(durationSeconds) || durationSeconds < 1) durationSeconds = 10;
   if (durationSeconds > 120) durationSeconds = 120;
   if (!isRustChaosStatusEffectAction(serverAction)) durationSeconds = 10;
+  let spawnCount = clampSoloSpawnRepeatCount(Number(options.spawnCount) || 1);
+  if (!isRustChaosSoloScrapSpawnAction(serverAction)) spawnCount = 1;
   const message =
     options.message != null ? String(options.message).trim() || null : null;
   let npcTemplateKey: string | null = null;
@@ -137,9 +147,18 @@ export async function createStreamerRule(
   );
   if (existing.length > 0) return { error: "A rule with this event name already exists" };
   const { rows } = await query<{ id: string }>(
-    `INSERT INTO streamer_tikfinity_rules (streamer_webhook_id, name, server_action, message, scrap_amount, duration_seconds, npc_template_key)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-    [streamerWebhookId, trimmed, serverAction, message, scrap, durationSeconds, npcTemplateKey]
+    `INSERT INTO streamer_tikfinity_rules (streamer_webhook_id, name, server_action, message, scrap_amount, duration_seconds, spawn_count, npc_template_key)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [
+      streamerWebhookId,
+      trimmed,
+      serverAction,
+      message,
+      scrap,
+      durationSeconds,
+      spawnCount,
+      npcTemplateKey,
+    ]
   );
   if (!rows[0]) return { error: "Insert failed" };
   return { id: rows[0].id };

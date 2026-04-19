@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
     scrapAmount?: number;
     durationSeconds?: number;
     npcTemplateKey?: string | null;
+    spawnCount?: number;
   };
   try {
     body = await request.json();
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
     scrapAmount: body.scrapAmount,
     durationSeconds: body.durationSeconds,
     npcTemplateKey: body.npcTemplateKey,
+    spawnCount: body.spawnCount,
   });
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });

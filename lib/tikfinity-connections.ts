@@ -28,6 +28,8 @@ export type TikfinityConnectionForWebhook = {
   npc_template_key: string | null;
   /** Streamer rules: default status-effect duration (1–120s). Admin connections omit (null). */
   duration_seconds?: number | null;
+  /** Streamer rules: solo animal/scientist spawns — repeat RCON this many times (1–15). Admin connections omit. */
+  spawn_count?: number | null;
 };
 
 const NPC_TEMPLATE_KEY_RE = /^[a-zA-Z0-9_-]{1,64}$/;
