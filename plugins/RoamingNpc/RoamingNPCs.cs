@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.53")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.54")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -2976,7 +2976,8 @@ namespace Oxide.Plugins
                 bot.Value.Init();
             }
             if (_bridgePatrolTimer != null && !_bridgePatrolTimer.Destroyed) _bridgePatrolTimer.Destroy();
-            _bridgePatrolTimer = timer.Every(1f, BridgePatrolTick);
+            // Bridge escort repaths often use sub‑second intervals — 1s tick caused stop‑go (Reset every tick while walking).
+            _bridgePatrolTimer = timer.Every(0.45f, BridgePatrolTick);
             if (_bridgeDepositApproachTimer != null && !_bridgeDepositApproachTimer.Destroyed)
                 _bridgeDepositApproachTimer.Destroy();
             _bridgeDepositApproachTimer = timer.Every(0.25f, BridgeDepositApproachTick);
@@ -3544,7 +3545,7 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// NavMesh hull can sit slightly above roads/asphalt — raycast down and Warp to nearest walkable near the visual surface (bridge idle / Stop).
+        /// NavMesh hull can sit above roads/asphalt (even a few cm). Raycast + terrain height + NavMesh.SamplePosition to pull feet down.
         /// </summary>
         private static void TrySnapBridgeNpcFeetToVisualGround(CustomPet pet)
         {
@@ -3557,31 +3558,59 @@ namespace Oxide.Plugins
 
                 var pos = pet.transform.position;
                 var mask = LayerMask.GetMask("Terrain", "World", "Default", "Construction", "Deployed");
-                if (!Physics.Raycast(pos + Vector3.up * 14f, Vector3.down, out var hit, 52f, mask,
+                float terY = TerrainMeta.HeightMap.GetHeight(pos);
+                float groundY = terY;
+                if (Physics.Raycast(pos + Vector3.up * 26f, Vector3.down, out var hit, 96f, mask,
                         QueryTriggerInteraction.Ignore))
-                    return;
+                    groundY = Mathf.Max(terY, hit.point.y);
 
-                var groundY = hit.point.y;
-                var dy = groundY - pos.y;
-                if (dy >= -2.95f && dy <= -0.045f)
+                var excess = pos.y - groundY;
+                if (excess <= 0.004f || excess > 5.5f) return;
+
+                bool Applied(Vector3 snapped)
                 {
-                    var probe = new Vector3(pos.x, groundY + 0.12f, pos.z);
-                    if (navigator.GetNearestNavmeshPosition(probe, out var snapped, 7f))
+                    if (snapped.y >= pos.y - 0.002f) return false;
+                    if (snapped.y < groundY - 0.55f) return false;
+                    pet.transform.position = snapped;
+                    navigator.Warp(snapped);
+                    UnityEngine.Physics.SyncTransforms();
+                    return true;
+                }
+
+                foreach (var lift in new[] { 0.1f, 0.28f, 0.55f, 1.1f })
+                {
+                    var probe = new Vector3(pos.x, groundY + lift, pos.z);
+                    for (var rad = 5f; rad <= 14f; rad += 3f)
                     {
-                        var adj = snapped.y - pos.y;
-                        if (adj >= -2.95f && adj <= -0.025f)
-                        {
-                            pet.transform.position = snapped;
-                            navigator.Warp(snapped);
-                            UnityEngine.Physics.SyncTransforms();
-                        }
+                        if (navigator.GetNearestNavmeshPosition(probe, out var snapped, rad) && Applied(snapped))
+                            return;
                     }
                 }
+
+                var samplePt = new Vector3(pos.x, groundY + 1.25f, pos.z);
+                if (NavMesh.SamplePosition(samplePt, out var nmHit, 16f, NavMesh.AllAreas) &&
+                    Applied(nmHit.position))
+                    return;
             }
             catch
             {
                 /* ignored */
             }
+        }
+
+        /// <summary>
+        /// <see cref="MoveController.SetDestinationFast"/> calls Reset() — re-issuing every patrol tick interrupts walking (stop‑go).
+        /// </summary>
+        private static bool ShouldSkipBridgeEscortRepath(CustomPet pet)
+        {
+            var agent = pet?.MoveController?.Navigator?.Agent;
+            if (agent == null || !agent.isOnNavMesh) return false;
+            if (agent.pathPending) return false;
+            if (!agent.hasPath) return false;
+            var rem = agent.remainingDistance;
+            if (float.IsInfinity(rem) || float.IsNaN(rem)) return false;
+            if (rem <= 2.1f) return false;
+            return agent.velocity.sqrMagnitude > 0.018f;
         }
 
         /// <summary>Clears bleeding-like metabolism channels after <see cref="BasePlayer.RecoverFromWounded"/>.</summary>
@@ -3696,7 +3725,7 @@ namespace Oxide.Plugins
             if (idleAgent != null && idleAgent.isOnNavMesh && idleAgent.velocity.sqrMagnitude < 0.025f &&
                 UnityEngine.Time.realtimeSinceStartup >= pet.Data.BridgeGroundSnapNextAt)
             {
-                pet.Data.BridgeGroundSnapNextAt = UnityEngine.Time.realtimeSinceStartup + 1.35f;
+                pet.Data.BridgeGroundSnapNextAt = UnityEngine.Time.realtimeSinceStartup + 0.62f;
                 TrySnapBridgeNpcFeetToVisualGround(pet);
             }
 
@@ -3831,6 +3860,15 @@ namespace Oxide.Plugins
                         UnityEngine.Physics.SyncTransforms();
                     }
                 }
+
+            // Avoid Reset() each patrol tick while a path is still being followed — causes stop-go stepping.
+            if (!useHomeCupboard && anchorChaseEscort && navOk && ShouldSkipBridgeEscortRepath(pet))
+            {
+                pet.Data.BridgePatrolNextMoveAt =
+                    UnityEngine.Time.realtimeSinceStartup +
+                    Mathf.Clamp(Random.Range(minI, maxI) * 0.5f, 0.18f, 0.85f);
+                return;
+            }
 
             // Full nav speed immediately — avoids slow ramp + per-frame Move spam from SetDestination(reset speed=0).
             if (mc?.Navigator?.Agent != null && mc.Navigator.Agent.isOnNavMesh && navOk)
