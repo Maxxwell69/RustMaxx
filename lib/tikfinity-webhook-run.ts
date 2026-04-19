@@ -168,18 +168,35 @@ async function handleCrewRnpcJoin(
     : null;
   if (parsedCrewTemplate) {
     const { rows: srvRows } = await query<ServerRow>(
-      "SELECT id, name, rcon_host, rcon_port, rcon_password FROM servers WHERE id = $1",
+      "SELECT id, name, rcon_host, rcon_port, rcon_password, tikfinity_anchor_steam_id FROM servers WHERE id = $1",
       [crewServerId]
     );
     const srv = srvRows[0];
     if (srv) {
-      const spawn = await npcmaxxRconSpawn({
-        server: srv,
-        templateKey: parsedCrewTemplate,
-        viewerDisplayName: displayName,
-        connectionId: null,
-        tikfinityEventName: "join",
-      });
+      const spawn = npcmaxxTemplateRequiresMaxxInvadersEngine(parsedCrewTemplate)
+        ? await maxxinvadersRconSpawn({
+            server: srv,
+            viewerDisplayName: displayName,
+            viewerId: uniqueId,
+            tier: 1,
+            kit: "-",
+            mode: "roaming",
+            roamingBotKey: parsedCrewTemplate,
+            anchorSteam64: resolveMaxxInvadersAnchorSteam(request, body, {
+              serverDefault: srv.tikfinity_anchor_steam_id ?? null,
+              envFallback: TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID,
+            }),
+            roamingWearPipe: null,
+            connectionId: null,
+            tikfinityEventName: "join",
+          })
+        : await npcmaxxRconSpawn({
+            server: srv,
+            templateKey: parsedCrewTemplate,
+            viewerDisplayName: displayName,
+            connectionId: null,
+            tikfinityEventName: "join",
+          });
       if (spawn.ok) {
         npcSpawn = { ok: true, command: spawn.command };
         audit("tikfinity", "crew_rnpc.npc_spawn", {
@@ -283,10 +300,17 @@ function parseMaxxInvadersParams(
 }
 
 /**
- * `npcmaxx.spawn` only hits NPCMaxx — no MaxxInvaders viewer registry / invader lifecycle.
- * These Roaming template keys must use `maxxinvaders.spawn` while still accepting `?action=npcmaxx&template=…`.
+ * `npcmaxx.spawn` only hits NPCMaxx — passes anchor Steam `0`, so bridge bots never leash to the streamer.
+ * Keys here, plus every `streamer_*` template, must use `maxxinvaders.spawn` while still accepting `?action=npcmaxx&template=…`.
  */
 const NPCMAXX_TEMPLATES_REQUIRING_MAXXINVADERS_ENGINE = new Set<string>(["snipemb"]);
+
+function npcmaxxTemplateRequiresMaxxInvadersEngine(templateKey: string): boolean {
+  return (
+    NPCMAXX_TEMPLATES_REQUIRING_MAXXINVADERS_ENGINE.has(templateKey) ||
+    templateKey.startsWith("streamer_")
+  );
+}
 
 async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
   request: NextRequest,
@@ -298,7 +322,7 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
   npcTemplateKeyResolved: string,
   tikfinitySpawnActionLabel: TikTriggerAction
 ): Promise<NextResponse | null> {
-  if (!NPCMAXX_TEMPLATES_REQUIRING_MAXXINVADERS_ENGINE.has(npcTemplateKeyResolved)) {
+  if (!npcmaxxTemplateRequiresMaxxInvadersEngine(npcTemplateKeyResolved)) {
     return null;
   }
 
