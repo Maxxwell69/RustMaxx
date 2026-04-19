@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.52")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.53")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -399,9 +399,9 @@ namespace Oxide.Plugins
             public List<string> SpawnRoamingTemplateKeys { get; set; } = new()
             {
                 "streamer_patrol",
-                "bob_resources_farmer",
-                "john_looter",
-                "alfred_hunter",
+                "streamer_miner",
+                "streamer_lumberjack",
+                "streamer_medic",
             };
 
             /// <summary>Legacy config key; 3D overhead tags are disabled (HP/distance use INVADERS panel only).</summary>

@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.56")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.57")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -1815,6 +1815,14 @@ namespace Oxide.Plugins
             [JsonProperty(RU ? "Разрешить использовать топливо для бензопилы?" : "Allow to use fuel for chainsaw?", Order = 15)]
             public bool CanFuelUseFromChainsaw = true;
 
+            /// <summary>Approximate multiplier for ore/stone hits (rounds to integers; 2 = two strike cycles per gather step).</summary>
+            [JsonProperty(RU ? "Множитель ударов по руде/камню (2 ≈ двойная добыча за цикл)" : "Ore/stone gathering strike multiplier (2 ≈ ~2× yield rate)", Order = 16)]
+            public float OreGatherYieldMultiplier = 1f;
+
+            /// <summary>Multiplies delay between tree/chainsaw swings (&lt; 1 = faster).</summary>
+            [JsonProperty(RU ? "Множитель задержки между ударами по дереву (0.5 = в 2 раза быстрее)" : "Tree chop delay multiplier (<1 = faster chainsaw swings)", Order = 17)]
+            public float TreeMiningStrikeDelayMultiplier = 1f;
+
             [JsonProperty(RU ? "Разрешить добывать руду?" : "Allow to mine ore?", Order = 20)]
             public bool CanMiningOre = true;
 
@@ -2974,6 +2982,8 @@ namespace Oxide.Plugins
             monuments = new();
             EnsureStreamerPatrolTemplate();
             EnsureStreamerMedicTemplate();
+            EnsureStreamerMinerTemplate();
+            EnsureStreamerLumberjackTemplate();
             MigrateStreamerRockyTerrainBridgeHintsOnce();
             MigrateStreamerMedicEscortPersonalityOnce();
             foreach (var bot in config.bots)
@@ -3547,12 +3557,151 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>Creates <c>streamer_miner</c> once — MaxxInvaders ore/stone farmer: Kick hazmat, backpack, revolver, ~2× ore strike rate.</summary>
+        private void EnsureStreamerMinerTemplate()
+        {
+            if (config?.bots == null) return;
+            const string minerKey = "streamer_miner";
+            if (config.bots.ContainsKey(minerKey)) return;
+            if (!config.bots.TryGetValue("streamer_patrol", out var src) || src == null)
+            {
+                if (!config.bots.TryGetValue("alfred_hunter", out src) || src == null) return;
+            }
+
+            try
+            {
+                var json = JsonConvert.SerializeObject(src, settingsSerializer);
+                var clone = JsonConvert.DeserializeObject<BotSetup>(json, settingsSerializer);
+                if (clone == null) return;
+
+                clone.Name = "Miner";
+                clone.Personality = PersonalityBot.Friendly;
+                clone.HunterState.CanHunt = false;
+
+                clone.MinerState ??= new SetupMining();
+                clone.MinerState.CanMiningWood = false;
+                clone.MinerState.CanMiningOre = true;
+                clone.MinerState.CanMiningBarrel = false;
+                clone.MinerState.CanMiningRoadSign = false;
+                clone.MinerState.CanPickupCollectibleItems = true;
+                clone.MinerState.CanPickupDroppedItems = false;
+                clone.MinerState.CanLootedContainer = false;
+                clone.MinerState.CanLootedCorpse = false;
+                clone.MinerState.CanButcherCorpse = false;
+                clone.MinerState.CanFuelUseFromChainsaw = false;
+                clone.MinerState.OreGatherYieldMultiplier = 2f;
+                clone.MinerState.TreeMiningStrikeDelayMultiplier = 1f;
+
+                clone.Wear.items = new List<ItemSetup>
+                {
+                    new ItemSetup("hazmatsuit.kick", 0),
+                    new ItemSetup("largebackpack", 0),
+                };
+
+                clone.ItemsMiningOre.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, false, new ItemSetup("pickaxe", 0)),
+                    new ItemBot(false, false, new ItemSetup("jackhammer", 0)),
+                    new ItemBot(true, true, new ItemSetup("pickaxe", 0)),
+                };
+
+                clone.ItemsMiningTree.Items = new List<ItemBot>();
+
+                clone.ItemsWeapon.CanUseAmmo = true;
+                clone.ItemsWeapon.AmountAmmo = 128;
+                clone.ItemsWeapon.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, true, new ItemSetup("pistol.revolver", 0)) { ammoShortname = "ammo.pistol" },
+                };
+
+                clone.Controller ??= new ControllerSetup();
+                clone.Controller.ApplyStreamerRockyTerrainBridgeHints();
+                clone.Init();
+                config.bots[minerKey] = clone;
+                SaveConfig();
+                PrintWarning(
+                    "[RoamingNPCs] Added default bot template 'streamer_miner' (Kick hazmat + backpack + revolver; ~2× ore gathering). Use ?template=streamer_miner.");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[RoamingNPCs] Could not add streamer_miner template: {ex.Message}");
+            }
+        }
+
+        /// <summary>Creates <c>streamer_lumberjack</c> once — Lumberjack hazmat, chainsaw + fuel, ~2× chop speed vs default.</summary>
+        private void EnsureStreamerLumberjackTemplate()
+        {
+            if (config?.bots == null) return;
+            const string ljKey = "streamer_lumberjack";
+            if (config.bots.ContainsKey(ljKey)) return;
+            if (!config.bots.TryGetValue("streamer_patrol", out var src) || src == null)
+            {
+                if (!config.bots.TryGetValue("alfred_hunter", out src) || src == null) return;
+            }
+
+            try
+            {
+                var json = JsonConvert.SerializeObject(src, settingsSerializer);
+                var clone = JsonConvert.DeserializeObject<BotSetup>(json, settingsSerializer);
+                if (clone == null) return;
+
+                clone.Name = "Jack";
+                clone.Personality = PersonalityBot.Friendly;
+                clone.HunterState.CanHunt = false;
+
+                clone.MinerState ??= new SetupMining();
+                clone.MinerState.CanMiningWood = true;
+                clone.MinerState.CanMiningOre = false;
+                clone.MinerState.CanMiningBarrel = false;
+                clone.MinerState.CanMiningRoadSign = false;
+                clone.MinerState.CanPickupCollectibleItems = true;
+                clone.MinerState.CanPickupDroppedItems = false;
+                clone.MinerState.CanLootedContainer = false;
+                clone.MinerState.CanLootedCorpse = false;
+                clone.MinerState.CanButcherCorpse = false;
+                clone.MinerState.CanFuelUseFromChainsaw = true;
+                clone.MinerState.OreGatherYieldMultiplier = 1f;
+                clone.MinerState.TreeMiningStrikeDelayMultiplier = 0.5f;
+
+                clone.Wear.items = new List<ItemSetup> { new ItemSetup("hazmatsuit.lumberjack", 0) };
+
+                clone.ItemsMiningOre.Items = new List<ItemBot>();
+
+                clone.ItemsMiningTree.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, false, new ItemSetup("chainsaw", 0)),
+                    new ItemBot(true, true, new ItemSetup("chainsaw", 0)),
+                    new ItemBot(false, false, new ItemSetup("hatchet", 0)),
+                };
+
+                clone.ItemsWeapon.CanUseAmmo = false;
+                clone.ItemsWeapon.AmountAmmo = 0;
+                clone.ItemsWeapon.Items = new List<ItemBot>();
+
+                clone.ItemsOnSpawn = new List<ItemSetup>();
+                for (var i = 0; i < 80; i++)
+                    clone.ItemsOnSpawn.Add(new ItemSetup("lowgradefuel", 0));
+
+                clone.Controller ??= new ControllerSetup();
+                clone.Controller.ApplyStreamerRockyTerrainBridgeHints();
+                clone.Init();
+                config.bots[ljKey] = clone;
+                SaveConfig();
+                PrintWarning(
+                    "[RoamingNPCs] Added default bot template 'streamer_lumberjack' (Lumberjack hazmat + chainsaw; ~2× wood chop speed). Use ?template=streamer_lumberjack.");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[RoamingNPCs] Could not add streamer_lumberjack template: {ex.Message}");
+            }
+        }
+
         /// <summary>Existing servers: upgrade streamer bridge templates once for rocky terrain navigation.</summary>
         private void MigrateStreamerRockyTerrainBridgeHintsOnce()
         {
             if (config?.bots == null) return;
             if (config.StreamerRockyTerrainBridgeApplied) return;
-            foreach (var key in new[] { "streamer_patrol", "streamer_medic" })
+            foreach (var key in new[] { "streamer_patrol", "streamer_medic", "streamer_miner", "streamer_lumberjack" })
             {
                 if (!config.bots.TryGetValue(key, out var bot) || bot?.Controller == null) continue;
                 bot.Controller.ApplyStreamerRockyTerrainBridgeHints();
@@ -3561,7 +3710,7 @@ namespace Oxide.Plugins
             config.StreamerRockyTerrainBridgeApplied = true;
             SaveConfig();
             PrintWarning(
-                "[RoamingNPCs] Applied rocky-terrain navigation hints to streamer_patrol / streamer_medic Controller (NavMesh relaxed, obstacle timer faster). Toggle \"Use only NavMesh\" back on in JSON if undesired.");
+                    "[RoamingNPCs] Applied rocky-terrain navigation hints to streamer bridge templates Controller (NavMesh relaxed, obstacle timer faster). Toggle \"Use only NavMesh\" back on in JSON if undesired.");
         }
 
         /// <summary>Existing servers: streamer_medic used Friendly — anchor escort could stall; Defensive matches bridge escort.</summary>
@@ -8196,7 +8345,9 @@ namespace Oxide.Plugins
                                     {
                                         if (ActivatedTool(treeEntity))
                                         {
-                                            yield return MiningResource(treeEntity, 1f);
+                                            float treeMul = Mathf.Max(0.08f,
+                                                owner?.Data?.Setup?.MinerState?.TreeMiningStrikeDelayMultiplier ?? 1f);
+                                            yield return MiningResource(treeEntity, treeMul);
                                         }
                                         else RemoveTarget(treeEntity, true);
                                         break;
@@ -8205,7 +8356,13 @@ namespace Oxide.Plugins
                                     {
                                         if (ActivatedTool(oreEntity))
                                         {
-                                            yield return MiningResource(oreEntity, 1f);
+                                            float multOre = owner?.Data?.Setup?.MinerState?.OreGatherYieldMultiplier ?? 1f;
+                                            int strikes = Mathf.Clamp(Mathf.RoundToInt(multOre), 1, 6);
+                                            for (var si = 0; si < strikes; si++)
+                                            {
+                                                if (!oreEntity.IsValid()) yield break;
+                                                yield return MiningResource(oreEntity, si == 0 ? 1f : 0.42f);
+                                            }
                                         }
                                         else RemoveTarget(oreEntity, true);
                                         break;

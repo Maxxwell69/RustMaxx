@@ -62,6 +62,16 @@ export const STREAMER_MAXXINVADERS_URL_PRESETS: StreamerMaxxPreset[] = [
     params: { action: "maxxinvaders", template: "streamer_medic" },
   },
   {
+    id: "maxx-miner",
+    label: "MaxxInvaders — template streamer_miner (Kick hazmat + backpack + ore)",
+    params: { action: "maxxinvaders", template: "streamer_miner" },
+  },
+  {
+    id: "maxx-lumberjack",
+    label: "MaxxInvaders — template streamer_lumberjack (Lumberjack hazmat + chainsaw)",
+    params: { action: "maxxinvaders", template: "streamer_lumberjack" },
+  },
+  {
     id: "outfit-default",
     label: "MaxxInvaders — outfit default (template clothes)",
     params: { action: "maxxinvaders", outfit: "default" },
