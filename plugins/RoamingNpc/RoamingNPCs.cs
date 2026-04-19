@@ -3809,7 +3809,44 @@ namespace Oxide.Plugins
         {
             if (listNpcPlayers == null || listNpcPlayers.Count == 0) return;
             foreach (var pet in listNpcPlayers.Values)
+                TrySyncProtectEscortCrouchWithAnchor(pet);
+            foreach (var pet in listNpcPlayers.Values)
                 TryBridgePatrolMoveForPet(pet);
+        }
+
+        /// <summary>
+        /// When the streamer (anchor) is crouched during protect/follow/guard escort, mirror stance on bridge NPCs.
+        /// Runs on the bridge patrol timer so it still applies while combat logic suppresses patrol moves.
+        /// </summary>
+        private void TrySyncProtectEscortCrouchWithAnchor(CustomPet pet)
+        {
+            var setup = pet?.Data?.Setup;
+            if (setup?.BridgePatrol == null || !setup.BridgePatrol.Enable) return;
+            if (pet?.Data == null || !pet.Data.SpawnedFromMaxxInvadersBridge) return;
+            if (pet.Data.BridgeProtectAnchorUserId == 0UL) return;
+            if (pet.Data.BridgeDepositApproachActive) return;
+            if (pet.Data.BridgeDepositStandbyActive) return;
+
+            var anchor = BasePlayer.FindByID(pet.Data.BridgeProtectAnchorUserId);
+            if (anchor == null || !anchor.IsAlive()) return;
+
+            var taskLow = (pet.Data.BridgeLastAppliedTask ?? "").Trim().ToLowerInvariant();
+            var medicEscort = setup.BridgeMedic != null && setup.BridgeMedic.Enable;
+            var anchorChaseEscort = setup.BattleState != null && setup.BattleState._protectBridgeAnchorPlayer &&
+                                    (taskLow == "protect" || taskLow == "follow" || taskLow == "guard" || medicEscort ||
+                                     (string.IsNullOrEmpty(taskLow) && setup.BridgePatrol.RadiusMeters <= 14f));
+            if (!anchorChaseEscort) return;
+
+            try
+            {
+                var wantDuck = anchor.IsDucked();
+                if (pet.Ducked != wantDuck)
+                    pet.Ducked = wantDuck;
+            }
+            catch
+            {
+                /* ignored */
+            }
         }
 
         private void TryBridgePatrolMoveForPet(CustomPet pet)
