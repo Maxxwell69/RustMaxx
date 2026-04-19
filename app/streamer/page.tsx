@@ -856,6 +856,16 @@ export default function StreamerDashboardPage() {
           </Link>{" "}
           to request access if the owner requires approval.
         </p>
+        <p className="mb-4 rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-400">
+          <strong className="text-zinc-200">TikFinity needs the full URL including </strong>
+          <code className="text-emerald-400">?token=…</code>
+          {" "}— use <strong className="text-zinc-200">Copy webhook URL</strong> (green box) after you{" "}
+          <strong className="text-zinc-200">Reveal URL</strong> on a new device or browser. The path alone (
+          <code className="text-zinc-600">/api/tikfinity/hooks/…</code>) returns{" "}
+          <code className="text-amber-400">401 Invalid token</code>.{" "}
+          <strong className="text-zinc-200">502</strong> / <strong className="text-zinc-200">spawn_position</strong> come from
+          the Rust server (RCON / MaxxInvaders), not from a wrong RustMaxx link.
+        </p>
         {serversLoadError ? (
           <p className="mb-4 rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
             {serversLoadError}

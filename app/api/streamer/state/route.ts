@@ -11,19 +11,10 @@ import {
   getStreamerWebhookLimit,
   parseStreamerBillingTier,
 } from "@/lib/billing-tiers";
+import { getPublicSiteOrigin } from "@/lib/public-site-origin";
 
-function appOrigin(): string | null {
-  const u = process.env.APP_URL?.trim() ?? process.env.SITE_URL?.trim();
-  if (!u) return null;
-  try {
-    return new URL(u).origin;
-  } catch {
-    return null;
-  }
-}
-
-export async function GET(_request: NextRequest) {
-  const session = getSession(_request.headers.get("cookie"));
+export async function GET(request: NextRequest) {
+  const session = getSession(request.headers.get("cookie"));
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -36,7 +27,7 @@ export async function GET(_request: NextRequest) {
     subscriptionStatus: user.subscription_status,
   });
   const dashboardOk = canAccessStreamerDashboard(user);
-  const origin = appOrigin();
+  const origin = getPublicSiteOrigin(request);
 
   const hooksRows = await listStreamerWebhooksForUser(user.id);
   const streamerTier = parseStreamerBillingTier(user.streamer_tier) ?? "free";

@@ -5,6 +5,7 @@ import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
 import { query } from "@/lib/db";
 import { createWebhookForServer } from "@/lib/streamer-webhooks";
 import { isStreamerAllowedForServerHooks } from "@/lib/streamer-server-allowlist";
+import { getPublicSiteOrigin } from "@/lib/public-site-origin";
 
 export async function POST(request: NextRequest) {
   const session = getSession(request.headers.get("cookie"));
@@ -75,9 +76,9 @@ export async function POST(request: NextRequest) {
     }
     throw e;
   }
-  const base = (process.env.APP_URL ?? process.env.SITE_URL ?? "").replace(/\/$/, "");
+  const origin = getPublicSiteOrigin(request);
   const webhookPath = `/api/tikfinity/hooks/${row.public_id}`;
-  const webhookUrl = base ? `${base}${webhookPath}` : webhookPath;
+  const webhookUrl = origin ? `${origin}${webhookPath}` : webhookPath;
   /** Paste this into TikFinity as-is when the secret is shown (avoids 401 Invalid token). */
   const tikFinityUrlWithToken =
     secretPlain && webhookUrl
