@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.51")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.52")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -81,6 +81,10 @@ namespace Oxide.Plugins
         {
             [JsonProperty(RU ? "Настройка ботов" : "Bots settings", Order = 10)]
             public Dictionary<string, BotSetup> bots = new();
+
+            /// <summary>One-time migration: rocky-terrain controller hints on streamer_patrol / streamer_medic.</summary>
+            [JsonProperty("RustMaxx streamer rocky bridge nav applied", Order = 5)]
+            public bool StreamerRockyTerrainBridgeApplied { get; set; }
 
             [JsonProperty(RU ? "Укажите для генератора ID ботов (от 8 - 15)" : "Specify the ID of the bot generator (8 - 15)")]
             private int digits = 9;
@@ -1540,6 +1544,19 @@ namespace Oxide.Plugins
                 timerTickBrain = Mathf.Min(timerTickBrain, 0.05f);
                 timerTickController = Mathf.Min(timerTickController, 0.08f);
             }
+
+            /// <summary>
+            /// MaxxInvaders streamer bridge on boulder maps: strict NavMesh-only paths often trap NPCs on rock edges; relax
+            /// mesh lock, shorten obstacle wait, widen entity scan; <see cref="SetEscortMovementSpeedMax"/> for snappy ticks.
+            /// </summary>
+            public void ApplyStreamerRockyTerrainBridgeHints()
+            {
+                OnlyNavMeshUse = false;
+                timerObstacle = Mathf.Min(timerObstacle, 1.12f);
+                if (RadiusFindEntity < 42f) RadiusFindEntity = 42f;
+                SetEscortMovementSpeedMax();
+            }
+
             // public bool AllowedDistanceToWarp(float distance) => allowedDistanceToWarp < 0 || distance <= allowedDistanceToWarp;
             public bool AllowedDistanceToWarp(float distance) => false;
         }
@@ -2946,6 +2963,7 @@ namespace Oxide.Plugins
             monuments = new();
             EnsureStreamerPatrolTemplate();
             EnsureStreamerMedicTemplate();
+            MigrateStreamerRockyTerrainBridgeHintsOnce();
             foreach (var bot in config.bots)
             {
                 bot.Value.Init();
@@ -3391,6 +3409,8 @@ namespace Oxide.Plugins
                 clone.FullState.BridgeUseAnchorOwnedStorage = true;
                 clone.FullState.BridgeAnchorStorageSearchRadius = 18f;
                 clone.AllowPlayerLootInventoryWhileAlive = true;
+                clone.Controller ??= new ControllerSetup();
+                clone.Controller.ApplyStreamerRockyTerrainBridgeHints();
                 config.bots[streamerKey] = clone;
                 SaveConfig();
                 PrintWarning(
@@ -3459,6 +3479,8 @@ namespace Oxide.Plugins
                     new AmountItemBot(false, true, 2, new ItemSetup("largemedkit", 0)),
                 };
 
+                clone.Controller ??= new ControllerSetup();
+                clone.Controller.ApplyStreamerRockyTerrainBridgeHints();
                 clone.Init();
                 config.bots[medicKey] = clone;
                 SaveConfig();
@@ -3469,6 +3491,23 @@ namespace Oxide.Plugins
             {
                 PrintWarning($"[RoamingNPCs] Could not add streamer_medic template: {ex.Message}");
             }
+        }
+
+        /// <summary>Existing servers: upgrade streamer bridge templates once for rocky terrain navigation.</summary>
+        private void MigrateStreamerRockyTerrainBridgeHintsOnce()
+        {
+            if (config?.bots == null) return;
+            if (config.StreamerRockyTerrainBridgeApplied) return;
+            foreach (var key in new[] { "streamer_patrol", "streamer_medic" })
+            {
+                if (!config.bots.TryGetValue(key, out var bot) || bot?.Controller == null) continue;
+                bot.Controller.ApplyStreamerRockyTerrainBridgeHints();
+            }
+
+            config.StreamerRockyTerrainBridgeApplied = true;
+            SaveConfig();
+            PrintWarning(
+                "[RoamingNPCs] Applied rocky-terrain navigation hints to streamer_patrol / streamer_medic Controller (NavMesh relaxed, obstacle timer faster). Toggle \"Use only NavMesh\" back on in JSON if undesired.");
         }
 
         /// <summary>Clears bleeding-like metabolism channels after <see cref="BasePlayer.RecoverFromWounded"/>.</summary>
@@ -11053,7 +11092,43 @@ namespace Oxide.Plugins
             return true;
         }
 
-        /// <summary>Strip Rich Text / length; if nothing left (emoji-only TikTok names, etc.), use Viewer_ + id digits so spawn never dies on empty name.</summary>
+        private static bool IsAnonymousBridgeDisplayLabel(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return true;
+            var t = s.Trim();
+            if (t.Length <= 1) return true;
+            if (string.Equals(t, "Viewer", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "DemoViewer", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "User", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "Player", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "Test", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.StartsWith("Test", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.StartsWith("Viewer_", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        private static string BridgeRandomCallsignFromSuffix(string uniqueSuffixForFallback)
+        {
+            string[] a =
+            {
+                "Rust", "Grit", "Viper", "Scrap", "Feral", "Dusk", "Iron", "Oak", "Ash", "Rogue", "Nova", "Brick"
+            };
+            string[] b =
+            {
+                "Fang", "Echo", "Jack", "Bolt", "Grim", "Crow", "Stag", "Wolf", "Fox", "Rook", "Mesa", "Drift"
+            };
+            var tag = $"{a[UnityEngine.Random.Range(0, a.Length)]}{b[UnityEngine.Random.Range(0, b.Length)]}";
+            var id = string.IsNullOrWhiteSpace(uniqueSuffixForFallback) ? "x" : uniqueSuffixForFallback.Trim();
+            var digits = new string(id.Where(char.IsDigit).ToArray());
+            if (digits.Length > 6)
+                digits = digits.Substring(digits.Length - 6);
+            if (string.IsNullOrEmpty(digits))
+                digits = UnityEngine.Random.Range(100, 999).ToString();
+            var name = $"{tag}{digits}";
+            return name.Length > 24 ? name.Substring(0, 24) : name;
+        }
+
+        /// <summary>Strip Rich Text / length; TikFinity placeholders (Viewer, Test…) become a random callsign instead of Viewer_ digits.</summary>
         private static string SanitizeBridgeDisplayName(string raw, string uniqueSuffixForFallback)
         {
             string s = null;
@@ -11065,18 +11140,10 @@ namespace Oxide.Plugins
                 s = s.Replace("<", "").Replace(">", "").Trim();
             }
 
-            if (!string.IsNullOrEmpty(s))
+            if (!string.IsNullOrEmpty(s) && !IsAnonymousBridgeDisplayLabel(s))
                 return s;
 
-            var id = string.IsNullOrWhiteSpace(uniqueSuffixForFallback) ? "viewer" : uniqueSuffixForFallback.Trim();
-            var digits = new string(id.Where(char.IsDigit).ToArray());
-            if (digits.Length > 10)
-                digits = digits.Substring(digits.Length - 10);
-            if (string.IsNullOrEmpty(digits))
-                digits = ((uint)Math.Abs(id.GetHashCode())).ToString();
-            if (digits.Length > 10)
-                digits = digits.Substring(0, 10);
-            return $"Viewer_{digits}";
+            return BridgeRandomCallsignFromSuffix(uniqueSuffixForFallback);
         }
         #endregion
     }

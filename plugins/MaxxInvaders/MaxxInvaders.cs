@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.50")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.51")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -993,6 +993,8 @@ namespace Oxide.Plugins
 
             if (IsUnexpandedWebhookPlaceholder(viewerName))
                 viewerName = "Viewer";
+
+            viewerName = EnsureRandomizedInvaderNameIfGeneric(viewerName, viewerId);
 
             if (!IsBehaviorAllowed(mode))
                 return SpawnResult.Fail("invalid_mode");
@@ -3525,6 +3527,47 @@ namespace Oxide.Plugins
             if (IsUnexpandedWebhookPlaceholder(s)) return null;
             if (s.Length > 24) s = s.Substring(0, 24);
             return string.IsNullOrWhiteSpace(s) ? null : s;
+        }
+
+        private static readonly string[] RustyNomAdjectives =
+        {
+            "Rust", "Grit", "Viper", "Scrap", "Feral", "Dusk", "Iron", "Oak", "Ash", "Nova", "Brick", "Rogue"
+        };
+
+        private static readonly string[] RustyNomNouns =
+        {
+            "Fang", "Echo", "Jack", "Bolt", "Grim", "Crow", "Stag", "Wolf", "Fox", "Rook", "Mesa", "Drift"
+        };
+
+        private static bool IsGenericWebhookInvaderLabel(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return true;
+            var t = s.Trim();
+            if (string.Equals(t, "Viewer", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "DemoViewer", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "User", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "Player", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "Test", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.StartsWith("Test", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>Each spawn gets a fresh callsign when TikFinity sends Viewer / Test / empty (RoamingNPCs sanitizes again).</summary>
+        private static string EnsureRandomizedInvaderNameIfGeneric(string viewerName, string viewerIdForEntropy)
+        {
+            if (!IsGenericWebhookInvaderLabel(viewerName))
+                return viewerName.Trim();
+            var seed =
+                $"{viewerIdForEntropy}:{DateTime.UtcNow.Ticks}:{UnityEngine.Random.Range(int.MinValue, int.MaxValue)}:{Guid.NewGuid():N}";
+            unchecked
+            {
+                var h = (uint)seed.GetHashCode();
+                var a = RustyNomAdjectives[h % RustyNomAdjectives.Length];
+                var b = RustyNomNouns[(h >> 9) % RustyNomNouns.Length];
+                var x = (int)((h >> 17) % 900 + 100);
+                var name = $"{a}{b}{x}";
+                return name.Length > 24 ? name.Substring(0, 24) : name;
+            }
         }
 
         /// <summary>TikFinity sometimes sends literal tokens if the action URL/body did not substitute variables.</summary>
