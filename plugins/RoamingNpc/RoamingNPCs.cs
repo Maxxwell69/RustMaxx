@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.58")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.59")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -8463,7 +8463,13 @@ namespace Oxide.Plugins
                 owner.AttackMelee(heldEntity, resource);
                 yield return CoroutineEx.waitForSeconds(wait);
 
-                ToggleTool(owner.GetHeldEntity(), false);
+                var heldAfter = owner.GetHeldEntity();
+                // Chainsaw: ToggleTool(false) kills the engine between swings — feels broken for lumberjack gather.
+                // Leave the saw running while chopping trees / wood piles; other tools still reset normally.
+                var woodChop = resource is TreeEntity ||
+                               (resource is ResourceEntity wre && wre.ShortPrefabName == "wood-pile");
+                if (!(heldAfter is Chainsaw && woodChop))
+                    ToggleTool(heldAfter, false);
             }
             private IEnumerator AttackedCorpse(BaseCorpse corpse, float wait)
             {
@@ -11059,7 +11065,18 @@ namespace Oxide.Plugins
                 }
 
                 // Do not re-apply far home-roam (40m patrol + 110m scan) after follow/protect/guard — that undoes anchor leash.
-                if (!string.Equals(t, "follow", StringComparison.OrdinalIgnoreCase) &&
+                // Tasks that call StripCompanionPatrolAndProtect() must NOT get home-TC patrol re-enabled here — it fights
+                // MinerState pathing (bot stands near base instead of scanning for wood/stone/etc.).
+                var skipHomeTcPatrolRestore =
+                    string.Equals(t, "wood", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t, "stone", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t, "cloth", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t, "hunt", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t, "mixed", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t, "idle", StringComparison.OrdinalIgnoreCase);
+
+                if (!skipHomeTcPatrolRestore &&
+                    !string.Equals(t, "follow", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(t, "protect", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(t, "guard", StringComparison.OrdinalIgnoreCase))
                     EnsureHomeBridgePatrolAfterTask();
