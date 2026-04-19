@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.60")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.61")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3598,9 +3598,11 @@ namespace Oxide.Plugins
                     new ItemSetup("largebackpack", 0),
                 };
 
+                // ItemBot(..., canGiveRespawn, ...): only CanGiveRespawn items are placed in inventory on spawn (itemsGiveBot).
+                // Jackhammer must be CanGiveRespawn or it never exists in the bag — ActivatedItem then only finds pickaxe.
                 clone.ItemsMiningOre.Items = new List<ItemBot>
                 {
-                    new ItemBot(false, false, new ItemSetup("jackhammer", 0)),
+                    new ItemBot(false, true, new ItemSetup("jackhammer", 0)),
                     new ItemBot(false, false, new ItemSetup("pickaxe", 0)),
                     new ItemBot(true, true, new ItemSetup("pickaxe", 0)),
                 };
