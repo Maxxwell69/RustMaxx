@@ -36,6 +36,7 @@ import {
 import { npcmaxxRconSpawn } from "@/lib/npcmaxx-rcon";
 import {
   maxxinvadersRconSpawn,
+  type MaxxinvadersRconResult,
 } from "@/lib/maxxinvaders-rcon";
 import {
   resolveRoamingWearPipeForOutfit,
@@ -75,6 +76,50 @@ export function withCors(response: NextResponse): NextResponse {
     response.headers.set(key, value);
   });
   return response;
+}
+
+function hasValidAnchorSteam64(v: string | null | undefined): boolean {
+  return typeof v === "string" && /^\d{17}$/.test(v.trim());
+}
+
+/**
+ * Railway/deploy logs: avoid repeating the full MaxxInvaders paragraph on every spawn_position failure.
+ * Uses warn for known operational spawn_position; keeps error for RCON/connect issues.
+ */
+function logMaxxInvadersSpawnFailure(
+  route: "maxxinvaders" | "npcmaxx_as_maxxinvaders",
+  spawnMi: Extract<MaxxinvadersRconResult, { ok: false }>,
+  meta: { serverId: string; anchorSteam64: string | null | undefined }
+): void {
+  const err = spawnMi.error ?? "";
+  const anchored = hasValidAnchorSteam64(meta.anchorSteam64);
+  const spawnPos = /spawn_position/i.test(err);
+  const hint =
+    spawnPos && !anchored
+      ? " — set RustMaxx Servers→TikFinity patrol anchor, webhook ?anchorSteam=765…, or oxide DefaultAnchorSteamId /maxxinvaders anchor"
+      : spawnPos && anchored
+        ? " — anchor Steam must be online/sleeping on map; try open ground or DefaultSpawnRadius/SpawnAttempts in MaxxInvaders.json"
+        : "";
+  const head = `[tikfinity webhook] ${route} ${spawnMi.step} server=${meta.serverId} anchor=${anchored ? "set" : "MISSING"}`;
+  if (spawnPos) {
+    console.warn(`${head}${hint}`);
+  } else {
+    console.error(head, err);
+  }
+}
+
+/** Overrides generic debug text when MaxxInvaders returns spawn_position (long message floods deploy logs). */
+function spawnPositionReplyHint(
+  spawnMi: Extract<MaxxinvadersRconResult, { ok: false }>,
+  anchorSteam64: string | null | undefined
+): string | null {
+  if (spawnMi.step !== "rcon_reply" || !/spawn_position/i.test(spawnMi.error ?? "")) {
+    return null;
+  }
+  if (!hasValidAnchorSteam64(anchorSteam64)) {
+    return "spawn_position: RustMaxx did not send a 17-digit anchor — set **Servers → TikFinity patrol anchor**, add **?anchorSteam=76561198…** to the webhook URL, or set **DefaultAnchorSteamId** in oxide/config/MaxxInvaders.json (or `/maxxinvaders anchor`). Full plugin text is in rconResponse.";
+  }
+  return "spawn_position: anchor was sent but the game could not place on navmesh — ensure that Steam user is **online or sleeping** on this map, stand on open ground, or raise **DefaultSpawnRadius** / **SpawnAttempts** and relax **BlockSpawn*** in MaxxInvaders.json. Full plugin text is in rconResponse.";
 }
 
 /**
@@ -356,7 +401,10 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
   });
 
   if (!spawnMi.ok) {
-    console.error("[tikfinity webhook] npcmaxx→maxxinvaders RCON failed:", spawnMi.error);
+    logMaxxInvadersSpawnFailure("npcmaxx_as_maxxinvaders", spawnMi, {
+      serverId: server.id,
+      anchorSteam64,
+    });
     audit("tikfinity", "webhook.failed", {
       reason:
         spawnMi.step === "rcon_connect"
@@ -379,6 +427,8 @@ async function trySpawnNpcmaxxTemplateViaMaxxInvadersEngine(
         : spawnMi.step === "rcon_connect"
           ? connectedErrorDebug(server.rcon_host)
           : "RCON connected but command could not be sent.";
+    const spawnPosHint = spawnPositionReplyHint(spawnMi, anchorSteam64);
+    if (spawnPosHint) replyHint = spawnPosHint;
     if (
       spawnMi.step === "rcon_reply" &&
       /roamingnpcs is not loaded/i.test(spawnMi.error ?? "")
@@ -963,7 +1013,10 @@ export async function runTikfinityWebhook(
     });
 
     if (!spawnMi.ok) {
-      console.error("[tikfinity webhook] maxxinvaders RCON failed:", spawnMi.error);
+      logMaxxInvadersSpawnFailure("maxxinvaders", spawnMi, {
+        serverId: server.id,
+        anchorSteam64,
+      });
       audit("tikfinity", "webhook.failed", {
         reason:
           spawnMi.step === "rcon_connect"
@@ -984,6 +1037,8 @@ export async function runTikfinityWebhook(
           : spawnMi.step === "rcon_connect"
             ? connectedErrorDebug(server.rcon_host)
             : "RCON connected but command could not be sent.";
+      const spawnPosHintMi = spawnPositionReplyHint(spawnMi, anchorSteam64);
+      if (spawnPosHintMi) replyHint = spawnPosHintMi;
       if (
         spawnMi.step === "rcon_reply" &&
         /roamingnpcs is not loaded/i.test(spawnMi.error ?? "")
