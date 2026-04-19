@@ -45,6 +45,7 @@ import {
   resolveMaxxInvadersAnchorSteam,
   type MaxxInvadersAnchorOptions,
 } from "@/lib/maxxinvaders-anchor-steam";
+import { viewerDisplayNameWithoutDigits } from "@/lib/viewer-display-name-game";
 import { fireSquawkAfterTikfinityEvent } from "@/lib/squawk-notify";
 import type { TikfinityConnectionForWebhook } from "@/lib/tikfinity-connections";
 
@@ -756,7 +757,7 @@ export async function runTikfinityWebhook(
     );
   }
 
-  const viewerArg = sanitizeArg(payload.viewerName);
+  const viewerArg = sanitizeArg(viewerDisplayNameWithoutDigits(payload.viewerName));
   const giftArg = sanitizeArg(payload.giftName);
   const scrapFromConnection = connectionFromAdmin?.scrap_amount ?? 0;
   const fromPayload = getGiftValueFromPayload(body);

@@ -1,4 +1,5 @@
 import type { ServerRow } from "@/lib/db";
+import { viewerDisplayNameWithoutDigits } from "@/lib/viewer-display-name-game";
 import { ensureConnection, sendCommand } from "@/lib/rcon-manager";
 import { insertRnpcSpawnEvent } from "@/lib/rnpc-spawn-events";
 
@@ -25,7 +26,7 @@ export async function npcmaxxRconSpawn(params: {
   connectionId: string | null;
   tikfinityEventName: string | null;
 }): Promise<NpcmaxxRconResult> {
-  const viewerArg = sanitizeArg(params.viewerDisplayName);
+  const viewerArg = sanitizeArg(viewerDisplayNameWithoutDigits(params.viewerDisplayName));
   const command = `npcmaxx.spawn ${params.templateKey} ${viewerArg}`;
 
   const connected = await ensureConnection(

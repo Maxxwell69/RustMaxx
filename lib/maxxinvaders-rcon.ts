@@ -1,4 +1,5 @@
 import type { ServerRow } from "@/lib/db";
+import { viewerDisplayNameWithoutDigits } from "@/lib/viewer-display-name-game";
 import { ensureConnection, runAndWait } from "@/lib/rcon-manager";
 import { insertRnpcSpawnEvent } from "@/lib/rnpc-spawn-events";
 
@@ -56,7 +57,7 @@ export async function maxxinvadersRconSpawn(params: {
   connectionId: string | null;
   tikfinityEventName: string | null;
 }): Promise<MaxxinvadersRconResult> {
-  const nameTok = sanitizeToken(params.viewerDisplayName, 48);
+  const nameTok = sanitizeToken(viewerDisplayNameWithoutDigits(params.viewerDisplayName), 48);
   const idTok = sanitizeToken(params.viewerId, 80);
   const tier = Math.min(99, Math.max(1, Math.trunc(params.tier)));
   const kitRaw = params.kit.trim();
