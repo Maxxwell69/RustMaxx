@@ -2,6 +2,10 @@ import Image from "next/image";
 
 import type { MaxxInvaderCharacter } from "@/lib/maxxinvaders-characters";
 
+/** Marketing portrait export (e.g. Lumberjack hero) — width × height px, aspect ≈ 2:3 */
+export const MAXXINVADER_PROFILE_IMAGE_WIDTH = 504;
+export const MAXXINVADER_PROFILE_IMAGE_HEIGHT = 750;
+
 type Props = {
   character: MaxxInvaderCharacter;
 };
@@ -10,15 +14,20 @@ export function MaxxInvaderCharacterCard({ character }: Props) {
   const { displayName, templateOrOutfit, loadout, role, imageSrc, tier } = character;
 
   return (
-    <article className="flex flex-col overflow-hidden rounded-xl border border-rust-border bg-rust-surface/90 shadow-sm transition-all hover:border-rust-cyan/25 hover:shadow-rust-glow-subtle">
-      <div className="relative aspect-[4/3] w-full bg-gradient-to-br from-zinc-800/90 to-zinc-950 border-b border-rust-border">
+    <article className="flex w-full max-w-[504px] flex-col overflow-hidden rounded-xl border border-rust-border bg-rust-surface/90 shadow-sm transition-all hover:border-rust-cyan/25 hover:shadow-rust-glow-subtle">
+      <div
+        className="relative w-full bg-gradient-to-br from-zinc-800/90 to-zinc-950 border-b border-rust-border"
+        style={{
+          aspectRatio: `${MAXXINVADER_PROFILE_IMAGE_WIDTH} / ${MAXXINVADER_PROFILE_IMAGE_HEIGHT}`,
+        }}
+      >
         {imageSrc ? (
           <Image
             src={imageSrc}
             alt={displayName}
             fill
-            className="object-cover object-center"
-            sizes="(max-width: 768px) 100vw, 400px"
+            className="object-contain object-center bg-zinc-950"
+            sizes="(max-width: 640px) 100vw, (max-width: 1152px) 45vw, 504px"
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">

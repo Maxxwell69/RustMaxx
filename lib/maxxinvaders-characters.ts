@@ -1,6 +1,7 @@
 /**
  * Marketing copy for /maxxinvaders — RoamingNPCs template keys & TikFinity outfits.
  * Images live under public/maxxinvaders/ — set imageSrc to `/maxxinvaders/<file>.png` etc.
+ * Target export size for hero art: **504×750 px** (portrait); cards use that aspect ratio.
  */
 
 export type MaxxInvaderTier = "main" | "special";

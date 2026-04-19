@@ -70,7 +70,7 @@ export default function MaxxInvadersPage() {
             template key in TikFinity (<code className="rounded bg-zinc-800 px-1 text-zinc-300">template=…</code>
             ).
           </p>
-          <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-10 grid justify-items-center gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {MAXXINVADER_MAIN_CHARACTERS.map((c) => (
               <MaxxInvaderCharacterCard key={c.slug} character={c} />
             ))}
@@ -82,7 +82,7 @@ export default function MaxxInvadersPage() {
           <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-zinc-400">
             Outfit presets and themed Roaming templates—great for seasons, raids, or meme redeploys.
           </p>
-          <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-10 grid justify-items-center gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {MAXXINVADER_SPECIAL_CHARACTERS.map((c) => (
               <MaxxInvaderCharacterCard key={c.slug} character={c} />
             ))}
