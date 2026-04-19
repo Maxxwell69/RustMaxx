@@ -1,6 +1,6 @@
 /**
  * Marketing copy for /maxxinvaders — RoamingNPCs template keys & TikFinity outfits.
- * Drop images under public/maxxinvaders/<slug>.webp (optional); leave imageSrc undefined for placeholder.
+ * Images live under public/maxxinvaders/ — set imageSrc to `/maxxinvaders/<file>.png` etc.
  */
 
 export type MaxxInvaderTier = "main" | "special";
@@ -9,7 +9,7 @@ export type MaxxInvaderCharacter = {
   slug: string;
   displayName: string;
   tier: MaxxInvaderTier;
-  /** Optional — use `/maxxinvaders/miner.webp` etc. when asset exists */
+  /** Public URL e.g. `/maxxinvaders/miner.png` */
   imageSrc?: string;
   /** Roaming bot key or outfit id for streamers */
   templateOrOutfit: string;
@@ -30,6 +30,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "miner",
     displayName: "Miner",
     tier: "main",
+    imageSrc: "/maxxinvaders/miner.png",
     templateOrOutfit: "streamer_miner",
     loadout: [
       "Kick hazmat",
@@ -44,6 +45,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "sniper",
     displayName: "Sniper",
     tier: "main",
+    imageSrc: "/maxxinvaders/sniper.png",
     templateOrOutfit: "streamer_patrol",
     loadout: [
       "Patrol / hunter kit from template (rifle-focused)",
@@ -56,6 +58,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "medic",
     displayName: "Medic",
     tier: "main",
+    imageSrc: "/maxxinvaders/medic.png",
     templateOrOutfit: "streamer_medic",
     loadout: ["Scrubs / surgeon suit", "Revolver", "Syringes & large medkits"],
     role:
@@ -65,6 +68,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "lumberjack",
     displayName: "Lumberjack",
     tier: "main",
+    imageSrc: "/maxxinvaders/lumberjack.png",
     templateOrOutfit: "streamer_lumberjack",
     loadout: ["Lumberjack hazmat", "Chainsaw + low grade", "Hatchet backup"],
     role:
@@ -77,6 +81,7 @@ export const MAXXINVADER_SPECIAL_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "gingy",
     displayName: "Gingy",
     tier: "special",
+    imageSrc: "/maxxinvaders/gingy.png",
     templateOrOutfit: "gingy (template) / ?outfit=gingy / gingynpc",
     loadout: ["Gingerbread suit", "Loadout from Roaming `gingy` template (e.g. AK, tools, meds)"],
     role: "Seasonal / fun spawn: full kit from the `gingy` Roaming template; great for holiday raids and memes.",
@@ -85,6 +90,7 @@ export const MAXXINVADER_SPECIAL_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "vamp",
     displayName: "Vamp",
     tier: "special",
+    imageSrc: "/maxxinvaders/vamp.png",
     templateOrOutfit: "vamp (template) / ?outfit=vamp / vampnpc",
     loadout: ["Dracula cape & mask", "Bow, bat, meds per `vamp` template"],
     role: "Gothic event look: use the `vamp` template for a themed loadout tied to TikFinity or manual spawns.",
@@ -93,6 +99,7 @@ export const MAXXINVADER_SPECIAL_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "egg-man",
     displayName: "Egg Man",
     tier: "special",
+    imageSrc: "/maxxinvaders/eggman.png",
     templateOrOutfit: "egg (template) / ?outfit=egg / eggnpc",
     loadout: ["Egg suit", "LR / chainsaw / meds per `egg` Roaming template"],
     role: "Egg suit chaos: spawn with the `egg` preset when you want silly, high-energy viewer moments.",
@@ -101,6 +108,7 @@ export const MAXXINVADER_SPECIAL_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "bunny",
     displayName: "Bunny",
     tier: "special",
+    imageSrc: "/maxxinvaders/bunny.png",
     templateOrOutfit: "bunny1 / ?outfit=bunny1 / bunny1npc",
     loadout: ["Bunny onesie & ears", "Weapons & gear from patrol template + bunny wear"],
     role:
