@@ -5,6 +5,23 @@ import { runTikfinityWebhook, withCors } from "@/lib/tikfinity-webhook-run";
 
 const TIKFINITY_SERVER_ID = process.env.TIKFINITY_SERVER_ID?.trim() ?? null;
 
+function jsonUnhandledError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error("[tikfinity webhook] Unhandled:", message);
+  return withCors(
+    NextResponse.json(
+      {
+        ok: false,
+        error: message,
+        debug:
+          "Unexpected server error while handling the webhook. Check deployment logs (DB, env, code). RCON/game failures usually return step rcon_connect / rcon_reply / rcon_wait instead.",
+        step: "unhandled",
+      },
+      { status: 500 }
+    )
+  );
+}
+
 export async function OPTIONS() {
   return withCors(new NextResponse(null, { status: 204 }));
 }
@@ -24,10 +41,14 @@ export async function GET(request: NextRequest) {
       )
     );
   }
-  return runTikfinityWebhook(request, {}, {
-    serverId: TIKFINITY_SERVER_ID,
-    resolveConnectionByEventName: getConnectionByEventName,
-  });
+  try {
+    return await runTikfinityWebhook(request, {}, {
+      serverId: TIKFINITY_SERVER_ID,
+      resolveConnectionByEventName: getConnectionByEventName,
+    });
+  } catch (err) {
+    return jsonUnhandledError(err);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -52,8 +73,12 @@ export async function POST(request: NextRequest) {
   } catch {
     body = {};
   }
-  return runTikfinityWebhook(request, body, {
-    serverId: TIKFINITY_SERVER_ID,
-    resolveConnectionByEventName: getConnectionByEventName,
-  });
+  try {
+    return await runTikfinityWebhook(request, body, {
+      serverId: TIKFINITY_SERVER_ID,
+      resolveConnectionByEventName: getConnectionByEventName,
+    });
+  } catch (err) {
+    return jsonUnhandledError(err);
+  }
 }
