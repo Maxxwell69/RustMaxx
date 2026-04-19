@@ -43,18 +43,8 @@ export const STREAMER_MAXXINVADERS_URL_PRESETS: StreamerMaxxPreset[] = [
   {
     id: "maxx-medic",
     label: "MaxxInvaders — template streamer_medic (field medic)",
+    hint: "Use ?action=maxxinvaders (not npcmaxx) for streamer TikFinity allowlists.",
     params: { action: "maxxinvaders", template: "streamer_medic" },
-  },
-  {
-    id: "npc-patrol",
-    label: "Roaming NPC — npcmaxx + streamer_patrol",
-    hint: "NPCMaxx.spawn path; often routed to MaxxInvaders on streamer servers.",
-    params: { action: "npcmaxx", template: "streamer_patrol" },
-  },
-  {
-    id: "npc-medic",
-    label: "Roaming NPC — npcmaxx + streamer_medic",
-    params: { action: "npcmaxx", template: "streamer_medic" },
   },
   {
     id: "outfit-default",

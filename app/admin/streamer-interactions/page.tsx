@@ -249,14 +249,14 @@ export default function AdminStreamerInteractionsPage() {
   const webhookActions = data.availableActions.filter(
     (a) => !WEBHOOK_HIDDEN_ACTIONS.includes(a.action)
   );
-  /** Chips: hide npcmaxx — use the dedicated spawn URL block (needs template). */
-  const webhookActionChips = webhookActions.filter((a) => a.action !== "npcmaxx");
+  /** Chips: hide maxxinvaders — use the dedicated spawn URL block (needs optional template). */
+  const webhookActionChips = webhookActions.filter((a) => a.action !== "maxxinvaders");
 
   /** Live webhook base URL (always www on rustmaxx.com apex for TikFinity). */
   const webhookUrl = normalizeTikfinityWebhookUrlForDisplay(
     data.webhookUrl ?? rustmaxxTikfinityWebhookUrl()
   );
-  const spawnNpcWebhookUrl = `${webhookUrl}?action=npcmaxx&template=${encodeURIComponent(
+  const spawnNpcWebhookUrl = `${webhookUrl}?action=maxxinvaders&template=${encodeURIComponent(
     tikfinitySpawnTemplate
   )}`;
 
@@ -305,10 +305,10 @@ export default function AdminStreamerInteractionsPage() {
           </h3>
           <p className="mt-2 text-sm text-zinc-400">
             Paste this <strong className="text-zinc-300">full URL</strong> into TikFinity → New Action →
-            Trigger WebHook. When the action runs, RustMaxx sends{" "}
-            <code className="rounded bg-zinc-800 px-1">npcmaxx.spawn</code> to your Rust server (from{" "}
+            Trigger WebHook.             When the action runs, RustMaxx sends{" "}
+            <code className="rounded bg-zinc-800 px-1">maxxinvaders.spawn</code> over RCON (from{" "}
             <code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code>) and the roaming NPC is
-            created with the viewer name from the TikFinity payload.
+            created with the viewer name from the TikFinity payload (invader registry + leash to anchor when configured).
           </p>
           {data.tikfinityFeatures?.npcmaxxRequireCrewRegistry && (
             <p className="mt-2 rounded border border-amber-800/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-100/95">
@@ -559,8 +559,9 @@ export default function AdminStreamerInteractionsPage() {
                 ) : (
                   <span className="text-zinc-500">not set</span>
                 )}
-                {" — first crew join also runs "}
-                <code className="rounded bg-zinc-800 px-1">npcmaxx.spawn</code> for that viewer.
+                {" — first crew join also triggers a Roaming viewer spawn ("}
+                <code className="rounded bg-zinc-800 px-1">maxxinvaders.spawn</code>
+                {" / NPC path) for that viewer."}
               </li>
               <li>
                 <code className="rounded bg-zinc-800 px-1">NPCMAXX_REQUIRE_CREW_REGISTRY</code>{" "}
@@ -569,8 +570,9 @@ export default function AdminStreamerInteractionsPage() {
                 ) : (
                   <span className="text-zinc-500">off</span>
                 )}
-                {" — gift/connection "}
-                <code className="rounded bg-zinc-800 px-1">npcmaxx</code> only if the viewer is in the crew registry.
+                {" — Roaming spawn webhooks ("}
+                <code className="rounded bg-zinc-800 px-1">maxxinvaders</code>
+                {" / npcmaxx) only if the viewer is in the crew registry."}
               </li>
             </ul>
           </div>
@@ -712,14 +714,19 @@ Invoke-RestMethod -Uri "${webhookUrl}?event=join" -Method POST -ContentType "app
                 ))}
               </select>
             </div>
-            {newConnectionAction === "npcmaxx" && (
+            {(newConnectionAction === "npcmaxx" || newConnectionAction === "maxxinvaders") && (
               <div>
-                <label className="block text-xs text-zinc-500">Roaming template key</label>
+                <label className="block text-xs text-zinc-500">
+                  Roaming template key
+                  {newConnectionAction === "npcmaxx"
+                    ? " (required)"
+                    : " (optional — default streamer_patrol)"}
+                </label>
                 <input
                   type="text"
                   value={newConnectionNpcTemplate}
                   onChange={(e) => { setNewConnectionNpcTemplate(e.target.value); setConnectionError(null); }}
-                  placeholder="e.g. bob_resources_farmer"
+                  placeholder="e.g. streamer_medic"
                   className="mt-1 w-56 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-200 placeholder:text-zinc-500"
                 />
               </div>
@@ -731,7 +738,7 @@ Invoke-RestMethod -Uri "${webhookUrl}?event=join" -Method POST -ContentType "app
               const name = newConnectionName.trim();
               if (!name) { setConnectionError("Enter a name"); return; }
               if (newConnectionAction === "npcmaxx" && !newConnectionNpcTemplate.trim()) {
-                setConnectionError("Enter a Roaming template key for Roaming NPC");
+                setConnectionError("Enter a Roaming template key for npcmaxx connections");
                 return;
               }
               setConnectionError(null);
@@ -746,8 +753,8 @@ Invoke-RestMethod -Uri "${webhookUrl}?event=join" -Method POST -ContentType "app
                   message: newConnectionMessage.trim() || undefined,
                   scrapAmount: scrap || undefined,
                   npcTemplateKey:
-                    newConnectionAction === "npcmaxx"
-                      ? newConnectionNpcTemplate.trim()
+                    newConnectionAction === "npcmaxx" || newConnectionAction === "maxxinvaders"
+                      ? newConnectionNpcTemplate.trim() || undefined
                       : undefined,
                 }),
               })
@@ -809,7 +816,8 @@ Invoke-RestMethod -Uri "${webhookUrl}?event=join" -Method POST -ContentType "app
                     </td>
                     <td className="px-4 py-3 text-zinc-400">{c.scrap_amount ?? 0}</td>
                     <td className="px-4 py-3 font-mono text-xs text-zinc-400">
-                      {c.server_action === "npcmaxx" && c.npc_template_key
+                      {(c.server_action === "npcmaxx" || c.server_action === "maxxinvaders") &&
+                      c.npc_template_key
                         ? c.npc_template_key
                         : "—"}
                     </td>
@@ -897,7 +905,7 @@ Invoke-RestMethod -Uri "${webhookUrl}?event=join" -Method POST -ContentType "app
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="text-lg font-medium text-zinc-200">Roaming NPC spawns (webhook log)</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Recent <code className="rounded bg-zinc-800 px-1">npcmaxx.spawn</code> attempts for this TikFinity server (<code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code>). Viewer name is taken from the TikFinity payload when available.
+          Recent Roaming spawn attempts (<code className="rounded bg-zinc-800 px-1">maxxinvaders.spawn</code> / npcmaxx) for this TikFinity server (<code className="rounded bg-zinc-800 px-1">TIKFINITY_SERVER_ID</code>). Viewer name is taken from the TikFinity payload when available.
         </p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -915,7 +923,8 @@ Invoke-RestMethod -Uri "${webhookUrl}?event=join" -Method POST -ContentType "app
               {rnpcSpawnEvents.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
-                    No Roaming NPC spawns logged yet. Trigger a webhook with a Roaming NPC connection or a URL with npcmaxx.
+                    No Roaming NPC spawns logged yet. Trigger a webhook with a Roaming connection or a URL with{" "}
+                    <code className="rounded bg-zinc-800 px-1">?action=maxxinvaders</code>.
                   </td>
                 </tr>
               ) : (

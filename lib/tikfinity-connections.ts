@@ -125,6 +125,17 @@ export async function createTikfinityConnection(
       };
     }
     npcTemplateKey = parsed;
+  } else if (serverAction === "maxxinvaders") {
+    if (options.npcTemplateKey != null && String(options.npcTemplateKey).trim()) {
+      const parsed = parseNpcTemplateKey(options.npcTemplateKey);
+      if (!parsed) {
+        return {
+          error:
+            "Optional Roaming template key is invalid (1–64 chars, letters, numbers, underscore, hyphen). Leave empty for default streamer_patrol.",
+        };
+      }
+      npcTemplateKey = parsed;
+    }
   }
   const { rows: existing } = await query<TikfinityConnectionRow>(
     `SELECT 1

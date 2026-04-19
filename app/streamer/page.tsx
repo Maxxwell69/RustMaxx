@@ -573,7 +573,10 @@ export default function StreamerDashboardPage() {
       name: ruleName,
       serverAction: ruleAction,
     };
-    if (ruleAction === "npcmaxx" && npcTemplate.trim()) {
+    if (
+      (ruleAction === "npcmaxx" || ruleAction === "maxxinvaders") &&
+      npcTemplate.trim()
+    ) {
       body.npcTemplateKey = npcTemplate.trim();
     }
     if (isRustChaosStatusEffectAction(ruleAction)) {
@@ -1307,9 +1310,12 @@ export default function StreamerDashboardPage() {
             </select>
             <p className="mt-1 text-[11px] text-zinc-600">Grouped by plugin/type for faster setup.</p>
           </div>
-          {ruleAction === "npcmaxx" ? (
+          {ruleAction === "npcmaxx" || ruleAction === "maxxinvaders" ? (
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs text-zinc-500">Roaming template key (required)</label>
+              <label className="mb-1 block text-xs text-zinc-500">
+                Roaming template key
+                {ruleAction === "npcmaxx" ? " (required)" : " (optional — default streamer_patrol)"}
+              </label>
               <input
                 value={npcTemplate}
                 onChange={(e) => setNpcTemplate(e.target.value)}

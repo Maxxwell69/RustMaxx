@@ -1,5 +1,5 @@
 /**
- * Streamer-facing actions: RustChaos + TikTok social (Squawk) + optional TikFinity Roaming spawns (npcmaxx / maxxinvaders).
+ * Streamer-facing actions: RustChaos + TikTok social (Squawk) + optional TikFinity Roaming spawns via MaxxInvaders (`maxxinvaders`).
  * Chaos waves, scientist boat, chaos heli, etc. remain admin-only unless added here.
  */
 import { query } from "@/lib/db";
@@ -40,7 +40,6 @@ export const STREAMER_BASE_ACTION_KEYS = [
   "share",
   "subscribe",
   "sociallike",
-  "npcmaxx",
   "maxxinvaders",
 ] as const satisfies readonly TikTriggerAction[];
 
@@ -146,7 +145,7 @@ export function validateAllowedActionsPayload(
     const t = k.trim();
     if (!isBaseStreamerAction(t)) {
       return {
-        error: `Action "${t}" is not in the streamer action allowlist (RustChaos / social / npcmaxx / maxxinvaders — see RustMaxx docs).`,
+        error: `Action "${t}" is not in the streamer action allowlist (RustChaos / social / maxxinvaders — see RustMaxx docs).`,
       };
     }
     if (!out.includes(t)) out.push(t);
