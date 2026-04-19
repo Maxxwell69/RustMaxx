@@ -24,6 +24,21 @@ export function buildStreamerHookQueryUrl(
   return `${webhookBase}?${parts.join("&")}`;
 }
 
+const STEAM64_RE = /^\d{17}$/;
+
+/**
+ * Adds `anchorSteam` so TikFinity paste-in URLs match resolveMaxxInvadersAnchorSteam (query wins over Profile DB).
+ * Call with Profile Steam64 from streamer state when building dashboard URLs.
+ */
+export function mergePresetParamsWithProfileAnchor(
+  presetParams: Record<string, string>,
+  profileSteam64: string | null | undefined
+): Record<string, string> {
+  const id = typeof profileSteam64 === "string" ? profileSteam64.trim() : "";
+  if (!STEAM64_RE.test(id)) return { ...presetParams };
+  return { ...presetParams, anchorSteam: id };
+}
+
 /**
  * All common MaxxInvaders-related setups for TikFinity “Trigger Webhook”.
  * Same hook base URL + secret as “Game servers & webhooks”; only query params differ.

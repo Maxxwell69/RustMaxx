@@ -12,6 +12,7 @@ import {
 } from "@/lib/tikfinity";
 import {
   buildStreamerHookQueryUrl,
+  mergePresetParamsWithProfileAnchor,
   STREAMER_MAXXINVADERS_URL_PRESETS,
 } from "@/lib/streamer-maxxinvaders-urls";
 
@@ -457,7 +458,8 @@ export default function StreamerDashboardPage() {
     lines.push(`${h.serverName ?? "Server"} — MaxxInvaders / roaming bots`);
     lines.push("");
     for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS) {
-      const url = buildStreamerHookQueryUrl(h.webhookUrl, token, preset.params);
+      const params = mergePresetParamsWithProfileAnchor(preset.params, state?.user.steamId);
+      const url = buildStreamerHookQueryUrl(h.webhookUrl, token, params);
       lines.push(preset.label);
       if (preset.hint) lines.push(`(${preset.hint})`);
       lines.push(url);
@@ -485,7 +487,8 @@ export default function StreamerDashboardPage() {
       lines.push(`=== ${h.serverName ?? h.serverId} — MaxxInvaders / roaming bots ===`);
       lines.push("");
       for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS) {
-        const url = buildStreamerHookQueryUrl(h.webhookUrl, token, preset.params);
+        const params = mergePresetParamsWithProfileAnchor(preset.params, state?.user.steamId);
+        const url = buildStreamerHookQueryUrl(h.webhookUrl, token, params);
         lines.push(preset.label);
         lines.push(url);
         lines.push("");
@@ -1054,6 +1057,20 @@ export default function StreamerDashboardPage() {
           <strong className="text-zinc-300">Copy all MaxxInvaders URLs</strong> (or copy per server / per row) and replace
           the old lines in TikFinity.
         </p>
+        {user.steamId && /^\d{17}$/.test(user.steamId.trim()) ? (
+          <p className="mb-3 rounded-lg border border-emerald-900/40 bg-emerald-950/25 px-3 py-2 text-xs text-emerald-100/95">
+            Your saved <strong className="text-emerald-50">Steam64</strong> is embedded in each URL as{" "}
+            <code className="rounded bg-zinc-900 px-1">anchorSteam=…</code> — paste into TikFinity as-is (no manual edits).
+            Server owners can still override patrol anchor on the server; <code className="rounded bg-zinc-900 px-1">anchorSteam</code>{" "}
+            in the URL takes priority.
+          </p>
+        ) : (
+          <p className="mb-3 rounded-lg border border-amber-900/50 bg-amber-950/25 px-3 py-2 text-xs text-amber-100/95">
+            <strong className="text-amber-50">Save your Steam64</strong> in the section above — then every preset URL here will
+            include <code className="rounded bg-zinc-900 px-1">anchorSteam=…</code> automatically so MaxxInvaders can place
+            spawns without extra query params.
+          </p>
+        )}
         {hooks.length === 0 ? (
           <p className="text-sm text-zinc-500">Add a webhook under Game servers first.</p>
         ) : (
@@ -1116,7 +1133,11 @@ export default function StreamerDashboardPage() {
                             {STREAMER_MAXXINVADERS_URL_PRESETS.map((preset) => {
                               const base = h.webhookUrl as string;
                               const tok = token as string;
-                              const fullUrl = buildStreamerHookQueryUrl(base, tok, preset.params);
+                              const fullUrl = buildStreamerHookQueryUrl(
+                                base,
+                                tok,
+                                mergePresetParamsWithProfileAnchor(preset.params, user.steamId)
+                              );
                               const rowKey = `${h.id}:${preset.id}`;
                               return (
                                 <tr key={preset.id} className="border-t border-zinc-800/90 align-top">
