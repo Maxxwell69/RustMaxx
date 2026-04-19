@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.54")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.55")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -3642,6 +3642,39 @@ namespace Oxide.Plugins
             }
             catch
             {
+            }
+        }
+
+        /// <summary>
+        /// <see cref="BasePlayer.RecoverFromWounded"/> restores posture/HP logic but not thirst/hunger — empty bars while crawling mean instant thirst death seconds after standing.
+        /// </summary>
+        private static void BridgeMedicReplenishSurvivalAfterRevive(BasePlayer anchor)
+        {
+            if (anchor?.metabolism == null) return;
+            try
+            {
+                var m = anchor.metabolism;
+                const float hydrateGoalFrac = 0.78f;
+                const float caloriesGoalFrac = 0.62f;
+                if (m.hydration != null && m.hydration.max > 1f)
+                {
+                    var target = m.hydration.max * hydrateGoalFrac;
+                    if (m.hydration.value < target)
+                        m.hydration.value = Mathf.Min(target, m.hydration.max);
+                }
+
+                if (m.calories != null && m.calories.max > 1f)
+                {
+                    var target = m.calories.max * caloriesGoalFrac;
+                    if (m.calories.value < target)
+                        m.calories.value = Mathf.Min(target, m.calories.max);
+                }
+
+                anchor.SendNetworkUpdate();
+            }
+            catch
+            {
+                /* ignored */
             }
         }
 
@@ -9134,6 +9167,7 @@ namespace Oxide.Plugins
                             if (down)
                                 anchor.RecoverFromWounded();
                             BridgeMedicTryClearBleed(anchor.metabolism);
+                            BridgeMedicReplenishSurvivalAfterRevive(anchor);
                             anchor.Heal(99999f);
                         }
                         else
