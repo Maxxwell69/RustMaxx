@@ -58,6 +58,7 @@ export function SiteHeader() {
     if (href === "/streamer") return isStreamerSetup;
     if (href === "/streamers") return isStreamersSection;
     if (href === "/viewer/superfan") return isViewerSuperfan;
+    if (href === "/maxxinvaders") return pathname === "/maxxinvaders";
     return pathname === href;
   }
 

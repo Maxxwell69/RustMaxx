@@ -3,6 +3,7 @@ import { Logo } from "./Logo";
 
 const FOOTER_PRODUCT = [
   { href: "/features", label: "Features" },
+  { href: "/maxxinvaders", label: "MaxxInvaders" },
   { href: "/pricing", label: "Pricing" },
   { href: "/docs", label: "Docs" },
   { href: "/contact", label: "Contact" },
