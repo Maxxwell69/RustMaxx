@@ -71,7 +71,7 @@ export function MaxxInvaderCharacterCard({ character }: Props) {
 
         <div className="border-t border-rust-border pt-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">What they do</h4>
-          <p className="mt-2 text-sm leading-relaxed text-zinc-400">{role}</p>
+          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-zinc-400">{role}</p>
         </div>
       </div>
     </article>
