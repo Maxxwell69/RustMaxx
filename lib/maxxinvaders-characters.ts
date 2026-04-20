@@ -12,8 +12,8 @@ export type MaxxInvaderCharacter = {
   tier: MaxxInvaderTier;
   /** Public URL e.g. `/maxxinvaders/miner.png` */
   imageSrc?: string;
-  /** Roaming bot key or outfit id for streamers */
-  templateOrOutfit: string;
+  /** Chat command (e.g. `!miner`) shown under the character name */
+  chatCommand: string;
   loadout: string[];
   /** Short gameplay / stream role */
   role: string;
@@ -25,7 +25,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     displayName: "Miner",
     tier: "main",
     imageSrc: "/maxxinvaders/miner.png",
-    templateOrOutfit: "streamer_miner",
+    chatCommand: "!miner",
     loadout: [
       "Kick hazmat",
       "Large backpack",
@@ -40,7 +40,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     displayName: "Sniper",
     tier: "main",
     imageSrc: "/maxxinvaders/sniper.png",
-    templateOrOutfit: "streamer_patrol",
+    chatCommand: "!snipemb",
     loadout: [
       "Patrol / hunter kit from template (rifle-focused)",
       "Med slots & melee backup per Roaming template",
@@ -53,7 +53,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     displayName: "Medic",
     tier: "main",
     imageSrc: "/maxxinvaders/medic.png",
-    templateOrOutfit: "streamer_medic",
+    chatCommand: "!medic",
     loadout: ["Scrubs / surgeon suit", "Revolver", "Syringes & large medkits"],
     role:
       "Field medic for the streamer: revives and heals the anchor, stays in escort range, and keeps the squad on its feet.",
@@ -63,7 +63,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     displayName: "Lumberjack",
     tier: "main",
     imageSrc: "/maxxinvaders/lumberjack.png",
-    templateOrOutfit: "streamer_lumberjack",
+    chatCommand: "!jack",
     loadout: ["Lumberjack hazmat", "Chainsaw + low grade", "Hatchet backup"],
     role:
       "Wood specialist: fast tree work for events, same MaxxInvaders bridge (tasks, escort, storage) as the rest of the crew.",
@@ -76,7 +76,7 @@ export const MAXXINVADER_SPECIAL_CHARACTERS: MaxxInvaderCharacter[] = [
     displayName: "Gingy",
     tier: "special",
     imageSrc: "/maxxinvaders/gingy.png",
-    templateOrOutfit: "gingy (template) / ?outfit=gingy / gingynpc",
+    chatCommand: "!gingy",
     loadout: ["Gingerbread suit", "Loadout from Roaming `gingy` template (e.g. AK, tools, meds)"],
     role: "Seasonal / fun spawn: full kit from the `gingy` Roaming template; great for holiday raids and memes.",
   },
@@ -85,7 +85,7 @@ export const MAXXINVADER_SPECIAL_CHARACTERS: MaxxInvaderCharacter[] = [
     displayName: "Vamp",
     tier: "special",
     imageSrc: "/maxxinvaders/vamp.png",
-    templateOrOutfit: "vamp (template) / ?outfit=vamp / vampnpc",
+    chatCommand: "!vamp",
     loadout: ["Dracula cape & mask", "Bow, bat, meds per `vamp` template"],
     role: "Gothic event look: use the `vamp` template for a themed loadout tied to TikFinity or manual spawns.",
   },
@@ -94,7 +94,7 @@ export const MAXXINVADER_SPECIAL_CHARACTERS: MaxxInvaderCharacter[] = [
     displayName: "Egg Man",
     tier: "special",
     imageSrc: "/maxxinvaders/eggman.png",
-    templateOrOutfit: "egg (template) / ?outfit=egg / eggnpc",
+    chatCommand: "!eggman",
     loadout: ["Egg suit", "LR / chainsaw / meds per `egg` Roaming template"],
     role: "Egg suit chaos: spawn with the `egg` preset when you want silly, high-energy viewer moments.",
   },
@@ -103,7 +103,7 @@ export const MAXXINVADER_SPECIAL_CHARACTERS: MaxxInvaderCharacter[] = [
     displayName: "Bunny",
     tier: "special",
     imageSrc: "/maxxinvaders/bunny.png",
-    templateOrOutfit: "bunny1 / ?outfit=bunny1 / bunny1npc",
+    chatCommand: "!bunny",
     loadout: ["Bunny onesie & ears", "Weapons & gear from patrol template + bunny wear"],
     role:
       "Cute infiltration: bunny outfit overlay on MaxxInvaders—perfect for spring events or gift-driven redeploys.",

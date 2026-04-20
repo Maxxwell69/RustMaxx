@@ -11,7 +11,7 @@ type Props = {
 };
 
 export function MaxxInvaderCharacterCard({ character }: Props) {
-  const { displayName, templateOrOutfit, loadout, role, imageSrc, tier } = character;
+  const { displayName, chatCommand, loadout, role, imageSrc, tier } = character;
 
   return (
     <article className="flex w-full max-w-[504px] flex-col overflow-hidden rounded-xl border border-rust-border bg-rust-surface/90 shadow-sm transition-all hover:border-rust-cyan/25 hover:shadow-rust-glow-subtle">
@@ -54,7 +54,7 @@ export function MaxxInvaderCharacterCard({ character }: Props) {
       <div className="flex flex-1 flex-col gap-4 p-5">
         <div>
           <h3 className="text-lg font-semibold text-zinc-100">{displayName}</h3>
-          <p className="mt-1 font-mono text-xs text-rust-cyan/90">{templateOrOutfit}</p>
+          <p className="mt-1.5 font-mono text-sm font-medium text-rust-cyan">{chatCommand}</p>
         </div>
 
         <div>

@@ -5,18 +5,6 @@ import {
   MAXXINVADER_SPECIAL_CHARACTERS,
 } from "@/lib/maxxinvaders-characters";
 
-/** Chat commands viewers use to spawn MaxxInvaders bots (configure on your stream / relay). */
-const MAXXINVADER_CHAT_COMMANDS = [
-  "!miner",
-  "!snipemb",
-  "!medic",
-  "!jack",
-  "!gingy",
-  "!vamp",
-  "!eggman",
-  "!bunny",
-] as const;
-
 export const metadata = {
   title: "MaxxInvaders | RustMaxx",
   description:
@@ -57,21 +45,6 @@ export default function MaxxInvadersPage() {
           <div className="mt-10 grid justify-items-center gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {MAXXINVADER_SPECIAL_CHARACTERS.map((c) => (
               <MaxxInvaderCharacterCard key={c.slug} character={c} />
-            ))}
-          </div>
-        </section>
-
-        <section className="mx-auto mt-20 max-w-3xl text-center">
-          <h2 className="text-lg font-semibold text-zinc-200">In chat</h2>
-          <p className="mt-2 text-sm text-zinc-500">Type:</p>
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {MAXXINVADER_CHAT_COMMANDS.map((cmd) => (
-              <code
-                key={cmd}
-                className="rounded-lg border border-zinc-700 bg-zinc-900/90 px-3 py-2 font-mono text-sm text-rust-cyan"
-              >
-                {cmd}
-              </code>
             ))}
           </div>
         </section>
