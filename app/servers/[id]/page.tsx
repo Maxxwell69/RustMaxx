@@ -63,6 +63,7 @@ export default function ServerDetailPage() {
     logo_url: "",
   });
   const [listingSaving, setListingSaving] = useState(false);
+  const [listingSaveError, setListingSaveError] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -434,10 +435,12 @@ export default function ServerDetailPage() {
 
   async function saveListing() {
     setListingSaving(true);
+    setListingSaveError(null);
     try {
       const res = await fetch(`/api/servers/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           listed: listingForm.listed,
           listing_name: listingForm.listing_name.trim() || null,
@@ -448,20 +451,22 @@ export default function ServerDetailPage() {
           logo_url: listingForm.logo_url.trim() || null,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setServer((prev) => (prev ? { ...prev, ...data } : null));
-        setListingForm((f) => ({
-          ...f,
-          listed: Boolean(data.listed),
-          listing_name: data.listing_name ?? "",
-          listing_description: data.listing_description ?? "",
-          game_host: data.game_host ?? "",
-          game_port: data.game_port != null ? String(data.game_port) : "",
-          location: data.location ?? "",
-          logo_url: data.logo_url ?? "",
-        }));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setListingSaveError(typeof data.error === "string" ? data.error : "Save failed");
+        return;
       }
+      setServer((prev) => (prev ? { ...prev, ...data } : null));
+      setListingForm((f) => ({
+        ...f,
+        listed: Boolean(data.listed),
+        listing_name: data.listing_name ?? "",
+        listing_description: data.listing_description ?? "",
+        game_host: data.game_host ?? "",
+        game_port: data.game_port != null ? String(data.game_port) : "",
+        location: data.location ?? "",
+        logo_url: data.logo_url ?? "",
+      }));
     } finally {
       setListingSaving(false);
     }
@@ -1219,17 +1224,24 @@ export default function ServerDetailPage() {
                               placeholder="e.g. Quebec"
                             />
                           </div>
-                          <div>
-                            <label className="mb-1 block text-xs text-zinc-400">Logo</label>
-                            <LogoUpload
-                              value={listingForm.logo_url}
-                              onChange={(url) => setListingForm((f) => ({ ...f, logo_url: url }))}
-                              disabled={listingSaving}
-                              className="mt-1"
-                            />
-                          </div>
                         </div>
                       )}
+                      <div className="mt-4">
+                        <label className="mb-1 block text-xs text-zinc-400">Listing logo</label>
+                        <p className="mb-2 text-xs text-zinc-600">
+                          Shown on the public server list when listed. Uploaded images are stored in the database so they
+                          survive deploys.
+                        </p>
+                        <LogoUpload
+                          value={listingForm.logo_url}
+                          onChange={(url) => setListingForm((f) => ({ ...f, logo_url: url }))}
+                          disabled={listingSaving}
+                          className="mt-1"
+                        />
+                      </div>
+                      {listingSaveError ? (
+                        <p className="mt-3 text-xs text-red-400">{listingSaveError}</p>
+                      ) : null}
                       <button
                         type="button"
                         onClick={saveListing}

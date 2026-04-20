@@ -19,6 +19,7 @@ const PUBLIC_PATHS = [
   "/maxxinvaders",      // marketing / character roster (public)
   "/server-list",       // public list of opted-in Rust servers
   "/api/server-list",
+  "/api/listing-logos", // public server listing logo images (bytea-backed)
   "/streamers",         // public streamer directory + profiles (GET /api/streamers)
   "/api/streamers",
   "/streamer-interaction",

@@ -4,7 +4,15 @@ import { audit } from "@/lib/audit";
 import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
 import { findUserById } from "@/lib/users";
 import type { ServerRow } from "@/lib/db";
-import { normalizeHostedLogoUrlForStorage } from "@/lib/upload-files";
+import {
+  canonicalListingLogoPath,
+  readHostedUploadForLogoIngest,
+} from "@/lib/server-listing-logo";
+import {
+  absolutePathForUploadBasename,
+  normalizeHostedLogoUrlForStorage,
+} from "@/lib/upload-files";
+import { unlink } from "fs/promises";
 
 type ServerWithRole = ServerRow & { myRole?: "owner" | "admin" | "moderator" };
 
@@ -108,8 +116,37 @@ export async function POST(request: NextRequest) {
        RETURNING id, name, rcon_host, rcon_port, created_at, listed, listing_name, listing_description, game_host, game_port, location, logo_url`,
       [name, host, portNum, password, session.userId, listed, listingName, listingDesc, gameHost, gamePortNum, location, logoUrl]
     );
-    const server = rows[0];
+    let server = rows[0];
     if (!server) return NextResponse.json({ error: "Insert failed" }, { status: 500 });
+
+    /** Copy uploaded disk file into Postgres so listing logos survive deploys (same as PATCH). */
+    if (
+      logoUrl &&
+      (logoUrl.startsWith("/api/uploads/") || logoUrl.startsWith("/uploads/"))
+    ) {
+      const ingested = await readHostedUploadForLogoIngest(logoUrl);
+      if (ingested.ok) {
+        try {
+          const canonical = canonicalListingLogoPath(server.id);
+          await query(
+            `UPDATE servers SET logo_url = $1, listing_logo_bytes = $2, listing_logo_mime = $3 WHERE id = $4`,
+            [canonical, ingested.bytes, ingested.mime, server.id]
+          );
+          server = { ...server, logo_url: canonical };
+          queueMicrotask(async () => {
+            try {
+              const abs = absolutePathForUploadBasename(ingested.basename);
+              if (abs) await unlink(abs);
+            } catch {
+              //
+            }
+          });
+        } catch {
+          /* e.g. migration 045 not applied yet — keep disk URL */
+        }
+      }
+    }
+
     await audit(session.userId, "server.create", { serverId: server.id, name: server.name });
     return NextResponse.json(server);
   } catch (err) {

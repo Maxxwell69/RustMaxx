@@ -1,3 +1,4 @@
+import { unlink } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { disconnect } from "@/lib/rcon-manager";
@@ -19,7 +20,14 @@ import {
   coerceServerBillingTier,
   serverTierAllowsStreamerInteraction,
 } from "@/lib/billing-tiers";
-import { normalizeHostedLogoUrlForStorage } from "@/lib/upload-files";
+import {
+  absolutePathForUploadBasename,
+  normalizeHostedLogoUrlForStorage,
+} from "@/lib/upload-files";
+import {
+  canonicalListingLogoPath,
+  readHostedUploadForLogoIngest,
+} from "@/lib/server-listing-logo";
 
 export async function GET(
   request: NextRequest,
@@ -122,10 +130,66 @@ export async function PATCH(
     values.push(typeof body.location === "string" ? body.location.trim() || null : null);
   }
   if (body.logo_url !== undefined) {
-    updates.push(`logo_url = $${idx++}`);
     const raw =
       typeof body.logo_url === "string" ? body.logo_url.trim() || null : null;
-    values.push(raw == null ? null : normalizeHostedLogoUrlForStorage(raw));
+    const normalized = raw == null ? null : normalizeHostedLogoUrlForStorage(raw);
+    const canonical = canonicalListingLogoPath(serverId);
+
+    /** Client re-sent the stable DB-backed URL — keep existing bytes (do not touch logo columns). */
+    if (normalized === canonical) {
+      /* no-op */
+    } else if (!normalized) {
+      updates.push(`logo_url = $${idx++}`);
+      values.push(null);
+      updates.push(`listing_logo_bytes = $${idx++}`);
+      values.push(null);
+      updates.push(`listing_logo_mime = $${idx++}`);
+      values.push(null);
+    } else if (
+      normalized.startsWith("http://") ||
+      normalized.startsWith("https://") ||
+      (normalized.startsWith("/") && !normalized.startsWith("/api/uploads/") && !normalized.startsWith("/uploads/"))
+    ) {
+      /** External or non-upload path: store URL only, drop embedded bytes. */
+      updates.push(`logo_url = $${idx++}`);
+      values.push(normalized);
+      updates.push(`listing_logo_bytes = $${idx++}`);
+      values.push(null);
+      updates.push(`listing_logo_mime = $${idx++}`);
+      values.push(null);
+    } else {
+      const ingested = await readHostedUploadForLogoIngest(normalized);
+      if (!ingested.ok) {
+        if (ingested.reason === "missing") {
+          return NextResponse.json(
+            {
+              error:
+                "Logo file is missing on disk (often after a deploy). Upload the image again — it will be stored in the database.",
+            },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json(
+          { error: "Invalid logo URL — use Upload image or an https URL." },
+          { status: 400 }
+        );
+      }
+      updates.push(`logo_url = $${idx++}`);
+      values.push(canonical);
+      updates.push(`listing_logo_bytes = $${idx++}`);
+      values.push(ingested.bytes);
+      updates.push(`listing_logo_mime = $${idx++}`);
+      values.push(ingested.mime);
+
+      queueMicrotask(async () => {
+        try {
+          const abs = absolutePathForUploadBasename(ingested.basename);
+          if (abs) await unlink(abs);
+        } catch {
+          //
+        }
+      });
+    }
   }
   if (body.map_preview_url !== undefined) {
     updates.push(`map_preview_url = $${idx++}`);
