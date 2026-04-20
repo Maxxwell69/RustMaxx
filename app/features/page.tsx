@@ -1,5 +1,6 @@
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { FeatureCard } from "@/components/marketing/FeatureCard";
+import { MarketingPartnersBand } from "@/components/marketing/MarketingPartnersBand";
 
 const ADMIN_FEATURES = [
   {
@@ -126,6 +127,8 @@ export default function FeaturesPage() {
           </p>
         </div>
       </div>
+
+      <MarketingPartnersBand />
 
       <div className="marketing-section border-t-0 pt-0">
         <div className="marketing-container-narrow">

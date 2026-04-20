@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  images: {
+    /** Next.js 16: local `next/image` src with query strings must match a pattern (e.g. cache-bust under /maxxinvaders/). */
+    localPatterns: [{ pathname: "/maxxinvaders/**" }, { pathname: "/marketing/**" }],
+  },
   async rewrites() {
     return [
       /** Legacy URLs in DB; GET is served by app/api/uploads/[filename] (not always reachable as static /public). */

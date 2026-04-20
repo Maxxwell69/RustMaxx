@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
+import { MarketingPartnersBand } from "@/components/marketing/MarketingPartnersBand";
 
 export const metadata: Metadata = {
   title: "RustMaxx – For server admins, streamers & fans",
@@ -308,6 +309,7 @@ export default function HomePage() {
     <MarketingLayout>
       <HeroSection />
       <AudiencesSection />
+      <MarketingPartnersBand />
       <IntegrationsRow />
       <TestimonialsSection />
       <CTASection />
