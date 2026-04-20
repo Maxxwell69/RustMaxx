@@ -19,13 +19,6 @@ export type MaxxInvaderCharacter = {
   role: string;
 };
 
-/** Repository docs — full plugin behaviour, install, config */
-export const MAXXINVADERS_PLUGIN_DOC_HREF =
-  "https://github.com/Maxxwell69/RustMaxx/blob/main/docs/MAXXINVADERS.md";
-
-export const MAXXINVADERS_PLUGIN_README_HREF =
-  "https://github.com/Maxxwell69/RustMaxx/blob/main/plugins/MaxxInvaders/README.md";
-
 export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
   {
     slug: "miner",
