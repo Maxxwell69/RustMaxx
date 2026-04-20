@@ -19,6 +19,8 @@ export type MaxxInvaderCharacter = {
   role: string;
   /** Optional line shown below `role` (e.g. tribute), styled as green highlight in the card */
   roleTribute?: string;
+  /** If set, `roleTribute` becomes a link (e.g. TikTok shout-out) */
+  roleTributeHref?: string;
 };
 
 export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
@@ -50,6 +52,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     role:
       "Long range menace who never misses a shot—if you stand still, you're already dead.",
     roleTribute: "Snipe My Burger tribute.",
+    roleTributeHref: "https://www.tiktok.com/@snipemyburger",
   },
   {
     slug: "medic",
@@ -61,6 +64,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     role:
       "Keeps allies alive… and enemies suffering—heals fast, poisons faster.",
     roleTribute: "Yomamma Pick tribute.",
+    roleTributeHref: "https://www.tiktok.com/@yomamapicks",
   },
   {
     slug: "lumberjack",

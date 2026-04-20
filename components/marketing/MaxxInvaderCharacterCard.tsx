@@ -11,7 +11,8 @@ type Props = {
 };
 
 export function MaxxInvaderCharacterCard({ character }: Props) {
-  const { displayName, chatCommand, loadout, role, roleTribute, imageSrc, tier } = character;
+  const { displayName, chatCommand, loadout, role, roleTribute, roleTributeHref, imageSrc, tier } =
+    character;
 
   return (
     <article className="flex w-full max-w-[504px] flex-col overflow-hidden rounded-xl border border-rust-border bg-rust-surface/90 shadow-sm transition-all hover:border-rust-cyan/25 hover:shadow-rust-glow-subtle">
@@ -74,9 +75,20 @@ export function MaxxInvaderCharacterCard({ character }: Props) {
           <div className="mt-2 space-y-2">
             <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-400">{role}</p>
             {roleTribute ? (
-              <p className="block w-full rounded-md bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-400 ring-1 ring-emerald-500/25">
-                {roleTribute}
-              </p>
+              roleTributeHref ? (
+                <a
+                  href={roleTributeHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full rounded-md bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-400 ring-1 ring-emerald-500/25 transition-colors hover:bg-emerald-500/25 hover:text-emerald-300 hover:underline"
+                >
+                  {roleTribute}
+                </a>
+              ) : (
+                <p className="block w-full rounded-md bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-400 ring-1 ring-emerald-500/25">
+                  {roleTribute}
+                </p>
+              )
             ) : null}
           </div>
         </div>

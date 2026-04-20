@@ -2,8 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
-import { TerminalCard } from "@/components/marketing/TerminalCard";
-import { LiveConsole } from "@/components/marketing/LiveConsole";
 
 export const metadata: Metadata = {
   title: "RustMaxx – For server admins, streamers & fans",
@@ -73,31 +71,6 @@ function HeroSection() {
           <AudienceTabs />
         </div>
         <HeroBannerStrip />
-        <div className="mt-12 grid gap-8 lg:grid-cols-2">
-          <TerminalCard title="rcon — live">
-            <LiveConsole />
-          </TerminalCard>
-          <div className="flex flex-col justify-center gap-4 rounded-xl border border-rust-border bg-rust-surface/90 p-6 shadow-lg shadow-black/20">
-            <p className="text-sm font-medium text-zinc-300">Connect your Rust server and go live</p>
-            <p className="text-sm text-zinc-500">
-              Sign in for the full dashboard — RCON, streamer invites, TikFinity hooks, and viewer tools in one place.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-3">
-              <Link
-                href="/register"
-                className="rounded-xl bg-rust-cyan px-5 py-2.5 text-sm font-semibold text-rust-panel shadow-rust-glow hover:opacity-90"
-              >
-                Get started
-              </Link>
-              <Link
-                href="/features"
-                className="rounded-xl border border-rust-border px-5 py-2.5 text-sm font-medium text-rust-cyan hover:border-rust-cyan/50"
-              >
-                Explore features
-              </Link>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   );
@@ -131,20 +104,6 @@ function AudienceTabs() {
   );
 }
 
-function TrustStrip() {
-  return (
-    <section className="border-b border-rust-border bg-rust-panel/30 py-8 sm:py-10">
-      <div className="marketing-container">
-        <p className="text-center text-sm text-zinc-400">
-          Works with <strong className="text-zinc-300">Oxide / uMod</strong> and common hosts. No
-          inbound ports required—connect outbound via WebRCON. Use at your own discretion; we do not
-          claim official endorsement.
-        </p>
-      </div>
-    </section>
-  );
-}
-
 function AudiencesSection() {
   const blocks: {
     id: string;
@@ -153,6 +112,8 @@ function AudiencesSection() {
     benefits: string[];
     href: string;
     cta: string;
+    imageSrc: string;
+    imageAlt: string;
   }[] = [
     {
       id: "server-admins",
@@ -165,6 +126,8 @@ function AudiencesSection() {
       ],
       href: "/features#admin",
       cta: "Admin & server features →",
+      imageSrc: "/marketing/audiences/server-admins.png",
+      imageAlt: "Rust server admins at the controls",
     },
     {
       id: "streamers",
@@ -177,6 +140,8 @@ function AudiencesSection() {
       ],
       href: "/streamer-interaction",
       cta: "Streamer interaction →",
+      imageSrc: "/marketing/audiences/streamers.png",
+      imageAlt: "Streamer live with RustMaxx",
     },
     {
       id: "fans",
@@ -189,6 +154,8 @@ function AudiencesSection() {
       ],
       href: "/streamers",
       cta: "Browse streamers →",
+      imageSrc: "/marketing/audiences/fans.png",
+      imageAlt: "Fans cheering and engaging with live streams",
     },
   ];
 
@@ -207,23 +174,34 @@ function AudiencesSection() {
             <div
               key={p.id}
               id={p.id}
-              className="rounded-xl border border-rust-border bg-rust-surface/90 p-6 shadow-lg shadow-black/15"
+              className="overflow-hidden rounded-xl border border-rust-border bg-rust-surface/90 shadow-lg shadow-black/15"
             >
-              <h3 className="font-semibold text-zinc-100">{p.title}</h3>
-              <p className="mt-1 text-sm text-zinc-400">{p.tagline}</p>
-              <ul className="mt-4 space-y-2">
-                {p.benefits.map((b, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-zinc-400">
-                    <span className="text-rust-cyan">›</span> {b}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href={p.href}
-                className="mt-4 inline-block text-sm font-medium text-rust-cyan hover:underline"
-              >
-                {p.cta}
-              </Link>
+              <div className="relative aspect-[3/4] max-h-[min(420px,55vh)] w-full border-b border-rust-border bg-zinc-950">
+                <Image
+                  src={p.imageSrc}
+                  alt={p.imageAlt}
+                  fill
+                  className="object-contain object-center"
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                />
+              </div>
+              <div className="p-6 pt-5">
+                <h3 className="font-semibold text-zinc-100">{p.title}</h3>
+                <p className="mt-1 text-sm text-zinc-400">{p.tagline}</p>
+                <ul className="mt-4 space-y-2">
+                  {p.benefits.map((b, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-zinc-400">
+                      <span className="text-rust-cyan">›</span> {b}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href={p.href}
+                  className="mt-4 inline-block text-sm font-medium text-rust-cyan hover:underline"
+                >
+                  {p.cta}
+                </Link>
+              </div>
             </div>
           ))}
         </div>
@@ -329,7 +307,6 @@ export default function HomePage() {
   return (
     <MarketingLayout>
       <HeroSection />
-      <TrustStrip />
       <AudiencesSection />
       <IntegrationsRow />
       <TestimonialsSection />
