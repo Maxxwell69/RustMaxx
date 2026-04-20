@@ -11,6 +11,11 @@ export function canonicalListingLogoPath(serverId: string): string {
   return `/api/listing-logos/${serverId}`;
 }
 
+/** Public URL pattern for avatars stored in `users.streamer_directory_avatar_bytes`. */
+export function canonicalStreamerAvatarPath(userId: string): string {
+  return `/api/streamer-avatars/${userId}`;
+}
+
 export function extractUploadBasenameFromPublicPath(normalizedPath: string): string | null {
   for (const prefix of ["/api/uploads/", "/uploads/"]) {
     if (normalizedPath.startsWith(prefix)) {

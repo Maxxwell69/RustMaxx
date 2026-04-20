@@ -20,6 +20,8 @@ const PUBLIC_PATHS = [
   "/server-list",       // public list of opted-in Rust servers
   "/api/server-list",
   "/api/listing-logos", // public server listing logo images (bytea-backed)
+  "/api/streamer-avatars", // public streamer directory avatars (bytea-backed)
+  "/superfans",         // fans / superfans marketing
   "/streamers",         // public streamer directory + profiles (GET /api/streamers)
   "/api/streamers",
   "/streamer-interaction",

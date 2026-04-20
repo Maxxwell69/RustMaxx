@@ -14,7 +14,7 @@ export const SITE_NAV_LINKS = [
   { href: "/", label: "Home", owner: true, streamer: true, fan: true },
   { href: "/server-list", label: "Server list", owner: true, streamer: false, fan: false },
   { href: "/streamers", label: "Streamers", owner: false, streamer: true, fan: true },
-  { href: "/viewer/superfan", label: "Superfans", owner: false, streamer: false, fan: true },
+  { href: "/superfans", label: "Fans & superfans", owner: true, streamer: true, fan: true },
   {
     href: "/streamer",
     label: "Streamer setup",
@@ -40,7 +40,7 @@ export const DASHBOARD_FOOTER_LINKS = [
     streamer: true,
     fan: false,
   },
-  { href: "/viewer/superfan", label: "Superfans", owner: false, streamer: false, fan: true },
+  { href: "/superfans", label: "Fans & superfans", owner: true, streamer: true, fan: true },
 ] as const satisfies readonly PersonaKeyedLink[];
 
 export type MeForPersona = Pick<

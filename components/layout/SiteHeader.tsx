@@ -48,7 +48,9 @@ export function SiteHeader() {
     (pathname?.startsWith("/streamer/") ?? false);
 
   const navLinks = useMemo(() => {
-    if (!loggedIn) return [...SITE_NAV_LINKS];
+    if (!loggedIn) {
+      return SITE_NAV_LINKS.filter((l) => l.href !== "/servers" && l.href !== "/streamer");
+    }
     const forPersona = filterNavLinksForUser(me);
     return forPersona.filter((l) => l.href !== "/");
   }, [loggedIn, me]);
@@ -57,6 +59,7 @@ export function SiteHeader() {
     if (href === "/servers") return isDashboard;
     if (href === "/streamer") return isStreamerSetup;
     if (href === "/streamers") return isStreamersSection;
+    if (href === "/superfans") return pathname === "/superfans";
     if (href === "/viewer/superfan") return isViewerSuperfan;
     if (href === "/maxxinvaders") return pathname === "/maxxinvaders";
     return pathname === href;

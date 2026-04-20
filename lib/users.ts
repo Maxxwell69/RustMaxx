@@ -1,9 +1,18 @@
+import { unlink } from "fs/promises";
 import { query } from "./db";
 import bcrypt from "bcryptjs";
 import type { UserRole } from "./permissions";
 import type { MembershipLevel } from "./membership-level";
 import { MEMBERSHIP_LEVELS } from "./membership-level";
-import { isOurHostedUploadPublicPath } from "./upload-files";
+import {
+  canonicalStreamerAvatarPath,
+  readHostedUploadForLogoIngest,
+} from "./server-listing-logo";
+import {
+  absolutePathForUploadBasename,
+  isOurHostedUploadPublicPath,
+  normalizeHostedLogoUrlForStorage,
+} from "./upload-files";
 import { coerceDirectorySocialsFromDb, parseDirectorySocialOverrides } from "./streamer-directory-socials";
 import type { StreamerBillingTier } from "./billing-tiers";
 import { parseStreamerBillingTier } from "./billing-tiers";
@@ -13,9 +22,17 @@ const SALT_ROUNDS = 10;
 /**
  * Accepts full http(s) URLs or same-origin paths from POST /api/upload (`/api/uploads/…` or legacy `/uploads/…`).
  */
+function isUuidLike(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
 function isAllowedStreamerDirectoryAvatarUrl(t: string): boolean {
   const trimmed = t.trim();
   if (!trimmed || trimmed.length > 2048) return false;
+  if (trimmed.startsWith("/api/streamer-avatars/")) {
+    const id = trimmed.slice("/api/streamer-avatars/".length).split("/")[0] ?? "";
+    return isUuidLike(id);
+  }
   if (isOurHostedUploadPublicPath(trimmed)) return true;
   try {
     const u = new URL(trimmed);
@@ -461,18 +478,75 @@ export async function updateStreamerDirectoryFields(
     if (raw === null || raw === "") {
       updates.push(`streamer_directory_avatar_url = $${idx++}`);
       values.push(null);
+      updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
+      values.push(null);
+      updates.push(`streamer_directory_avatar_mime = $${idx++}`);
+      values.push(null);
     } else if (typeof raw === "string") {
-      const t = raw.trim();
-      if (t.length > 2048) return { ok: false, error: "Avatar URL is too long" };
-      if (!isAllowedStreamerDirectoryAvatarUrl(t)) {
-        return {
-          ok: false,
-          error:
-            "Avatar URL must be https (or http) or a path from Upload image, for example /api/uploads/your-file.png.",
-        };
+      const normalized = normalizeHostedLogoUrlForStorage(raw.trim()) ?? raw.trim();
+      const canonical = canonicalStreamerAvatarPath(userId);
+
+      if (normalized === canonical) {
+        /* Client re-sent stable DB-backed URL — keep existing bytes. */
+      } else if (!normalized) {
+        updates.push(`streamer_directory_avatar_url = $${idx++}`);
+        values.push(null);
+        updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
+        values.push(null);
+        updates.push(`streamer_directory_avatar_mime = $${idx++}`);
+        values.push(null);
+      } else if (
+        normalized.startsWith("http://") ||
+        normalized.startsWith("https://") ||
+        (normalized.startsWith("/") &&
+          !normalized.startsWith("/api/uploads/") &&
+          !normalized.startsWith("/uploads/"))
+      ) {
+        if (!isAllowedStreamerDirectoryAvatarUrl(normalized)) {
+          return {
+            ok: false,
+            error:
+              "Avatar URL must be https (or http) or a path from Upload image, for example /api/uploads/your-file.png.",
+          };
+        }
+        updates.push(`streamer_directory_avatar_url = $${idx++}`);
+        values.push(normalized);
+        updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
+        values.push(null);
+        updates.push(`streamer_directory_avatar_mime = $${idx++}`);
+        values.push(null);
+      } else {
+        const ingested = await readHostedUploadForLogoIngest(normalized);
+        if (!ingested.ok) {
+          if (ingested.reason === "missing") {
+            return {
+              ok: false,
+              error:
+                "Avatar file is missing on disk (often after a deploy). Upload again — it will be stored in the database.",
+            };
+          }
+          return {
+            ok: false,
+            error:
+              "Avatar URL must be https (or http) or a path from Upload image, for example /api/uploads/your-file.png.",
+          };
+        }
+        updates.push(`streamer_directory_avatar_url = $${idx++}`);
+        values.push(canonical);
+        updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
+        values.push(ingested.bytes);
+        updates.push(`streamer_directory_avatar_mime = $${idx++}`);
+        values.push(ingested.mime);
+
+        queueMicrotask(async () => {
+          try {
+            const abs = absolutePathForUploadBasename(ingested.basename);
+            if (abs) await unlink(abs);
+          } catch {
+            //
+          }
+        });
       }
-      updates.push(`streamer_directory_avatar_url = $${idx++}`);
-      values.push(t);
     } else {
       return { ok: false, error: "Invalid avatar URL" };
     }

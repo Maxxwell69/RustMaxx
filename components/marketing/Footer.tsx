@@ -13,7 +13,7 @@ const FOOTER_AUDIENCE = [
   { href: "/servers", label: "Dashboard" },
   { href: "/streamer/register", label: "Streamer application" },
   { href: "/streamers", label: "Streamers" },
-  { href: "/viewer/superfan", label: "Superfans" },
+  { href: "/superfans", label: "Fans & superfans" },
 ];
 
 const FOOTER_DISCOVER = [
