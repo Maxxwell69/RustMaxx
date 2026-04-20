@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { PirateMaxxCredit } from "@/components/layout/PirateMaxxCredit";
 import { Logo } from "@/components/marketing/Logo";
 
 function RegisterForm() {
@@ -62,8 +63,9 @@ function RegisterForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-[33.6rem] rounded-xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-xl">
+    <div className="flex min-h-screen flex-col">
+      <div className="flex flex-1 items-center justify-center p-4">
+        <div className="w-full max-w-[33.6rem] rounded-xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-xl">
         <div className="mb-6 flex justify-center">
           <Logo
             className="h-[16.2rem] w-auto"
@@ -195,7 +197,11 @@ function RegisterForm() {
             Sign in
           </Link>
         </p>
+        </div>
       </div>
+      <footer className="border-t border-zinc-800/80 bg-zinc-950 py-5">
+        <PirateMaxxCredit variant="compact" />
+      </footer>
     </div>
   );
 }

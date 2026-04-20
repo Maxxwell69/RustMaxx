@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PirateMaxxCredit } from "@/components/layout/PirateMaxxCredit";
 import { Logo } from "./Logo";
 
 const FOOTER_PRODUCT = [
@@ -87,6 +88,9 @@ export function Footer() {
           </div>
         </div>
         <div className="mt-12 border-t border-rust-border pt-8">
+          <PirateMaxxCredit variant="marketing" />
+        </div>
+        <div className="mt-10 border-t border-rust-border pt-8">
           <p className="text-xs leading-relaxed text-zinc-600">
             RustMaxx is not affiliated with, endorsed by, or connected with Facepunch Studios or the official Rust
             game. &quot;Rust&quot; is a trademark of Facepunch Studios.

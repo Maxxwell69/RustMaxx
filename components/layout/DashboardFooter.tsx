@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { AuthMePayload } from "@/lib/auth-me-payload";
+import { PirateMaxxCredit } from "@/components/layout/PirateMaxxCredit";
 import { filterDashboardFooterLinksForUser } from "@/components/layout/nav-persona";
 
 export function DashboardFooter() {
@@ -49,6 +50,9 @@ export function DashboardFooter() {
               </Link>
             )}
           </nav>
+        </div>
+        <div className="mt-6 border-t border-rust-border pt-6">
+          <PirateMaxxCredit variant="dashboard" />
         </div>
       </div>
     </footer>
