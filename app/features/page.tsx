@@ -128,8 +128,6 @@ export default function FeaturesPage() {
         </div>
       </div>
 
-      <MarketingPartnersBand />
-
       <div className="marketing-section border-t-0 pt-0">
         <div className="marketing-container-narrow">
         <section className="mt-0" id="admin">
@@ -187,6 +185,8 @@ export default function FeaturesPage() {
         </section>
         </div>
       </div>
+
+      <MarketingPartnersBand />
     </MarketingLayout>
   );
 }
