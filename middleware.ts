@@ -18,6 +18,8 @@ const PUBLIC_PATHS = [
   "/about",
   "/contact",
   "/maxxinvaders",      // marketing / character roster (public)
+  "/plugins",           // public plugin directory + detail pages
+  "/api/plugins",       // public plugin directory JSON
   "/server-list",       // public list of opted-in Rust servers
   "/api/server-list",
   "/api/listing-logos", // public server listing logo images (bytea-backed)

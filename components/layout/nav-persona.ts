@@ -24,7 +24,7 @@ export const SITE_NAV_LINKS = [
   },
   { href: "/features", label: "Features", owner: true, streamer: true, fan: true },
   { href: "/games", label: "Games", owner: true, streamer: true, fan: true },
-  { href: "/maxxinvaders", label: "MaxxInvaders", owner: true, streamer: true, fan: true },
+  { href: "/plugins", label: "Plugins", owner: true, streamer: true, fan: true },
 ] as const satisfies readonly PersonaKeyedLink[];
 
 export type SiteNavLink = (typeof SITE_NAV_LINKS)[number];
