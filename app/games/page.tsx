@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
@@ -42,21 +43,61 @@ export default function GamesPage() {
             <p className="mt-1 max-w-2xl text-sm text-zinc-400">
               Full product: RCON, streamer rewards, public listings, and everything you see across the site.
             </p>
-            <div className="mt-8 max-w-xl">
-              <div className="rounded-xl border border-orange-500/35 bg-gradient-to-br from-orange-950/40 to-zinc-950/80 p-6 shadow-rust-glow-subtle ring-1 ring-orange-400/20">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-amber-100">Rust</h3>
-                    <p className="mt-1 text-sm text-zinc-400">
-                      Facepunch&apos;s survival sandbox — our flagship. Admins, streamers, and fans in one loop.
-                    </p>
+            <div className="mt-10 space-y-8">
+              <div className="relative overflow-hidden rounded-2xl border border-rust-border bg-zinc-950 shadow-lg shadow-black/40 ring-1 ring-orange-500/25">
+                <div className="relative aspect-[1024/682] w-full max-h-[min(52vh,560px)]">
+                  <Image
+                    src="/marketing/games/rust/naval-update.png"
+                    alt="Rust — naval battle scene at sunset with hazmat crews"
+                    fill
+                    className="object-cover object-center"
+                    sizes="(max-width: 1280px) 100vw, 1152px"
+                    priority
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-6 sm:grid-cols-2">
+                <figure className="overflow-hidden rounded-2xl border border-rust-border bg-zinc-950 shadow-lg ring-1 ring-orange-500/20">
+                  <div className="relative aspect-square w-full">
+                    <Image
+                      src="/marketing/games/rust/hazmat-blue.png"
+                      alt="Rust — blue hazmat survivor in a fiery hex frame"
+                      fill
+                      className="object-cover object-center"
+                      sizes="(max-width: 640px) 100vw, 576px"
+                    />
                   </div>
-                  <Link
-                    href="/"
-                    className="inline-flex shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-amber-200 via-orange-400 to-orange-600 px-6 py-3 text-center text-sm font-semibold text-rust-panel shadow-rust-glow transition-opacity hover:opacity-95 hover:shadow-rust-glow-lg"
-                  >
-                    Open Rust home
-                  </Link>
+                </figure>
+                <figure className="overflow-hidden rounded-2xl border border-rust-border bg-zinc-950 shadow-lg ring-1 ring-orange-500/20">
+                  <div className="relative aspect-square w-full">
+                    <Image
+                      src="/marketing/games/rust/hazmat-orange-ak.png"
+                      alt="Rust — orange hazmat survivor with rifle in a fiery hex frame"
+                      fill
+                      className="object-cover object-center"
+                      sizes="(max-width: 640px) 100vw, 576px"
+                    />
+                  </div>
+                </figure>
+              </div>
+
+              <div className="mx-auto max-w-xl">
+                <div className="rounded-xl border border-orange-500/35 bg-gradient-to-br from-orange-950/40 to-zinc-950/80 p-6 shadow-rust-glow-subtle ring-1 ring-orange-400/20">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-amber-100">Rust</h3>
+                      <p className="mt-1 text-sm text-zinc-400">
+                        Facepunch&apos;s survival sandbox — our flagship. Admins, streamers, and fans in one loop.
+                      </p>
+                    </div>
+                    <Link
+                      href="/"
+                      className="inline-flex shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-amber-200 via-orange-400 to-orange-600 px-6 py-3 text-center text-sm font-semibold text-rust-panel shadow-rust-glow transition-opacity hover:opacity-95 hover:shadow-rust-glow-lg"
+                    >
+                      Open Rust home
+                    </Link>
+                  </div>
                 </div>
               </div>
             </div>
