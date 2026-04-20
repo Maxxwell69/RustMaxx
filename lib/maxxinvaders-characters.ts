@@ -17,6 +17,8 @@ export type MaxxInvaderCharacter = {
   loadout: string[];
   /** Short gameplay / stream role */
   role: string;
+  /** Optional line shown below `role` (e.g. tribute), styled as green highlight in the card */
+  roleTribute?: string;
 };
 
 export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
@@ -46,7 +48,8 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
       "Med slots & melee backup per Roaming template",
     ],
     role:
-      "Long range menace who never misses a shot—if you stand still, you're already dead.\n\nSnipe My Burger tribute.",
+      "Long range menace who never misses a shot—if you stand still, you're already dead.",
+    roleTribute: "Snipe My Burger tribute.",
   },
   {
     slug: "medic",
@@ -56,7 +59,8 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     chatCommand: "!medic",
     loadout: ["Scrubs / surgeon suit", "Revolver", "Syringes & large medkits"],
     role:
-      "Keeps allies alive… and enemies suffering—heals fast, poisons faster.\n\nYomamma Pick tribute.",
+      "Keeps allies alive… and enemies suffering—heals fast, poisons faster.",
+    roleTribute: "Yomamma Pick tribute.",
   },
   {
     slug: "lumberjack",
