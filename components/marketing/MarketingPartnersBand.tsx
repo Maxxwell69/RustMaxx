@@ -3,10 +3,10 @@ import Image from "next/image";
 const WORKS_WITH_LOGOS = [
   { src: "/marketing/partners/tikfinity.png", alt: "TikFinity" },
   { src: "/marketing/partners/tiktok.png", alt: "TikTok" },
-  { src: "/marketing/partners/tikfinity-alt.png", alt: "TikFinity" },
+  { src: "/marketing/partners/twitch.png", alt: "Twitch" },
 ] as const;
 
-/** Partner logos for home + features: TikFinity / TikTok under “Works with”, Shockbyte under “Some Servers powered by”. */
+/** Partner logos for home + features: TikFinity / TikTok / Twitch under “Works with”, Shockbyte under “Some Servers powered by”. */
 export function MarketingPartnersBand() {
   return (
     <section className="marketing-section-muted" aria-label="Partners">
