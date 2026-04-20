@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.53")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.54")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -3945,13 +3945,13 @@ namespace Oxide.Plugins
                 }
 
                 // Keep the viewer name visible for the whole session (engine nameplates fade with distance).
-                // Health% and distance stay in the INVADERS HUD panel; here we only draw the name, green/yellow/red by HP.
+                // Health%, distance, and task/job labels stay in the INVADERS HUD panel only — not as a second ddraw line under the name.
                 foreach (var r in bots)
                 {
                     var npc = r.NpcPlayer;
                     if (npc == null) continue;
                     var dist = Vector3.Distance(player.transform.position, npc.transform.position);
-                    DrawInvaderNameOnly(player, r, dist, bridgeTaskByEntity);
+                    DrawInvaderNameOnly(player, r, dist);
                 }
 
                 UpdateLootTaskOverlayForPlayer(player, bots, bridgeTaskByEntity);
@@ -4350,13 +4350,12 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// Draw name above the bot head that stays visible at distance.
-        /// Uses HP% thresholds to color the name (green/yellow/red).
+        /// Uses HP% thresholds to color the name (green/yellow/red). Task/job text is not drawn here — see INVADERS HUD only.
         /// </summary>
         private static void DrawInvaderNameOnly(
             BasePlayer viewer,
             InvaderRuntime r,
-            float distMeters,
-            Dictionary<ulong, string> bridgeTaskByEntity)
+            float distMeters)
         {
             if (viewer == null || r?.NpcPlayer == null || r.NpcPlayer.IsDestroyed) return;
 
@@ -4378,17 +4377,6 @@ namespace Oxide.Plugins
             var root = r.NpcPlayer.transform.position + Vector3.up * 2.15f;
             var txt = $"<size={sz}>{nameRaw}</size>";
             viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, color, root, txt, NoFade);
-
-            if (r.IsRoamingNpc && bridgeTaskByEntity != null &&
-                bridgeTaskByEntity.TryGetValue(r.EntityId, out var tlab) && !string.IsNullOrEmpty(tlab) &&
-                tlab != "—")
-            {
-                var tpos = r.NpcPlayer.transform.position + Vector3.up * 1.88f;
-                var tc = new Color(0.78f, 0.82f, 1f, 1f);
-                var tsz = Mathf.Clamp(sz - 3, 6, 11);
-                viewer.SendConsoleCommand("ddraw.text", InvaderOverlayDrawDuration, tc, tpos,
-                    $"<size={tsz}>{tlab}</size>", NoFade);
-            }
         }
 
         #endregion

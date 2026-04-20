@@ -135,6 +135,7 @@ Toggles: **Invaders GUI → Maxx → PersistViewerIdentity / MergeSavedViewerOnS
 
 ## Changelog (high level)
 
+- **1.7.54:** Roaming bridge **task / job** label is **no longer** drawn as a **second world `ddraw` line** under the viewer name — it remains on the **INVADERS HUD** list (right panel) only.
 - **1.7.7:** **Per-viewer persistence** (`ViewerProfiles` in `MaxxInvadersData.json`): save last tier/kit/mode/roaming template/display name per stable **`viewerId`**; optional **merge** on spawn when the relay sends placeholders or empty fields. GUI toggles **PersistViewerIdentity** and **MergeSavedViewerOnSpawn** on the **Maxx** tab.
 - **1.6.8:** **World tags** always show **name + HP + distance**; `ddraw.text` uses **distance fade 0** so labels stay readable at long range. **RoamingNPCs 0.5.15+** clears the **vanilla nameplate** for **MaxxInvaders bridge** bots only (`Data.DisplayName` kept for corpse + admin UI via `GetResolvedDisplayName`).
 - **1.6.7:** **MAXX SETTINGS** uses a **scroll view** (mouse wheel) so all fields are reachable; **Access** line stays **fixed** at the bottom of the panel.
