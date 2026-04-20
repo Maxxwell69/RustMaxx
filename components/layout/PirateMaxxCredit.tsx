@@ -52,7 +52,7 @@ export function PirateMaxxCredit({ variant = "marketing", className = "" }: Prop
           rel="noopener noreferrer"
           className="font-medium text-rust-cyan underline-offset-2 hover:text-rust-cyan hover:underline"
         >
-          PirateMAxx.com
+          PirateMaxx.com
         </Link>
       </p>
     </div>
