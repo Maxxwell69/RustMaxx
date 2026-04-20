@@ -8,10 +8,11 @@ import {
 export const metadata = {
   title: "MaxxInvaders | RustMaxx",
   description:
-    "Viewer-named Rust NPCs for TikFinity / webhooks: patrol, miner, medic, lumberjack, and seasonal outfits.",
+    "Tie your TikTok crew's names to WorkingNPCs on Rust: patrol, gather, fight, heal, loot — RustMaxx webhooks and optional MaxxInvaders HUD tasks.",
   openGraph: {
     title: "MaxxInvaders | RustMaxx",
-    description: "Streamer bots and seasonal characters for Rust + TikFinity.",
+    description:
+      "Tie your TikTok crew's names to WorkingNPCs on Rust — webhooks and optional MaxxInvaders HUD tasks.",
   },
 };
 
@@ -25,9 +26,9 @@ export default function MaxxInvadersPage() {
             MaxxInvaders
           </h1>
           <p className="mt-4 text-lg leading-relaxed text-zinc-400">
-            Tie TikTok viewer names to full Roaming NPC bots on your Rust server: patrol around your
-            anchor, gather, fight, heal, and drop loot—controlled from RustMaxx webhooks and optional
-            MaxxInvaders HUD tasks.
+            Tie your TikTok crew&apos;s names to full WorkingNPCs on your Rust server. These loyal hands patrol
+            your waters, gather resources, fight enemies, patch you up, and drop loot along the way. All
+            commanded through RustMaxx webhooks and powered by optional MaxxInvaders HUD tasks.
           </p>
         </header>
 
