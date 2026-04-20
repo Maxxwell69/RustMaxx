@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { MaxxInvaderCharacterCard } from "@/components/marketing/MaxxInvaderCharacterCard";
 import {
@@ -20,7 +21,22 @@ export default function MaxxInvadersPage() {
   return (
     <MarketingLayout>
       <div className="marketing-container px-4 py-14 sm:py-20">
-        <header className="mx-auto max-w-3xl text-center">
+        <div className="mx-auto max-w-5xl">
+          <div className="relative overflow-hidden rounded-2xl border border-rust-border bg-zinc-950 shadow-xl shadow-black/40 ring-1 ring-orange-500/30">
+            <div className="relative aspect-[1024/682] w-full">
+              <Image
+                src="/marketing/maxxinvaders/hero.png?v=20260420"
+                alt="MaxxInvaders — viewer-named NPC crew, stream raid tags, and fiery battlefield art"
+                fill
+                priority
+                className="object-cover object-center"
+                sizes="(max-width: 1280px) 100vw, 896px"
+              />
+            </div>
+          </div>
+        </div>
+
+        <header className="mx-auto mt-10 max-w-3xl text-center">
           <p className="text-sm font-medium uppercase tracking-wider text-rust-cyan">Streamer NPCs</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-zinc-100 sm:text-4xl">
             MaxxInvaders
