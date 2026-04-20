@@ -41,12 +41,13 @@ function HeroBannerStrip() {
           key={banner.src}
           className="overflow-hidden rounded-xl border border-rust-border bg-zinc-950 shadow-lg shadow-black/30 ring-1 ring-white/5"
         >
-          <div className="relative aspect-[2/1] w-full">
+          {/* object-contain shows full artwork; object-cover + a short aspect box cropped top/bottom */}
+          <div className="relative aspect-video w-full">
             <Image
               src={banner.src}
               alt={banner.alt}
               fill
-              className="object-cover object-center"
+              className="object-contain object-center"
               sizes="(max-width: 768px) 100vw, 33vw"
               priority={i === 0}
             />
