@@ -287,7 +287,7 @@ function CTASection() {
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
               href="/register"
-              className="rounded-xl bg-rust-cyan px-6 py-3 font-semibold text-rust-panel shadow-rust-glow hover:opacity-90 hover:shadow-rust-glow-lg"
+              className="rounded-xl bg-gradient-to-b from-amber-200 via-orange-400 to-orange-600 px-6 py-3 font-semibold text-rust-panel shadow-rust-glow hover:opacity-90 hover:shadow-rust-glow-lg"
             >
               Get started
             </Link>

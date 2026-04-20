@@ -143,7 +143,7 @@ function RegisterForm() {
                 onClick={() => togglePersona("owner", !interestedServerOwner)}
                 className={`rounded-xl border-2 px-3 py-3 text-left transition-colors ${
                   interestedServerOwner
-                    ? "border-rust-cyan bg-rust-cyan/15 text-zinc-100 shadow-rust-glow-subtle"
+                    ? "border-orange-400 bg-orange-500/15 text-zinc-100 shadow-rust-glow-subtle"
                     : "border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600"
                 }`}
               >
@@ -157,7 +157,7 @@ function RegisterForm() {
                 onClick={() => togglePersona("streamer", !interestedStreamer)}
                 className={`rounded-xl border-2 px-3 py-3 text-left transition-colors ${
                   interestedStreamer
-                    ? "border-rust-cyan bg-rust-cyan/15 text-zinc-100 shadow-rust-glow-subtle"
+                    ? "border-orange-400 bg-orange-500/15 text-zinc-100 shadow-rust-glow-subtle"
                     : "border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600"
                 }`}
               >
@@ -171,7 +171,7 @@ function RegisterForm() {
                 onClick={() => togglePersona("fan", !interestedFan)}
                 className={`rounded-xl border-2 px-3 py-3 text-left transition-colors sm:col-span-1 ${
                   interestedFan
-                    ? "border-rust-cyan bg-rust-cyan/15 text-zinc-100 shadow-rust-glow-subtle"
+                    ? "border-orange-400 bg-orange-500/15 text-zinc-100 shadow-rust-glow-subtle"
                     : "border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:border-zinc-600"
                 }`}
               >
@@ -186,7 +186,7 @@ function RegisterForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-rust-cyan px-4 py-2 font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
+            className="w-full rounded-lg bg-gradient-to-b from-amber-200 via-orange-400 to-orange-600 px-4 py-2 font-medium text-rust-panel shadow-rust-glow hover:shadow-rust-glow-lg disabled:opacity-50"
           >
             {loading ? "Creating account…" : "Sign up"}
           </button>

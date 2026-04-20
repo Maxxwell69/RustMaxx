@@ -12,11 +12,11 @@
     @apply pointer-events-none fixed inset-x-0 top-0 z-0 h-[min(70vh,520px)];
     background: radial-gradient(
         ellipse 80% 60% at 50% -10%,
-        rgba(6, 182, 212, 0.14),
+        rgba(251, 146, 60, 0.12),
         transparent 55%
       ),
-      radial-gradient(ellipse 50% 40% at 100% 0%, rgba(6, 182, 212, 0.06), transparent 50%),
-      radial-gradient(ellipse 40% 35% at 0% 0%, rgba(6, 182, 212, 0.05), transparent 45%);
+      radial-gradient(ellipse 50% 40% at 100% 0%, rgba(234, 88, 12, 0.07), transparent 50%),
+      radial-gradient(ellipse 40% 35% at 0% 0%, rgba(251, 191, 36, 0.06), transparent 45%);
   }
   .marketing-grid-bg {
     @apply absolute inset-0 opacity-[0.4];
@@ -37,23 +37,23 @@
     @apply border-b border-rust-border/90 bg-rust-panel/35 py-16 backdrop-blur-[2px] sm:py-24;
   }
   .marketing-section-spotlight {
-    @apply border-b border-rust-border/90 bg-gradient-to-b from-cyan-950/[0.12] via-transparent to-transparent py-16 sm:py-24;
+    @apply border-b border-rust-border/90 bg-gradient-to-b from-orange-950/[0.18] via-transparent to-transparent py-16 sm:py-24;
   }
   .marketing-h1 {
     @apply text-balance text-3xl font-bold tracking-tight text-zinc-100 sm:text-4xl md:text-5xl;
   }
   .marketing-lead {
-    @apply text-pretty text-lg leading-relaxed text-zinc-400 sm:text-xl;
+    @apply text-pretty text-lg leading-relaxed text-stone-300 sm:text-xl;
   }
 }
 
 /* Marketing: grid overlay utility */
 @layer utilities {
   .btn-glow {
-    box-shadow: 0 0 20px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.2);
+    box-shadow: 0 0 22px rgba(251, 146, 60, 0.5), 0 0 44px rgba(234, 88, 12, 0.2);
   }
   .btn-glow:hover {
-    box-shadow: 0 0 25px rgba(6, 182, 212, 0.6), 0 0 50px rgba(6, 182, 212, 0.25);
+    box-shadow: 0 0 28px rgba(251, 146, 60, 0.6), 0 0 56px rgba(234, 88, 12, 0.26);
   }
   .bg-grid-subtle {
     background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),

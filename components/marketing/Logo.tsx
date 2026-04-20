@@ -31,7 +31,7 @@ function LogoSvg({ className }: { className?: string }) {
       <text
         x="0"
         y="34"
-        fill="#06b6d4"
+        fill="#fb923c"
         filter="url(#rust-glow)"
         fontFamily="system-ui, -apple-system, sans-serif"
         fontWeight="bold"

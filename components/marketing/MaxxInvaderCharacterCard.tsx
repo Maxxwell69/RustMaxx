@@ -80,12 +80,12 @@ export function MaxxInvaderCharacterCard({ character }: Props) {
                   href={roleTributeHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full rounded-md bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-400 ring-1 ring-emerald-500/25 transition-colors hover:bg-emerald-500/25 hover:text-emerald-300 hover:underline"
+                  className="block w-full rounded-md bg-amber-500/15 px-3 py-2 text-sm font-medium text-amber-300 ring-1 ring-amber-500/30 transition-colors hover:bg-amber-500/25 hover:text-amber-200 hover:underline"
                 >
                   {roleTribute}
                 </a>
               ) : (
-                <p className="block w-full rounded-md bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-400 ring-1 ring-emerald-500/25">
+                <p className="block w-full rounded-md bg-amber-500/15 px-3 py-2 text-sm font-medium text-amber-300 ring-1 ring-amber-500/30">
                   {roleTribute}
                 </p>
               )

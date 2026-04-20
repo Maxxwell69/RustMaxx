@@ -82,8 +82,8 @@ export function SiteHeader() {
               height={isHome ? 136 : isAppShell ? 80 : 108}
               fallbackClassName={
                 isHome
-                  ? "text-4xl font-bold text-rust-cyan sm:text-5xl md:text-6xl"
-                  : "text-3xl font-bold text-rust-cyan sm:text-4xl"
+                  ? "text-4xl font-bold text-amber-400 sm:text-5xl md:text-6xl"
+                  : "text-3xl font-bold text-amber-400 sm:text-4xl"
               }
             />
           </Link>
@@ -98,8 +98,8 @@ export function SiteHeader() {
               href={href}
               className={`shrink-0 rounded-lg px-2.5 py-1.5 text-sm transition-colors ${
                 navLinkActive(href)
-                  ? "font-medium text-rust-cyan shadow-rust-glow-subtle bg-rust-cyan/10"
-                  : "text-zinc-300 hover:bg-zinc-800/80 hover:text-zinc-100"
+                  ? "bg-gradient-to-b from-orange-500/25 to-amber-600/10 font-medium text-amber-200 shadow-rust-glow-subtle ring-1 ring-orange-400/35"
+                  : "text-stone-300 hover:bg-orange-950/40 hover:text-amber-100"
               }`}
             >
               {label}
@@ -119,13 +119,13 @@ export function SiteHeader() {
             <>
               <Link
                 href="/login"
-                className="rounded-lg border border-zinc-600 bg-transparent px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:bg-zinc-800/80"
+                className="rounded-lg border border-orange-400/45 bg-transparent px-3 py-1.5 text-sm font-medium text-amber-200/95 transition-colors hover:border-orange-400/70 hover:bg-orange-950/35"
               >
                 Log in
               </Link>
               <Link
                 href="/register"
-                className="rounded-lg bg-rust-cyan px-4 py-1.5 text-sm font-semibold text-rust-panel shadow-rust-glow transition-opacity hover:opacity-95 hover:shadow-rust-glow-lg"
+                className="rounded-lg bg-gradient-to-b from-amber-200 via-orange-400 to-orange-600 px-4 py-1.5 text-sm font-semibold text-rust-panel shadow-rust-glow transition-opacity hover:opacity-95 hover:shadow-rust-glow-lg"
               >
                 Get started
               </Link>
@@ -144,8 +144,8 @@ export function SiteHeader() {
             href={href}
             className={`shrink-0 rounded-lg px-3 py-1.5 text-sm ${
               navLinkActive(href)
-                ? "bg-rust-cyan/10 font-medium text-rust-cyan"
-                : "text-zinc-300 hover:bg-zinc-800/80 hover:text-zinc-100"
+                ? "bg-gradient-to-b from-orange-500/25 to-amber-600/10 font-medium text-amber-200 ring-1 ring-orange-400/35"
+                : "text-stone-300 hover:bg-orange-950/40 hover:text-amber-100"
             }`}
           >
             {label}
@@ -156,13 +156,13 @@ export function SiteHeader() {
             <span className="text-zinc-600">|</span>
             <Link
               href="/login"
-              className="shrink-0 rounded border border-rust-cyan/60 px-3 py-1.5 text-sm font-medium text-rust-cyan"
+              className="shrink-0 rounded border border-orange-400/55 px-3 py-1.5 text-sm font-medium text-amber-200"
             >
               Log in
             </Link>
             <Link
               href="/register"
-              className="shrink-0 rounded-lg bg-rust-cyan px-3 py-1.5 text-sm font-semibold text-rust-panel shadow-rust-glow"
+              className="shrink-0 rounded-lg bg-gradient-to-b from-amber-200 via-orange-400 to-orange-600 px-3 py-1.5 text-sm font-semibold text-rust-panel shadow-rust-glow"
             >
               Get started
             </Link>

@@ -10,20 +10,25 @@ const config: Config = {
     extend: {
       colors: {
         rust: {
-          panel: "#0c0d0e",
-          surface: "#111215",
-          border: "#1e2124",
-          mute: "#6b7280",
+          /** Warm charcoal so UI reads with orange fire accents */
+          panel: "#090807",
+          surface: "#12100e",
+          border: "#2a221c",
+          mute: "#a8a29e",
           green: "#22c55e",
-          cyan: "#06b6d4",
-          amber: "#f59e0b",
+          /** Primary accent — fiery orange (class name `rust-cyan` kept for compatibility) */
+          cyan: "#fb923c",
+          /** Gold highlight for hovers / secondary emphasis */
+          amber: "#fbbf24",
           danger: "#ef4444",
         },
       },
       boxShadow: {
-        "rust-glow": "0 0 20px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.2)",
-        "rust-glow-lg": "0 0 25px rgba(6, 182, 212, 0.6), 0 0 50px rgba(6, 182, 212, 0.25)",
-        "rust-glow-subtle": "0 0 12px rgba(6, 182, 212, 0.35)",
+        "rust-glow":
+          "0 0 22px rgba(251, 146, 60, 0.55), 0 0 48px rgba(234, 88, 12, 0.2), 0 0 2px rgba(254, 243, 199, 0.35)",
+        "rust-glow-lg":
+          "0 0 28px rgba(251, 146, 60, 0.65), 0 0 64px rgba(234, 88, 12, 0.28), 0 0 3px rgba(254, 243, 199, 0.45)",
+        "rust-glow-subtle": "0 0 14px rgba(251, 146, 60, 0.42), 0 0 28px rgba(234, 88, 12, 0.12)",
       },
     },
   },
