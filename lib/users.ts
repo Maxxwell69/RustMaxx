@@ -460,7 +460,9 @@ export type StreamerDirectoryPatch = {
 /** Updates public directory fields for the current user (validated). */
 export async function updateStreamerDirectoryFields(
   userId: string,
-  patch: StreamerDirectoryPatch
+  patch: StreamerDirectoryPatch,
+  /** When true, avatar uploads are stored as URL only (no bytea columns). Used if migration 046 is not applied yet. */
+  forceLegacyAvatarStorage = false
 ): Promise<{ ok: true; user: UserRow } | { ok: false; error: string }> {
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -478,10 +480,12 @@ export async function updateStreamerDirectoryFields(
     if (raw === null || raw === "") {
       updates.push(`streamer_directory_avatar_url = $${idx++}`);
       values.push(null);
-      updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
-      values.push(null);
-      updates.push(`streamer_directory_avatar_mime = $${idx++}`);
-      values.push(null);
+      if (!forceLegacyAvatarStorage) {
+        updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
+        values.push(null);
+        updates.push(`streamer_directory_avatar_mime = $${idx++}`);
+        values.push(null);
+      }
     } else if (typeof raw === "string") {
       const normalized = normalizeHostedLogoUrlForStorage(raw.trim()) ?? raw.trim();
       const canonical = canonicalStreamerAvatarPath(userId);
@@ -491,10 +495,12 @@ export async function updateStreamerDirectoryFields(
       } else if (!normalized) {
         updates.push(`streamer_directory_avatar_url = $${idx++}`);
         values.push(null);
-        updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
-        values.push(null);
-        updates.push(`streamer_directory_avatar_mime = $${idx++}`);
-        values.push(null);
+        if (!forceLegacyAvatarStorage) {
+          updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
+          values.push(null);
+          updates.push(`streamer_directory_avatar_mime = $${idx++}`);
+          values.push(null);
+        }
       } else if (
         normalized.startsWith("http://") ||
         normalized.startsWith("https://") ||
@@ -511,10 +517,16 @@ export async function updateStreamerDirectoryFields(
         }
         updates.push(`streamer_directory_avatar_url = $${idx++}`);
         values.push(normalized);
-        updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
-        values.push(null);
-        updates.push(`streamer_directory_avatar_mime = $${idx++}`);
-        values.push(null);
+        if (!forceLegacyAvatarStorage) {
+          updates.push(`streamer_directory_avatar_bytes = $${idx++}`);
+          values.push(null);
+          updates.push(`streamer_directory_avatar_mime = $${idx++}`);
+          values.push(null);
+        }
+      } else if (forceLegacyAvatarStorage) {
+        /** Migration 046 missing: keep upload path on disk URL so img src works until migrate + re-save. */
+        updates.push(`streamer_directory_avatar_url = $${idx++}`);
+        values.push(normalized);
       } else {
         const ingested = await readHostedUploadForLogoIngest(normalized);
         if (!ingested.ok) {
@@ -586,10 +598,22 @@ export async function updateStreamerDirectoryFields(
 
   updates.push(`updated_at = now()`);
   values.push(userId);
-  const row = await queryOneUserRow(
-    `UPDATE users SET ${updates.join(", ")} WHERE id = $${idx} RETURNING ${USER_SELECT}`,
-    values
-  );
-  if (!row) return { ok: false, error: "User not found" };
-  return { ok: true, user: row };
+  try {
+    const row = await queryOneUserRow(
+      `UPDATE users SET ${updates.join(", ")} WHERE id = $${idx} RETURNING ${USER_SELECT}`,
+      values
+    );
+    if (!row) return { ok: false, error: "User not found" };
+    return { ok: true, user: row };
+  } catch (e) {
+    if (
+      forceLegacyAvatarStorage ||
+      !isPgUndefinedColumnError(e) ||
+      !(String((e as Error)?.message ?? "").includes("streamer_directory_avatar_bytes") ||
+        String((e as Error)?.message ?? "").includes("streamer_directory_avatar_mime"))
+    ) {
+      throw e;
+    }
+    return updateStreamerDirectoryFields(userId, patch, true);
+  }
 }

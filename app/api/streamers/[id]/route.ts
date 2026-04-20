@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getStreamerPublicProfileRow } from "@/lib/streamer-directory";
+import { logoUrlForImgSrc } from "@/lib/upload-files";
 
 /**
  * Public streamer profile. Shown if directory_visible, or always to the same logged-in user (preview).
@@ -28,7 +29,7 @@ export async function GET(
       id: row.id,
       display_name: row.display_name,
       stream_name: row.stream_name,
-      avatar_url: row.avatar_url,
+      avatar_url: logoUrlForImgSrc(row.avatar_url),
       bio: row.bio,
       directory_visible: row.directory_visible,
       application_approved: row.application_approved,

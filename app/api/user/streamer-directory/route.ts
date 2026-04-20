@@ -3,6 +3,7 @@ import { getSessionFromRequest, requireSession } from "@/lib/api-auth";
 import { hasApprovedRustmaxxStreamerApplication } from "@/lib/streamer-applications";
 import { coerceDirectorySocialsFromDb } from "@/lib/streamer-directory-socials";
 import { findUserById, updateStreamerDirectoryFields } from "@/lib/users";
+import { logoUrlForImgSrc } from "@/lib/upload-files";
 
 /** Update public directory visibility, avatar URL, and bio (own profile only). */
 export async function PATCH(request: NextRequest) {
@@ -79,7 +80,16 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  const result = await updateStreamerDirectoryFields(user.id, patch);
+  let result: Awaited<ReturnType<typeof updateStreamerDirectoryFields>>;
+  try {
+    result = await updateStreamerDirectoryFields(user.id, patch);
+  } catch (e) {
+    console.error("[streamer-directory PATCH]", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Save failed" },
+      { status: 500 }
+    );
+  }
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -87,7 +97,7 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     streamer_directory_visible: result.user.streamer_directory_visible,
-    streamer_directory_avatar_url: result.user.streamer_directory_avatar_url,
+    streamer_directory_avatar_url: logoUrlForImgSrc(result.user.streamer_directory_avatar_url ?? null),
     streamer_directory_bio: result.user.streamer_directory_bio,
     streamer_directory_socials: coerceDirectorySocialsFromDb(result.user.streamer_directory_socials),
     streamer_directory_show_servers: result.user.streamer_directory_show_servers === true,

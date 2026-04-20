@@ -68,5 +68,20 @@ export function normalizeHostedLogoUrlForStorage(raw: string | null | undefined)
 
 /** For `<img src>`: prefer relative path for our uploads so the browser hits the current origin. */
 export function logoUrlForImgSrc(raw: string | null | undefined): string | null {
-  return normalizeHostedLogoUrlForStorage(raw);
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  const normalized = normalizeHostedLogoUrlForStorage(trimmed);
+  if (
+    normalized &&
+    (normalized.startsWith("/") ||
+      normalized.startsWith("http://") ||
+      normalized.startsWith("https://"))
+  ) {
+    return normalized;
+  }
+  /** Legacy / bad rows: basename only → same-origin upload route */
+  if (isSafeUploadBasename(trimmed)) {
+    return `/api/uploads/${trimmed}`;
+  }
+  return normalized || null;
 }
