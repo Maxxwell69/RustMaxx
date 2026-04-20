@@ -17,18 +17,18 @@ export function MarketingPartnersBand() {
         >
           Works with
         </h2>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-8 sm:gap-10">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-10 sm:gap-14 md:gap-16">
           {WORKS_WITH_LOGOS.map((logo) => (
             <div
               key={logo.src}
-              className="relative h-36 w-36 shrink-0 overflow-hidden rounded-xl bg-white p-4 shadow-md ring-1 ring-zinc-900/15 sm:h-40 sm:w-40"
+              className="relative h-72 w-72 max-h-[min(18rem,88vw)] max-w-[min(18rem,88vw)] shrink-0 sm:h-80 sm:w-80 sm:max-h-none sm:max-w-none"
             >
               <Image
                 src={logo.src}
                 alt={logo.alt}
                 fill
-                className="object-contain object-center p-2"
-                sizes="160px"
+                className="object-contain object-center"
+                sizes="(max-width: 640px) 88vw, 320px"
               />
             </div>
           ))}
