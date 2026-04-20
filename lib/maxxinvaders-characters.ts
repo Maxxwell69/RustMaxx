@@ -58,7 +58,8 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     slug: "medic",
     displayName: "🩺 Medic",
     tier: "main",
-    imageSrc: "/maxxinvaders/medic.png",
+    /** Bump `?v=` when replacing the PNG so CDN / Next Image invalidate cached bytes. */
+    imageSrc: "/maxxinvaders/medic.png?v=20260420",
     chatCommand: "!medic",
     loadout: ["Scrubs / surgeon suit", "Revolver", "Syringes & large medkits"],
     role:
