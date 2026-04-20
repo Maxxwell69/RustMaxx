@@ -67,9 +67,9 @@ export function Logo({
 
   return (
     <img
-      src="/rustmaxx-logo.png"
+      src="/rustmaxx-logo.png?v=20260420"
       alt="RustMaxx"
-      className={className}
+      className={[className, "object-contain"].filter(Boolean).join(" ")}
       width={width}
       height={height}
       onError={() => setFailed(true)}
