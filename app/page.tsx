@@ -1,9 +1,9 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { TerminalCard } from "@/components/marketing/TerminalCard";
 import { LiveConsole } from "@/components/marketing/LiveConsole";
-import { DashboardFrame } from "@/components/marketing/placeholders/DashboardFrame";
 
 export const metadata: Metadata = {
   title: "RustMaxx – For server admins, streamers & fans",
@@ -15,6 +15,47 @@ export const metadata: Metadata = {
       "Invite streamers, invite viewers, and grow — RCON, TikFinity hooks, and superfan tools in one command center.",
   },
 };
+
+const HOME_HERO_BANNERS: { src: string; alt: string }[] = [
+  {
+    src: "/marketing/hero/server-admins.png",
+    alt:
+      "RustMaxx for server owners — level up your Rust server: boost player count, customize events, earn more",
+  },
+  {
+    src: "/marketing/hero/streamers.png",
+    alt:
+      "RustMaxx for streamers — level up your stream with interactive gifts, engagement, and income",
+  },
+  {
+    src: "/marketing/hero/fans.png",
+    alt: "RustMaxx for fans — send gifts, control the game, watch mayhem",
+  },
+];
+
+function HeroBannerStrip() {
+  return (
+    <div className="mt-12 grid gap-4 sm:gap-6 md:grid-cols-3">
+      {HOME_HERO_BANNERS.map((banner, i) => (
+        <div
+          key={banner.src}
+          className="overflow-hidden rounded-xl border border-rust-border bg-zinc-950 shadow-lg shadow-black/30 ring-1 ring-white/5"
+        >
+          <div className="relative aspect-[2/1] w-full">
+            <Image
+              src={banner.src}
+              alt={banner.alt}
+              fill
+              className="object-cover object-center"
+              sizes="(max-width: 768px) 100vw, 33vw"
+              priority={i === 0}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function HeroSection() {
   return (
@@ -30,12 +71,30 @@ function HeroSection() {
         <div className="mt-10 flex justify-center">
           <AudienceTabs />
         </div>
+        <HeroBannerStrip />
         <div className="mt-12 grid gap-8 lg:grid-cols-2">
           <TerminalCard title="rcon — live">
             <LiveConsole />
           </TerminalCard>
-          <div className="overflow-hidden rounded-xl border border-rust-border bg-rust-surface/90 shadow-lg shadow-black/20">
-            <HeroScreenshotPlaceholder />
+          <div className="flex flex-col justify-center gap-4 rounded-xl border border-rust-border bg-rust-surface/90 p-6 shadow-lg shadow-black/20">
+            <p className="text-sm font-medium text-zinc-300">Connect your Rust server and go live</p>
+            <p className="text-sm text-zinc-500">
+              Sign in for the full dashboard — RCON, streamer invites, TikFinity hooks, and viewer tools in one place.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <Link
+                href="/register"
+                className="rounded-xl bg-rust-cyan px-5 py-2.5 text-sm font-semibold text-rust-panel shadow-rust-glow hover:opacity-90"
+              >
+                Get started
+              </Link>
+              <Link
+                href="/features"
+                className="rounded-xl border border-rust-border px-5 py-2.5 text-sm font-medium text-rust-cyan hover:border-rust-cyan/50"
+              >
+                Explore features
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -67,25 +126,6 @@ function AudienceTabs() {
         <span className="block font-medium text-zinc-200">Fans</span>
         <span className="block text-xs text-zinc-500">Follow streamers · superfan access</span>
       </Link>
-    </div>
-  );
-}
-
-function HeroScreenshotPlaceholder() {
-  return (
-    <div
-      className="relative min-h-[280px] sm:min-h-[320px] rounded-lg border border-rust-border overflow-hidden bg-rust-surface"
-      aria-label="Dashboard preview placeholder"
-    >
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4">
-        <DashboardFrame className="h-auto w-full max-h-[200px] sm:max-h-[240px] flex-shrink-0" />
-        <p className="text-center text-sm text-zinc-500 font-medium">
-          Dashboard preview — sign in to use the full command center
-        </p>
-      </div>
-      <div className="absolute bottom-2 right-2 rounded bg-rust-panel/90 px-2 py-1 font-mono text-xs text-zinc-500">
-        Preview
-      </div>
     </div>
   );
 }
