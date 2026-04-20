@@ -64,7 +64,7 @@ export const MAXXINVADER_MAIN_CHARACTERS: MaxxInvaderCharacter[] = [
     loadout: ["Scrubs / surgeon suit", "Revolver", "Syringes & large medkits"],
     role:
       "Keeps allies alive… and enemies suffering—heals fast, poisons faster.",
-    roleTribute: "Yomamma Pick tribute.",
+    roleTribute: "Yomomma Picks tribute.",
     roleTributeHref: "https://www.tiktok.com/@yomamapicks",
   },
   {
