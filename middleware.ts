@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   "/api/auth/me",
   "/",
   "/features",
+  "/games",
   "/pricing",
   "/api/billing/tiers",
   "/docs",
