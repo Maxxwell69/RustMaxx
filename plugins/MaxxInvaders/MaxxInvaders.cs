@@ -39,9 +39,10 @@ namespace Oxide.Plugins
         private const string UiName = "MaxxInvaders.AdminUI";
         private const string HudOverlayUiName = "MaxxInvaders.HudOverlay";
         private const string LootTaskOverlayUiName = "MaxxInvaders.LootTaskOverlay";
-        /// <summary>Streamer INVADERS readout: right-side column (not gift toasts — those are RustChaos).</summary>
-        private const string HudStreamerAnchorMin = "0.72 0.26";
-        private const string HudStreamerAnchorMax = "0.992 0.74";
+        /// <summary>Streamer MaxInvaders readout: lower-right overlay (not gift toasts — those are RustChaos).</summary>
+        /// <summary>Streamer MaxInvaders list panel: lower-right, above weapon hotbar (Overlay normalized coords).</summary>
+        private const string HudStreamerAnchorMin = "0.66 0.06";
+        private const string HudStreamerAnchorMax = "0.996 0.50";
         private const int GuiSchemaCurrent = 2;
         private const float InvaderOverlayDrawDuration = 0.45f;
 
@@ -3075,14 +3076,14 @@ namespace Oxide.Plugins
             if (_hudOverlayHiddenByUser.Contains(player.userID))
             {
                 _hudOverlayHiddenByUser.Remove(player.userID);
-                player.ChatMessage("[MaxxInvaders] INVADERS panel ON.");
+                player.ChatMessage("[MaxxInvaders] MaxInvaders HUD ON.");
             }
             else
             {
                 _hudOverlayHiddenByUser.Add(player.userID);
                 _lastHudContentByUser.Remove(player.userID);
                 CuiHelper.DestroyUi(player, HudOverlayUiName);
-                player.ChatMessage("[MaxxInvaders] INVADERS panel OFF. /maxxinvaders hud  or  bind f9 maxxinvaders.hudtoggle");
+                player.ChatMessage("[MaxxInvaders] MaxInvaders HUD OFF. /maxxinvaders hud  or  bind f9 maxxinvaders.hudtoggle");
             }
         }
 
@@ -4140,7 +4141,7 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text =
-                            $"<size=12><color=#ccddee><b>INVADERS</b></color></size>\n<size=9><color=#8899aa>level · squad · task · name — HP% — distance</color></size>\n<size=8><color=#667788>F9: bind f9 maxxinvaders.hudtoggle</color></size>\n\n{body}",
+                            $"<size=12><color=#ccddee><b>MaxInvaders</b></color></size>\n<size=9><color=#8899aa>level · squad · task · name — HP% — distance</color></size>\n<size=8><color=#667788>F9: bind f9 maxxinvaders.hudtoggle</color></size>\n\n{body}",
                         FontSize = 11,
                         Align = TextAnchor.UpperLeft,
                     },
