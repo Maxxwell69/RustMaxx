@@ -11,17 +11,52 @@ export type StreamerMaxxPreset = {
   params: Record<string, string>;
 };
 
-/** Build `?token=…&…` with stable ordering (token first). */
+/** True if we can build TikFinity URLs (opaque path, or legacy path with token). */
+export function canBuildStreamerHookUrl(
+  webhookBase: string | null | undefined,
+  token: string | null | undefined
+): boolean {
+  const b = (webhookBase ?? "").trim();
+  if (!b) return false;
+  if (webhookBaseUsesOpaqueSecret(b)) return true;
+  return Boolean((token ?? "").trim());
+}
+
+/**
+ * True when the webhook base URL uses the opaque 64-hex path segment (secret in URL; no ?token=).
+ */
+export function webhookBaseUsesOpaqueSecret(webhookBase: string): boolean {
+  const s = webhookBase.trim();
+  if (!s) return false;
+  try {
+    const u = new URL(s, "https://example.com");
+    const last = u.pathname.split("/").filter(Boolean).pop() ?? "";
+    return /^[a-f0-9]{64}$/i.test(last);
+  } catch {
+    const last = s.split("/").filter(Boolean).pop() ?? "";
+    return /^[a-f0-9]{64}$/i.test(last);
+  }
+}
+
+/**
+ * Build query string for TikFinity. Opaque URLs skip `token=`; legacy UUID paths require token.
+ */
 export function buildStreamerHookQueryUrl(
   webhookBase: string,
-  token: string,
+  token: string | null,
   params: Record<string, string>
 ): string {
-  const parts: string[] = [`token=${encodeURIComponent(token)}`];
+  const parts: string[] = [];
+  if (!webhookBaseUsesOpaqueSecret(webhookBase)) {
+    if (!token) {
+      throw new Error("token required for legacy webhook URL");
+    }
+    parts.push(`token=${encodeURIComponent(token)}`);
+  }
   for (const [k, v] of Object.entries(params)) {
     parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
   }
-  return `${webhookBase}?${parts.join("&")}`;
+  return parts.length ? `${webhookBase}?${parts.join("&")}` : webhookBase;
 }
 
 const STEAM64_RE = /^\d{17}$/;

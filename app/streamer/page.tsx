@@ -12,8 +12,10 @@ import {
 } from "@/lib/tikfinity";
 import {
   buildStreamerHookQueryUrl,
+  canBuildStreamerHookUrl,
   mergePresetParamsWithProfileAnchor,
   STREAMER_MAXXINVADERS_URL_PRESETS,
+  webhookBaseUsesOpaqueSecret,
 } from "@/lib/streamer-maxxinvaders-urls";
 
 const LEGACY_WH_STORAGE = "rustmaxx_streamer_wh";
@@ -64,6 +66,24 @@ function persistSecretForPublicId(publicId: string | undefined, secret: string) 
   }
 }
 
+function legacyTokenForHook(
+  h: { publicId: string; webhookUpdatedAt: string },
+  secrets: Record<string, string>
+): string | null {
+  return secrets[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
+}
+
+/** Full pasteable TikFinity base URL (opaque path, or legacy UUID + ?token=). */
+function hookPasteableUrl(
+  h: { webhookUrl: string | null; publicId: string; webhookUpdatedAt: string },
+  secrets: Record<string, string>
+): string | null {
+  if (!h.webhookUrl) return null;
+  if (webhookBaseUsesOpaqueSecret(h.webhookUrl)) return h.webhookUrl;
+  const t = legacyTokenForHook(h, secrets);
+  return t ? `${h.webhookUrl}?token=${encodeURIComponent(t)}` : null;
+}
+
 function readSecretForPublicId(
   publicId: string | undefined,
   webhookUpdatedAt?: string | null
@@ -87,8 +107,7 @@ function readSecretForPublicId(
 }
 
 /**
- * Full URL for TikFinity: token + in-game action key as `action=` (empty-body safe; matches streamer rule’s server_action).
- * Re-copy after rotating the token (Copy all or each Copy webhook).
+ * Full URL for TikFinity: opaque path needs only `action=`; legacy URLs need `?token=&action=`.
  */
 function fullRuleWebhookUrl(
   webhookBase: string | null,
@@ -97,15 +116,20 @@ function fullRuleWebhookUrl(
   spawnCount?: number
 ): string | null {
   const name = serverAction.trim();
-  if (!webhookBase || !secret || !name) return null;
-  const base = `${webhookBase}?token=${encodeURIComponent(secret)}&action=${encodeURIComponent(name)}`;
+  if (!webhookBase || !name) return null;
+  if (!canBuildStreamerHookUrl(webhookBase, secret)) return null;
   const c =
     typeof spawnCount === "number" &&
     Number.isFinite(spawnCount) &&
     spawnCount > 1
       ? Math.min(SOLO_SPAWN_REPEAT_MAX, Math.trunc(spawnCount))
       : 0;
-  return c > 1 ? `${base}&count=${c}` : base;
+  const params: Record<string, string> = { action: name };
+  if (c > 1) params.count = String(c);
+  if (webhookBaseUsesOpaqueSecret(webhookBase)) {
+    return buildStreamerHookQueryUrl(webhookBase, null, params);
+  }
+  return buildStreamerHookQueryUrl(webhookBase, secret!, params);
 }
 
 type HookSummary = {
@@ -401,15 +425,10 @@ export default function StreamerDashboardPage() {
       setErr(data.error ?? "Rotate failed");
       return;
     }
-    if (data.webhookSecret) {
-      const h = state?.hooks.find((x) => x.id === hookId);
-      const publicId = h?.publicId;
-      if (publicId) {
-        persistSecretForPublicId(publicId, data.webhookSecret);
-        setSecretByPublicId((prev) => ({ ...prev, [publicId]: data.webhookSecret }));
-      }
+    if (data.webhookUrl) {
+      await load();
       setRotateHint(
-        "New secret is active. Every rule URL and every MaxxInvaders URL in the section below now uses this token — use Copy all rule webhooks, Copy all MaxxInvaders URLs (per server or all servers), or each Copy button, and paste into TikFinity to replace old URLs. RustMaxx cannot change TikFinity for you."
+        "New webhook URL is active. Copy it from the green box and replace the URL in each TikFinity trigger (RustMaxx cannot edit TikFinity for you)."
       );
       window.setTimeout(() => setRotateHint(null), 18_000);
     }
@@ -448,10 +467,9 @@ export default function StreamerDashboardPage() {
     setRotateHint(null);
     const h = state?.hooks.find((x) => x.id === hookId);
     if (!h?.webhookUrl) return;
-    const token =
-      secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
-    if (!token) {
-      setErr("Reveal the webhook URL or New secret for this server first.");
+    const token = legacyTokenForHook(h, secretByPublicId);
+    if (!canBuildStreamerHookUrl(h.webhookUrl, token)) {
+      setErr("Reveal the webhook URL or Regenerate URL for this server first.");
       return;
     }
     const lines: string[] = [];
@@ -459,7 +477,11 @@ export default function StreamerDashboardPage() {
     lines.push("");
     for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS) {
       const params = mergePresetParamsWithProfileAnchor(preset.params, state?.user.steamId);
-      const url = buildStreamerHookQueryUrl(h.webhookUrl, token, params);
+      const url = buildStreamerHookQueryUrl(
+        h.webhookUrl,
+        webhookBaseUsesOpaqueSecret(h.webhookUrl) ? null : token,
+        params
+      );
       lines.push(preset.label);
       if (preset.hint) lines.push(`(${preset.hint})`);
       lines.push(url);
@@ -480,15 +502,18 @@ export default function StreamerDashboardPage() {
     const hooksList = state?.hooks ?? [];
     const blocks: string[] = [];
     for (const h of hooksList) {
-      const token =
-        secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
-      if (!h.webhookUrl || !token) continue;
+      const token = legacyTokenForHook(h, secretByPublicId);
+      if (!canBuildStreamerHookUrl(h.webhookUrl, token)) continue;
       const lines: string[] = [];
       lines.push(`=== ${h.serverName ?? h.serverId} — MaxxInvaders / roaming bots ===`);
       lines.push("");
       for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS) {
         const params = mergePresetParamsWithProfileAnchor(preset.params, state?.user.steamId);
-        const url = buildStreamerHookQueryUrl(h.webhookUrl, token, params);
+        const url = buildStreamerHookQueryUrl(
+          h.webhookUrl!,
+          webhookBaseUsesOpaqueSecret(h.webhookUrl!) ? null : token,
+          params
+        );
         lines.push(preset.label);
         lines.push(url);
         lines.push("");
@@ -496,7 +521,7 @@ export default function StreamerDashboardPage() {
       blocks.push(lines.join("\n").trimEnd());
     }
     if (blocks.length === 0) {
-      setErr("Reveal webhook tokens under Game servers first (each server needs Copy webhook URL or New secret).");
+      setErr("Reveal webhook URLs under Game servers first (each server needs Copy webhook URL or Regenerate URL).");
       return;
     }
     try {
@@ -525,11 +550,7 @@ export default function StreamerDashboardPage() {
     const lines: string[] = [];
     for (const r of state?.rules ?? []) {
       const wh = state?.hooks.find((x) => x.id === r.hookId);
-      const sec =
-        wh?.publicId != null
-          ? secretByPublicId[wh.publicId] ??
-            readSecretForPublicId(wh.publicId, wh.webhookUpdatedAt)
-          : null;
+      const sec = wh ? legacyTokenForHook(wh, secretByPublicId) : null;
       const u = fullRuleWebhookUrl(
         wh?.webhookUrl ?? null,
         sec ?? null,
@@ -541,7 +562,7 @@ export default function StreamerDashboardPage() {
       }
     }
     if (lines.length === 0) {
-      setErr("Add rules and reveal the webhook token under Game servers first.");
+      setErr("Add rules and ensure each server’s webhook URL is available under Game servers first.");
       return;
     }
     try {
@@ -700,24 +721,19 @@ export default function StreamerDashboardPage() {
   const { user, hooks, rules, allowedStreamerItemsByServer = [] } = state;
 
   const firstHook = hooks[0];
-  const firstPublicId = firstHook?.publicId;
-  const firstSecret =
-    (firstPublicId &&
-      (secretByPublicId[firstPublicId] ??
-        readSecretForPublicId(firstPublicId, firstHook?.webhookUpdatedAt))) ||
-    null;
-  const firstUrl =
-    firstHook?.webhookUrl && firstSecret
-      ? `${firstHook.webhookUrl}?token=${encodeURIComponent(firstSecret)}`
-      : null;
   /** TikFinity often sends an empty POST body; force the final in-game action key in the URL. */
   const exampleRuleForUrl =
     rules.find((r) => r.server_action.toLowerCase().trim() === "wolf")?.server_action ??
     rules[0]?.server_action ??
     "wolf";
+  const firstToken = firstHook ? legacyTokenForHook(firstHook, secretByPublicId) : null;
   const fullTikfinityUrlWithRuleAction =
-    firstUrl && exampleRuleForUrl
-      ? `${firstUrl}&action=${encodeURIComponent(exampleRuleForUrl)}`
+    firstHook?.webhookUrl && canBuildStreamerHookUrl(firstHook.webhookUrl, firstToken)
+      ? buildStreamerHookQueryUrl(
+          firstHook.webhookUrl,
+          webhookBaseUsesOpaqueSecret(firstHook.webhookUrl) ? null : firstToken,
+          { action: exampleRuleForUrl }
+        )
       : null;
 
   const serverIdsWithHooks = new Set(hooks.map((h) => h.serverId));
@@ -725,9 +741,8 @@ export default function StreamerDashboardPage() {
   const serverForAdd = servers.find((s) => s.id === serverId);
   const canSubmitWebhookAdd = Boolean(serverId);
   const maxxReadyHooks = hooks.filter((h) => {
-    const token =
-      secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
-    return Boolean(h.webhookUrl && token);
+    const token = legacyTokenForHook(h, secretByPublicId);
+    return canBuildStreamerHookUrl(h.webhookUrl, token);
   });
 
   return (
@@ -860,12 +875,10 @@ export default function StreamerDashboardPage() {
           to request access if the owner requires approval.
         </p>
         <p className="mb-4 rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-400">
-          <strong className="text-zinc-200">TikFinity needs the full URL including </strong>
-          <code className="text-emerald-400">?token=…</code>
-          {" "}— use <strong className="text-zinc-200">Copy webhook URL</strong> (green box) after you{" "}
-          <strong className="text-zinc-200">Reveal URL</strong> on a new device or browser. The path alone (
-          <code className="text-zinc-600">/api/tikfinity/hooks/…</code>) returns{" "}
-          <code className="text-amber-400">401 Invalid token</code>.{" "}
+          <strong className="text-zinc-200">Copy the full webhook URL</strong> from the green box into TikFinity — it includes
+          a long secret in the path (no <code className="text-emerald-400">?token=</code> needed).{" "}
+          <strong className="text-zinc-200">Regenerate URL</strong> gives you a new link if TikFinity or a leak exposed the old
+          one; update every TikFinity trigger after regenerating.{" "}
           <strong className="text-zinc-200">502</strong> / <strong className="text-zinc-200">spawn_position</strong> come from
           the Rust server (RCON / MaxxInvaders), not from a wrong RustMaxx link.
         </p>
@@ -890,13 +903,7 @@ export default function StreamerDashboardPage() {
         {hooks.length > 0 ? (
           <ul className="mb-6 space-y-4">
             {hooks.map((h) => {
-              const token =
-                secretByPublicId[h.publicId] ??
-                readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
-              const fullUrl =
-                h.webhookUrl && token
-                  ? `${h.webhookUrl}?token=${encodeURIComponent(token)}`
-                  : null;
+              const fullUrl = hookPasteableUrl(h, secretByPublicId);
               return (
                 <li
                   key={h.id}
@@ -935,12 +942,15 @@ export default function StreamerDashboardPage() {
                           onClick={() => void rotateSecretForHook(h.id)}
                           className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700"
                         >
-                          New secret
+                          Regenerate URL
                         </button>
                       </div>
-                      {token ? (
+                      {h.webhookUrl &&
+                      !webhookBaseUsesOpaqueSecret(h.webhookUrl) &&
+                      fullUrl ? (
                         <p className="mt-2 text-[10px] text-zinc-600">
-                          Optional separate token field: <code className="text-zinc-400">{token}</code>
+                          Legacy <code className="text-zinc-400">?token=</code> in URL — new webhooks use one line with no
+                          query string.
                         </p>
                       ) : null}
                     </>
@@ -966,7 +976,7 @@ export default function StreamerDashboardPage() {
           <p className="mb-4 text-sm text-zinc-500">No webhooks yet — add a server below.</p>
         )}
 
-        {hooks.length > 0 && firstUrl ? (
+        {hooks.length > 0 && fullTikfinityUrlWithRuleAction ? (
           <div className="mb-6 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-100/95">
             <p className="mb-2 font-medium text-amber-50">
               Seeing{" "}
@@ -1101,9 +1111,8 @@ export default function StreamerDashboardPage() {
             </div>
             <ul className="space-y-5">
               {hooks.map((h) => {
-                const token =
-                  secretByPublicId[h.publicId] ?? readSecretForPublicId(h.publicId, h.webhookUpdatedAt);
-                const ready = Boolean(h.webhookUrl && token);
+                const token = legacyTokenForHook(h, secretByPublicId);
+                const ready = canBuildStreamerHookUrl(h.webhookUrl, token);
                 return (
                   <li
                     key={h.id}
@@ -1122,7 +1131,8 @@ export default function StreamerDashboardPage() {
                     </div>
                     {!ready ? (
                       <p className="text-xs text-amber-200/90">
-                        Reveal this server’s webhook URL or use <strong className="text-amber-100">New secret</strong> above
+                        Reveal this server’s legacy <code className="text-amber-200">?token=</code> URL or use{" "}
+                        <strong className="text-amber-100">Regenerate URL</strong> above
                         so this page can build the preset URLs.
                       </p>
                     ) : (
@@ -1138,10 +1148,9 @@ export default function StreamerDashboardPage() {
                           <tbody className="text-zinc-300">
                             {STREAMER_MAXXINVADERS_URL_PRESETS.map((preset) => {
                               const base = h.webhookUrl as string;
-                              const tok = token as string;
                               const fullUrl = buildStreamerHookQueryUrl(
                                 base,
-                                tok,
+                                webhookBaseUsesOpaqueSecret(base) ? null : token,
                                 mergePresetParamsWithProfileAnchor(preset.params, user.steamId)
                               );
                               const rowKey = `${h.id}:${preset.id}`;
@@ -1227,12 +1236,11 @@ export default function StreamerDashboardPage() {
           then add rules or quick spawns. <strong className="font-medium text-zinc-300">TikFinity event name</strong> is your
           alias/label; <strong className="font-medium text-zinc-300">Server action</strong> is the in-game action key.{" "}
           <strong className="font-medium text-zinc-300">Copy webhook</strong> builds{" "}
-          <code className="rounded bg-zinc-800 px-1">?token=…&amp;action=server_action</code> (e.g.{" "}
-          <code className="rounded bg-zinc-800 px-1">statusflippers</code>) — most reliable for empty-body TikFinity posts. For
-          solo animal/scientist spawns, use <code className="rounded bg-zinc-800 px-1">&amp;count=3</code> (or set count in the rule
-          below) to spawn more than one per trigger.
-          After <strong className="text-zinc-300">New secret</strong>, use <strong className="text-zinc-300">Copy all rule webhooks</strong>,{" "}
-          <strong className="text-zinc-300">Copy all MaxxInvaders URLs</strong> (section above), or each Copy so TikFinity gets the new token.
+          <code className="rounded bg-zinc-800 px-1">&amp;action=server_action</code> on your webhook URL (legacy accounts may still
+          show <code className="rounded bg-zinc-800 px-1">?token=</code>). For solo animal/scientist spawns, use{" "}
+          <code className="rounded bg-zinc-800 px-1">&amp;count=3</code> (or set count in the rule below). After{" "}
+          <strong className="text-zinc-300">Regenerate URL</strong>, use <strong className="text-zinc-300">Copy all rule webhooks</strong>,{" "}
+          <strong className="text-zinc-300">Copy all MaxxInvaders URLs</strong>, or each Copy so TikFinity gets the new link.
         </p>
         {rotateHint ? (
           <p className="mb-4 rounded-lg border border-emerald-900/50 bg-emerald-950/30 p-3 text-xs text-emerald-100/95">
@@ -1246,11 +1254,10 @@ export default function StreamerDashboardPage() {
               onClick={() => void copyAllRuleWebhookUrls()}
               className="rounded-lg border border-emerald-800/80 bg-emerald-950/40 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-900/40"
             >
-              {allRulesCopied ? "Copied all" : "Copy all rule webhooks (current token)"}
+              {allRulesCopied ? "Copied all" : "Copy all rule webhooks"}
             </button>
             <span className="text-[11px] text-zinc-600">
-              One block to paste into notes / TikFinity — updates whenever the token in your browser matches{" "}
-              <strong className="text-zinc-500">New secret</strong>.
+              One block to paste into notes / TikFinity — copy again after <strong className="text-zinc-500">Regenerate URL</strong>.
             </span>
           </div>
         ) : null}
@@ -1406,11 +1413,7 @@ export default function StreamerDashboardPage() {
         <ul className="space-y-2">
           {rules.map((r) => {
             const wh = hooks.find((x) => x.id === r.hookId);
-            const sec =
-              wh?.publicId != null
-                ? secretByPublicId[wh.publicId] ??
-                  readSecretForPublicId(wh.publicId, wh.webhookUpdatedAt)
-                : null;
+            const sec = wh ? legacyTokenForHook(wh, secretByPublicId) : null;
             const ruleUrl = fullRuleWebhookUrl(
               wh?.webhookUrl ?? null,
               sec ?? null,
@@ -1445,8 +1448,11 @@ export default function StreamerDashboardPage() {
                       {copiedRuleId === r.id ? "Copied" : "Copy webhook"}
                     </button>
                   ) : (
-                    <span className="text-[11px] text-zinc-600" title="Save webhook or open Game server above to reveal token">
-                      Webhook needs token
+                    <span
+                      className="text-[11px] text-zinc-600"
+                      title="Open Game servers above — copy URL or Regenerate URL (legacy: reveal ?token=)"
+                    >
+                      Webhook URL unavailable
                     </span>
                   )}
                   <button

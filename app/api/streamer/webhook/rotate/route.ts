@@ -6,6 +6,7 @@ import {
   listStreamerWebhooksForUser,
   rotateStreamerWebhookSecret,
 } from "@/lib/streamer-webhooks";
+import { getPublicSiteOrigin } from "@/lib/public-site-origin";
 
 export async function POST(request: NextRequest) {
   const session = getSession(request.headers.get("cookie"));
@@ -41,5 +42,13 @@ export async function POST(request: NextRequest) {
   if (!out) {
     return NextResponse.json({ error: "Webhook not found" }, { status: 404 });
   }
-  return NextResponse.json({ webhookSecret: out.secretPlain, hookId: targetId });
+  const origin = getPublicSiteOrigin(request);
+  const path = `/api/tikfinity/hooks/${out.hookKey}`;
+  const webhookUrl = origin ? `${origin}${path}` : path;
+  return NextResponse.json({
+    webhookSecret: out.secretPlain,
+    hookKey: out.hookKey,
+    webhookUrl,
+    hookId: targetId,
+  });
 }

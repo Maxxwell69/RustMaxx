@@ -77,13 +77,10 @@ export async function POST(request: NextRequest) {
     throw e;
   }
   const origin = getPublicSiteOrigin(request);
-  const webhookPath = `/api/tikfinity/hooks/${row.public_id}`;
+  const webhookPath = `/api/tikfinity/hooks/${row.hook_key}`;
   const webhookUrl = origin ? `${origin}${webhookPath}` : webhookPath;
-  /** Paste this into TikFinity as-is when the secret is shown (avoids 401 Invalid token). */
-  const tikFinityUrlWithToken =
-    secretPlain && webhookUrl
-      ? `${webhookUrl}?token=${encodeURIComponent(secretPlain)}`
-      : undefined;
+  /** Same as webhookUrl — path contains the secret; no ?token= required. */
+  const tikFinityUrlWithToken = webhookUrl;
 
   return NextResponse.json({
     hook: {
@@ -91,10 +88,9 @@ export async function POST(request: NextRequest) {
       publicId: row.public_id,
       serverId: row.server_id,
       webhookUrl,
-      /** Full URL including ?token= — only when a new secret was generated. */
       tikFinityUrlWithToken,
     },
-    /** Only when a new server webhook was created — use ?token= in TikFinity (or tikFinityUrlWithToken). */
+    /** @deprecated Legacy UUID+token flows; new webhooks use hook_key in path only. */
     webhookSecret: secretPlain,
     created: Boolean(secretPlain),
   });

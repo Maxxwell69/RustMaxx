@@ -5,6 +5,7 @@ import {
   withCors,
 } from "@/lib/tikfinity-webhook-run";
 import {
+  getStreamerWebhookByHookKey,
   getStreamerWebhookByPublicId,
   verifyWebhookSecret,
 } from "@/lib/streamer-webhooks";
@@ -13,6 +14,11 @@ import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
 import { getStreamerRuleByEventName } from "@/lib/streamer-tikfinity-rules";
 import { getStreamerPolicyForServer } from "@/lib/streamer-action-policy";
 import { isStreamerAllowedForServerHooks } from "@/lib/streamer-server-allowlist";
+
+const UUID_SEGMENT =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Opaque path secret (32 bytes hex) — no ?token= required. */
+const OPAQUE_HOOK_KEY = /^[a-f0-9]{64}$/;
 
 function getHookToken(request: NextRequest): string | null {
   const q = request.nextUrl.searchParams.get("token")?.trim();
@@ -28,14 +34,14 @@ export async function OPTIONS() {
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ publicId: string }> }
+  context: { params: Promise<{ segment: string }> }
 ) {
   return handleHook(request, context, {});
 }
 
 export async function POST(
   request: NextRequest,
-  context: { params: Promise<{ publicId: string }> }
+  context: { params: Promise<{ segment: string }> }
 ) {
   let body: unknown;
   try {
@@ -50,11 +56,19 @@ export async function POST(
 
 async function handleHook(
   request: NextRequest,
-  context: { params: Promise<{ publicId: string }> },
+  context: { params: Promise<{ segment: string }> },
   body: unknown
 ) {
-  const { publicId } = await context.params;
-  const hook = await getStreamerWebhookByPublicId(publicId);
+  const { segment: raw } = await context.params;
+  const segment = raw.trim();
+
+  let hook =
+    OPAQUE_HOOK_KEY.test(segment)
+      ? await getStreamerWebhookByHookKey(segment)
+      : UUID_SEGMENT.test(segment)
+        ? await getStreamerWebhookByPublicId(segment)
+        : null;
+
   if (!hook) {
     return withCors(
       NextResponse.json(
@@ -64,19 +78,23 @@ async function handleHook(
     );
   }
 
-  const token = getHookToken(request);
-  if (!token || !(await verifyWebhookSecret(token, hook.secret_hash))) {
-    return withCors(
-      NextResponse.json(
-        {
-          ok: false,
-          error: "Invalid or missing webhook token",
-          debug:
-            "Append ?token=YOUR_SECRET to the URL, or send Authorization: Bearer YOUR_SECRET, or header X-Rustmaxx-Webhook-Token.",
-        },
-        { status: 401 }
-      )
-    );
+  const usesOpaqueKey = OPAQUE_HOOK_KEY.test(segment);
+
+  if (!usesOpaqueKey) {
+    const token = getHookToken(request);
+    if (!token || !(await verifyWebhookSecret(token, hook.secret_hash))) {
+      return withCors(
+        NextResponse.json(
+          {
+            ok: false,
+            error: "Invalid or missing webhook token",
+            debug:
+              "Use your one-line webhook URL from Streamer dashboard (includes secret in the path), or append ?token=YOUR_SECRET, or send Authorization: Bearer YOUR_SECRET, or header X-Rustmaxx-Webhook-Token.",
+          },
+          { status: 401 }
+        )
+      );
+    }
   }
 
   const user = await findUserById(hook.user_id);

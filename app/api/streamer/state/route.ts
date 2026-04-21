@@ -71,8 +71,8 @@ export async function GET(request: NextRequest) {
     const serverName = sn[0]?.name ?? null;
     const webhookUrl =
       origin
-        ? `${origin}/api/tikfinity/hooks/${h.public_id}`
-        : `/api/tikfinity/hooks/${h.public_id}`;
+        ? `${origin}/api/tikfinity/hooks/${h.hook_key}`
+        : `/api/tikfinity/hooks/${h.hook_key}`;
     hooks.push({
       id: h.id,
       publicId: h.public_id,

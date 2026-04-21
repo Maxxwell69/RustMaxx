@@ -6,11 +6,17 @@ import { billingSkippedInEnv, getStreamerWebhookLimit } from "@/lib/billing-tier
 
 const SALT_ROUNDS = 10;
 
+/** 32 bytes as hex — unique URL segment; authenticates without ?token=. */
+export function generateHookKey(): string {
+  return randomBytes(32).toString("hex");
+}
+
 export type StreamerWebhookRow = {
   id: string;
   user_id: string;
   server_id: string;
   public_id: string;
+  hook_key: string;
   secret_hash: string;
   created_at: Date;
   updated_at: Date;
@@ -41,8 +47,21 @@ export async function getStreamerWebhookByPublicId(
     return null;
   }
   const { rows } = await query<StreamerWebhookRow>(
-    "SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at FROM streamer_webhooks WHERE public_id = $1 LIMIT 1",
+    "SELECT id, user_id, server_id, public_id::text, hook_key, secret_hash, created_at, updated_at FROM streamer_webhooks WHERE public_id = $1 LIMIT 1",
     [trimmed]
+  );
+  return rows[0] ?? null;
+}
+
+/** Lookup by opaque path segment (64-char lowercase hex). */
+export async function getStreamerWebhookByHookKey(
+  hookKey: string
+): Promise<StreamerWebhookRow | null> {
+  const k = hookKey.trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(k)) return null;
+  const { rows } = await query<StreamerWebhookRow>(
+    "SELECT id, user_id, server_id, public_id::text, hook_key, secret_hash, created_at, updated_at FROM streamer_webhooks WHERE hook_key = $1 LIMIT 1",
+    [k]
   );
   return rows[0] ?? null;
 }
@@ -59,7 +78,7 @@ export async function listStreamerWebhooksForUser(
   userId: string
 ): Promise<StreamerWebhookRow[]> {
   const { rows } = await query<StreamerWebhookRow>(
-    `SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at
+    `SELECT id, user_id, server_id, public_id::text, hook_key, secret_hash, created_at, updated_at
      FROM streamer_webhooks WHERE user_id = $1 ORDER BY created_at ASC`,
     [userId]
   );
@@ -79,7 +98,7 @@ export async function getWebhookByUserAndServer(
   serverId: string
 ): Promise<StreamerWebhookRow | null> {
   const { rows } = await query<StreamerWebhookRow>(
-    `SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at
+    `SELECT id, user_id, server_id, public_id::text, hook_key, secret_hash, created_at, updated_at
      FROM streamer_webhooks WHERE user_id = $1 AND server_id = $2 LIMIT 1`,
     [userId, serverId]
   );
@@ -91,7 +110,7 @@ export async function getWebhookByIdForUser(
   webhookId: string
 ): Promise<StreamerWebhookRow | null> {
   const { rows } = await query<StreamerWebhookRow>(
-    `SELECT id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at
+    `SELECT id, user_id, server_id, public_id::text, hook_key, secret_hash, created_at, updated_at
      FROM streamer_webhooks WHERE id = $1 AND user_id = $2 LIMIT 1`,
     [webhookId, userId]
   );
@@ -99,7 +118,8 @@ export async function getWebhookByIdForUser(
 }
 
 /**
- * Ensure a webhook row exists for this user+server. New rows get a plaintext secret once.
+ * Ensure a webhook row exists for this user+server.
+ * New rows get an opaque hook_key (paste one URL into TikFinity) plus legacy bcrypt secret for old UUID+token URLs.
  */
 export async function createWebhookForServer(
   userId: string,
@@ -122,11 +142,12 @@ export async function createWebhookForServer(
 
   const plain = generatePlainSecret();
   const secret_hash = await hashWebhookSecret(plain);
+  const hook_key = generateHookKey();
   const { rows } = await query<StreamerWebhookRow>(
-    `INSERT INTO streamer_webhooks (user_id, server_id, secret_hash)
-     VALUES ($1, $2, $3)
-     RETURNING id, user_id, server_id, public_id::text, secret_hash, created_at, updated_at`,
-    [userId, serverId, secret_hash]
+    `INSERT INTO streamer_webhooks (user_id, server_id, secret_hash, hook_key)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, user_id, server_id, public_id::text, hook_key, secret_hash, created_at, updated_at`,
+    [userId, serverId, secret_hash, hook_key]
   );
   const row = rows[0];
   if (!row) throw new Error("insert streamer_webhooks failed");
@@ -144,17 +165,21 @@ export async function deleteWebhookForUser(
   return (rowCount ?? 0) > 0;
 }
 
+/**
+ * Regenerates both opaque URL segment and legacy bcrypt token (old URLs stop working).
+ */
 export async function rotateStreamerWebhookSecret(
   userId: string,
   webhookId: string
-): Promise<{ secretPlain: string } | null> {
+): Promise<{ secretPlain: string; hookKey: string } | null> {
   const hook = await getWebhookByIdForUser(userId, webhookId);
   if (!hook) return null;
   const plain = generatePlainSecret();
   const secret_hash = await hashWebhookSecret(plain);
+  const hook_key = generateHookKey();
   await query(
-    "UPDATE streamer_webhooks SET secret_hash = $1, updated_at = now() WHERE id = $2 AND user_id = $3",
-    [secret_hash, webhookId, userId]
+    "UPDATE streamer_webhooks SET secret_hash = $1, hook_key = $2, updated_at = now() WHERE id = $3 AND user_id = $4",
+    [secret_hash, hook_key, webhookId, userId]
   );
-  return { secretPlain: plain };
+  return { secretPlain: plain, hookKey: hook_key };
 }
