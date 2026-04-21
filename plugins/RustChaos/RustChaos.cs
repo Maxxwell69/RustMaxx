@@ -20,13 +20,16 @@ using UnityEngine.AI;
 using Rust;
 using Oxide.Game.Rust.Cui;
 using Oxide.Core;
+using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.39")]
-    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher.")]
+    [Info("RustChaos", "RustMaxx", "1.15.40")]
+    [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher. chaosraid_*: RandomRaids progressive waves.")]
     public class RustChaos : RustPlugin
     {
+        [PluginReference]
+        private Plugin RandomRaids;
         #region Configuration
 
         private class PluginConfig
@@ -1055,6 +1058,16 @@ namespace Oxide.Plugins
                         TryStartLandChaosWave(target, viewerName, giftName, ChatMsg, ChaosWaveMode.Random);
                     break;
 
+                case "chaosraid_easy":
+                case "chaosraid_medium":
+                case "chaosraid_hard":
+                    if (target != null)
+                    {
+                        string errRaid = TryTriggerChaosRaidWave(target, viewerName, giftName, ChatMsg, action);
+                        if (errRaid != null) return errRaid;
+                    }
+                    break;
+
                 case "chaoswavecancel":
                     // Admin/admin-like RCON stop button for a glitched wave.
                     CancelChaosWave(ChatMsg("Chaos wave cancelled."));
@@ -1843,6 +1856,64 @@ namespace Oxide.Plugins
                     });
                     break;
             }
+        }
+
+        /// <summary>RandomRaids progressive chaos presets (chaos_easy / chaos_medium / chaos_hard). Rewards stay per RandomRaids.json tier clones.</summary>
+        private string TryTriggerChaosRaidWave(BasePlayer target, string viewerName, string giftName,
+            Func<string, string> chatMsg, string action)
+        {
+            if (target == null || !target.IsValid()) return "no_target";
+            if (RandomRaids == null || !RandomRaids.IsLoaded)
+            {
+                BroadcastChatGiftBanner(chatMsg("Chaos raid requires RandomRaids plugin loaded."));
+                return "randomraids_missing";
+            }
+
+            string raidKey = action switch
+            {
+                "chaosraid_easy" => "chaos_easy",
+                "chaosraid_medium" => "chaos_medium",
+                "chaosraid_hard" => "chaos_hard",
+                _ => null
+            };
+            if (raidKey == null) return "invalid_chaos_raid";
+
+            object result;
+            try
+            {
+                result = RandomRaids.Call("TryStartRaidForStreamer", target, raidKey);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"{LogPrefix} Chaos raid Call failed: {ex.Message}");
+                BroadcastChatGiftBanner(chatMsg("Chaos raid failed (check console)."));
+                return "call_failed";
+            }
+
+            if (result is bool ok && ok)
+            {
+                string label = action switch
+                {
+                    "chaosraid_easy" => "Easy (4 waves → boss)",
+                    "chaosraid_medium" => "Medium (8 waves → 2 bosses)",
+                    "chaosraid_hard" => "Hard (10 waves + attack heli)",
+                    _ => raidKey
+                };
+                BroadcastChatGiftBanner(chatMsg($"{viewerName} triggered CHAOS RAID {label}!"));
+                return null;
+            }
+
+            string token = result?.ToString() ?? "failed";
+            string human = token switch
+            {
+                "need_building_privilege" => "Streamer needs TC authorization.",
+                "terrain_blocked" => "Raid blocked on this terrain.",
+                "base_too_small" => "Base too small for raid (needs foundations).",
+                "unknown_raid_type" => "Chaos raid profile missing — reload RandomRaids.",
+                _ => token
+            };
+            BroadcastChatGiftBanner(chatMsg($"Chaos raid failed: {human}"));
+            return token;
         }
 
         private bool TryStartLandChaosWave(BasePlayer target, string viewerName, string giftName, Func<string, string> chatMsg, ChaosWaveMode mode)
