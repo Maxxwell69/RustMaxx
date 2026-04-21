@@ -393,6 +393,24 @@ export const ACTION_META: Record<
       "Like Chaos Wave (1→10 land waves) with random enemies: animals (wolves, bears, pigs, tigers, panthers, zombies) plus scientists (LR300, roam, heavy, legacy paths per server build). Round 1 includes 1500 wood + building hammer plus 3000 stone + metal door + reinforced window. Between waves, chat/UI preview the next-wave lineup.",
     exampleGifts: ["Random Chaos Wave", "RandomChaosWave"],
   },
+  chaosraid_easy: {
+    label: "Chaos raid Easy",
+    description:
+      "RandomRaids preset: 4 progressive NPC waves (1→4) then juggernaut boss. Requires RandomRaids + RustChaos on server; streamer must be on TC.",
+    exampleGifts: [],
+  },
+  chaosraid_medium: {
+    label: "Chaos raid Medium",
+    description:
+      "RandomRaids preset: 8 progressive waves then 2 juggernauts. Requires RandomRaids + RustChaos.",
+    exampleGifts: [],
+  },
+  chaosraid_hard: {
+    label: "Chaos raid Hard",
+    description:
+      "RandomRaids preset: 10 progressive waves + attack heli at start; final juggernaut. Requires RandomRaids + RustChaos.",
+    exampleGifts: [],
+  },
   healinghands: {
     label: "Healing Hands",
     description:

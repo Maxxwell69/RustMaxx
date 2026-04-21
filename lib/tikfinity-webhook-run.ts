@@ -12,6 +12,7 @@ import {
   extractViewerNameFromWebhookBody,
   getViewerNameFromQueryString,
   parseTikfinityWebhookBody,
+  TIKTRIGGER_ACTIONS,
   type TikTriggerAction,
   isTikTokSocialOnlyAction,
   isRustChaosStatusEffectAction,
@@ -592,8 +593,17 @@ export async function runTikfinityWebhook(
     "";
   let actionFromQuery: TikTriggerAction | null = null;
   if (queryActionRaw) {
-    actionFromQuery = getActionFromPayload({ action: queryActionRaw.toLowerCase() });
+    const qLower = queryActionRaw.toLowerCase().trim();
+    actionFromQuery = getActionFromPayload({ action: qLower });
     if (!actionFromQuery) actionFromQuery = getActionForGift(queryActionRaw);
+    // Explicit allowlist fallback (deploy drift / gift map): ?action= must match RustChaos keys in TIKTRIGGER_ACTIONS.
+    if (
+      !actionFromQuery &&
+      qLower &&
+      (TIKTRIGGER_ACTIONS as readonly string[]).includes(qLower)
+    ) {
+      actionFromQuery = qLower as TikTriggerAction;
+    }
   }
   const templateFromQuery = request.nextUrl.searchParams.get("template")?.trim() ?? null;
 
