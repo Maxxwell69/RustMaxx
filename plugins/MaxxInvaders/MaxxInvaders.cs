@@ -39,10 +39,9 @@ namespace Oxide.Plugins
         private const string UiName = "MaxxInvaders.AdminUI";
         private const string HudOverlayUiName = "MaxxInvaders.HudOverlay";
         private const string LootTaskOverlayUiName = "MaxxInvaders.LootTaskOverlay";
-        /// <summary>Streamer MaxInvaders readout: lower-right overlay (not gift toasts — those are RustChaos).</summary>
-        /// <summary>Streamer MaxInvaders list panel: lower-right, above weapon hotbar (Overlay normalized coords).</summary>
-        private const string HudStreamerAnchorMin = "0.66 0.06";
-        private const string HudStreamerAnchorMax = "0.996 0.50";
+        /// <summary>Streamer MaxInvaders list: lower-left, above hotbar. (Not RustChaos gift toasts.)</summary>
+        private const string HudStreamerAnchorMin = "0.004 0.06";
+        private const string HudStreamerAnchorMax = "0.34 0.50";
         private const int GuiSchemaCurrent = 2;
         private const float InvaderOverlayDrawDuration = 0.45f;
 
