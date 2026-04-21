@@ -86,3 +86,19 @@ export async function getServerOwnerId(serverId: string): Promise<string | null>
   );
   return rows[0]?.owner_id ?? null;
 }
+
+/** True if the user owns a server or appears in server_users (invited admin/moderator). */
+export async function userHasServerAccess(userId: string): Promise<boolean> {
+  try {
+    const { rows } = await query<{ ok: boolean }>(
+      `SELECT (
+        EXISTS (SELECT 1 FROM servers WHERE owner_id = $1::uuid)
+        OR EXISTS (SELECT 1 FROM server_users WHERE user_id = $1::uuid)
+      ) AS ok`,
+      [userId]
+    );
+    return rows[0]?.ok === true;
+  } catch {
+    return false;
+  }
+}
