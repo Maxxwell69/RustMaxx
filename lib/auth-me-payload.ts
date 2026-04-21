@@ -7,6 +7,7 @@ import {
   parseStreamerBillingTier,
   type StreamerBillingTier,
 } from "./billing-tiers";
+import { userHasServerAccess } from "./server-access";
 
 export type AuthMeSteam = {
   steamId: string;
@@ -27,6 +28,8 @@ export type AuthMePayload = UserProfile & {
   /** Account-level TikFinity webhook tier (limits how many server hooks you may create). */
   streamer_tier: StreamerBillingTier;
   streamer_webhook_limit: number;
+  /** Owns a server or was added under Server access (admin/moderator); unlocks Dashboard even without server-owner signup. */
+  has_server_access: boolean;
 };
 
 export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> {
@@ -63,6 +66,8 @@ export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> 
 
   const streamerTier = parseStreamerBillingTier(user.streamer_tier) ?? "free";
 
+  const has_server_access = await userHasServerAccess(user.id);
+
   return {
     ...base,
     steam,
@@ -74,5 +79,6 @@ export async function buildAuthMePayload(user: UserRow): Promise<AuthMePayload> 
     streamer_directory_show_servers: user.streamer_directory_show_servers === true,
     streamer_tier: streamerTier,
     streamer_webhook_limit: getStreamerWebhookLimit(streamerTier),
+    has_server_access,
   };
 }

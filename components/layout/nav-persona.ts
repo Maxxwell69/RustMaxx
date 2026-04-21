@@ -46,7 +46,11 @@ export const DASHBOARD_FOOTER_LINKS = [
 
 export type MeForPersona = Pick<
   AuthMePayload,
-  "role" | "signup_interested_server_owner" | "signup_interested_streamer" | "signup_interested_fan"
+  | "role"
+  | "signup_interested_server_owner"
+  | "signup_interested_streamer"
+  | "signup_interested_fan"
+  | "has_server_access"
 >;
 
 function filterLinksBySignupPersonas(me: MeForPersona | null, links: readonly PersonaKeyedLink[]): PersonaKeyedLink[] {
@@ -56,9 +60,12 @@ function filterLinksBySignupPersonas(me: MeForPersona | null, links: readonly Pe
   const owner = me.signup_interested_server_owner === true;
   const streamer = me.signup_interested_streamer === true;
   const fan = me.signup_interested_fan === true;
-  if (!owner && !streamer && !fan) return [...links];
+  /** Invited on a server (admin/moderator) or owns one — needs same nav as server owners without “server owner” signup. */
+  const delegatedServer = me.has_server_access === true;
+  if (!owner && !streamer && !fan && !delegatedServer) return [...links];
 
   return links.filter((link) => {
+    if (delegatedServer && link.owner) return true;
     if (owner && link.owner) return true;
     if (streamer && link.streamer) return true;
     if (fan && link.fan) return true;
@@ -102,14 +109,21 @@ export function dashboardPersonaPanels(
     !me.signup_interested_fan;
   if (legacyNoIntent) {
     if (me.role === "streamer") {
-      return { serverAdmin: false, showAddServerForm: false, streamer: true, fan: false };
+      const delegated = me.has_server_access === true;
+      return {
+        serverAdmin: delegated,
+        showAddServerForm: false,
+        streamer: true,
+        fan: false,
+      };
     }
     return { serverAdmin: true, showAddServerForm: true, streamer: true, fan: true };
   }
 
   const ownerSignup = me.signup_interested_server_owner === true;
+  const delegatedAccess = me.has_server_access === true;
   return {
-    serverAdmin: ownerSignup,
+    serverAdmin: ownerSignup || delegatedAccess,
     showAddServerForm: ownerSignup,
     streamer: me.signup_interested_streamer === true || me.role === "streamer",
     fan: me.signup_interested_fan === true,
@@ -159,6 +173,9 @@ export function activePersonaSummary(me: MeForPersona | null): string | null {
   if (me.signup_interested_server_owner) parts.push("Server admin");
   if (me.signup_interested_streamer === true || me.role === "streamer") parts.push("Streamer");
   if (me.signup_interested_fan) parts.push("Fan / viewer");
+  if (me.has_server_access && !me.signup_interested_server_owner) {
+    parts.push("Invited server access (Dashboard shows those servers)");
+  }
   if (parts.length === 0) return "No persona flags matched — use Profile or the actions below.";
   return `Your account is set up for: ${parts.join(" · ")}.`;
 }
