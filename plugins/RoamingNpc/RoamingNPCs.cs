@@ -10775,6 +10775,28 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// MaxxInvaders / plugin despawn: use <see cref="CustomPet.AdminKill"/> so <see cref="DataBots.RemoveBot"/> runs before death.
+        /// Plain <see cref="BaseCombatEntity.Kill"/> triggers <see cref="CustomPet.OnDied"/> which always schedules respawn (min 3s via <see cref="BotSetup.GetTimerRespawn"/>), resurrecting viewer bots after lifetime/GUI despawn.
+        /// </summary>
+        [HookMethod("DespawnBridgeNpc")]
+        public object DespawnBridgeNpc(BasePlayer npc)
+        {
+            if (npc == null || npc.IsDestroyed || listNpcPlayers == null) return false;
+            if (!listNpcPlayers.TryGetValue(npc.net.ID.Value, out var pet) || pet == null || pet.IsDestroyed)
+                return false;
+            try
+            {
+                pet.AdminKill();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintError($"[RoamingNPCs] DespawnBridgeNpc: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// MaxxInvaders: align bridge anchor and enable companion behavior (protect anchor player, gather/loot, deposit to anchor-owned storage) on an already-spawned bot.
         /// Runtime-only; does not write JSON. Vanilla ScientistNPC spawns are not tracked here — returns false.
         /// </summary>

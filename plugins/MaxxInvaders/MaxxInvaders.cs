@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.54")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.55")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1025,6 +1025,9 @@ namespace Oxide.Plugins
 
             var kitResolved = string.IsNullOrWhiteSpace(kitName) ? tierDef.DefaultKit : kitName;
             var lifetime = tierDef.LifetimeSeconds > 0 ? tierDef.LifetimeSeconds : _cfg.DefaultLifetimeSeconds;
+            // Avoid infinite lifetime if tier + DefaultLifetimeSeconds are both 0 (bots would never BehaviorTick-despawn).
+            if (lifetime <= 0)
+                lifetime = 3600f;
 
             anchorPlayer = ResolveAnchorForSpawn(anchorPlayer);
 
@@ -2631,12 +2634,42 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>
+        /// RoamingNPCs viewer bots must not use plain Kill — RoamingNPCs schedules a respawn shortly after death; use bridge DespawnBridgeNpc (AdminKill + RemoveBot) first.
+        /// </summary>
+        private void KillInvaderEntity(BasePlayer npc, bool isRoamingNpc)
+        {
+            if (npc == null || npc.IsDestroyed) return;
+            if (isRoamingNpc && RoamingNPCs != null && RoamingNPCs.IsLoaded)
+            {
+                try
+                {
+                    var result = RoamingNPCs.Call("DespawnBridgeNpc", npc);
+                    if (result is bool ok && ok)
+                        return;
+                }
+                catch
+                {
+                    /* fall through to Kill */
+                }
+            }
+
+            try
+            {
+                npc.Kill();
+            }
+            catch
+            {
+                /* ignored */
+            }
+        }
+
         private void DespawnInternal(InvaderRuntime r, string reason)
         {
             try
             {
                 if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
-                    r.NpcPlayer.Kill();
+                    KillInvaderEntity(r.NpcPlayer, r.IsRoamingNpc);
             }
             catch
             {
@@ -3857,7 +3890,7 @@ namespace Oxide.Plugins
                 if (gentle)
                     DespawnInternal(r, "gui_despawn");
                 else if (r.NpcPlayer != null && !r.NpcPlayer.IsDestroyed)
-                    r.NpcPlayer.Kill();
+                    KillInvaderEntity(r.NpcPlayer, r.IsRoamingNpc);
                 return;
             }
         }
