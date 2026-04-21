@@ -39,9 +39,9 @@ namespace Oxide.Plugins
         private const string UiName = "MaxxInvaders.AdminUI";
         private const string HudOverlayUiName = "MaxxInvaders.HudOverlay";
         private const string LootTaskOverlayUiName = "MaxxInvaders.LootTaskOverlay";
-        /// <summary>Streamer MaxInvaders list: lower-left, above hotbar. (Not RustChaos gift toasts.)</summary>
-        private const string HudStreamerAnchorMin = "0.004 0.06";
-        private const string HudStreamerAnchorMax = "0.34 0.50";
+        /// <summary>Streamer MaxInvaders readout: top-left, text only — panel is fully transparent (no grey box).</summary>
+        private const string HudStreamerAnchorMin = "0.008 0.76";
+        private const string HudStreamerAnchorMax = "0.52 0.992";
         private const int GuiSchemaCurrent = 2;
         private const float InvaderOverlayDrawDuration = 0.45f;
 
@@ -4128,7 +4128,7 @@ namespace Oxide.Plugins
             var root = container.Add(
                 new CuiPanel
                 {
-                    Image = { Color = "0.05 0.06 0.08 0.82" },
+                    Image = { Color = "0 0 0 0" },
                     RectTransform = { AnchorMin = HudStreamerAnchorMin, AnchorMax = HudStreamerAnchorMax },
                     CursorEnabled = false,
                 },
@@ -4140,11 +4140,11 @@ namespace Oxide.Plugins
                     Text =
                     {
                         Text =
-                            $"<size=12><color=#ccddee><b>MaxInvaders</b></color></size>\n<size=9><color=#8899aa>level · squad · task · name — HP% — distance</color></size>\n<size=8><color=#667788>F9: bind f9 maxxinvaders.hudtoggle</color></size>\n\n{body}",
+                            $"<size=12><color=#dce8ee><b>MaxInvaders</b></color></size>\n<size=9><color=#aab8c8>level · squad · task · name — HP% — distance</color></size>\n<size=8><color=#778899>F9: bind f9 maxxinvaders.hudtoggle</color></size>\n\n{body}",
                         FontSize = 11,
                         Align = TextAnchor.UpperLeft,
                     },
-                    RectTransform = { AnchorMin = "0.03 0.03", AnchorMax = "0.97 0.97" },
+                    RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
                 },
                 root);
             CuiHelper.AddUi(player, container);
