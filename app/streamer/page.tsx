@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/marketing/Logo";
 import { SteamIdForm } from "@/components/profile/SteamIdForm";
@@ -14,6 +14,8 @@ import {
   buildStreamerHookQueryUrl,
   canBuildStreamerHookUrl,
   mergePresetParamsWithProfileAnchor,
+  MAXX_GROUP_ORDER,
+  MAXX_GROUP_TITLE,
   STREAMER_MAXXINVADERS_URL_PRESETS,
   webhookBaseUsesOpaqueSecret,
 } from "@/lib/streamer-maxxinvaders-urls";
@@ -427,9 +429,7 @@ export default function StreamerDashboardPage() {
     }
     if (data.webhookUrl) {
       await load();
-      setRotateHint(
-        "New webhook URL is active. Copy it from the green box and replace the URL in each TikFinity trigger (RustMaxx cannot edit TikFinity for you)."
-      );
+      setRotateHint("Link updated — copy it from the green box and paste into each TikFinity trigger.");
       window.setTimeout(() => setRotateHint(null), 18_000);
     }
   }
@@ -469,23 +469,27 @@ export default function StreamerDashboardPage() {
     if (!h?.webhookUrl) return;
     const token = legacyTokenForHook(h, secretByPublicId);
     if (!canBuildStreamerHookUrl(h.webhookUrl, token)) {
-      setErr("Reveal the webhook URL or Regenerate URL for this server first.");
+      setErr("Finish this server’s webhook under Game servers first.");
       return;
     }
     const lines: string[] = [];
-    lines.push(`${h.serverName ?? "Server"} — MaxxInvaders / roaming bots`);
+    lines.push(`${h.serverName ?? "Server"} — Viewer bots (MaxxInvaders)`);
     lines.push("");
-    for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS) {
-      const params = mergePresetParamsWithProfileAnchor(preset.params, state?.user.steamId);
-      const url = buildStreamerHookQueryUrl(
-        h.webhookUrl,
-        webhookBaseUsesOpaqueSecret(h.webhookUrl) ? null : token,
-        params
-      );
-      lines.push(preset.label);
-      if (preset.hint) lines.push(`(${preset.hint})`);
-      lines.push(url);
+    for (const group of MAXX_GROUP_ORDER) {
+      lines.push(`— ${MAXX_GROUP_TITLE[group]} —`);
       lines.push("");
+      for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS.filter((p) => p.group === group)) {
+        const params = mergePresetParamsWithProfileAnchor(preset.params, state?.user.steamId);
+        const url = buildStreamerHookQueryUrl(
+          h.webhookUrl,
+          webhookBaseUsesOpaqueSecret(h.webhookUrl) ? null : token,
+          params
+        );
+        lines.push(preset.label);
+        if (preset.hint) lines.push(`(${preset.hint})`);
+        lines.push(url);
+        lines.push("");
+      }
     }
     try {
       await navigator.clipboard.writeText(lines.join("\n").trimEnd());
@@ -505,23 +509,27 @@ export default function StreamerDashboardPage() {
       const token = legacyTokenForHook(h, secretByPublicId);
       if (!canBuildStreamerHookUrl(h.webhookUrl, token)) continue;
       const lines: string[] = [];
-      lines.push(`=== ${h.serverName ?? h.serverId} — MaxxInvaders / roaming bots ===`);
+      lines.push(`=== ${h.serverName ?? h.serverId} — Viewer bots (MaxxInvaders) ===`);
       lines.push("");
-      for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS) {
-        const params = mergePresetParamsWithProfileAnchor(preset.params, state?.user.steamId);
-        const url = buildStreamerHookQueryUrl(
-          h.webhookUrl!,
-          webhookBaseUsesOpaqueSecret(h.webhookUrl!) ? null : token,
-          params
-        );
-        lines.push(preset.label);
-        lines.push(url);
+      for (const group of MAXX_GROUP_ORDER) {
+        lines.push(`— ${MAXX_GROUP_TITLE[group]} —`);
         lines.push("");
+        for (const preset of STREAMER_MAXXINVADERS_URL_PRESETS.filter((p) => p.group === group)) {
+          const params = mergePresetParamsWithProfileAnchor(preset.params, state?.user.steamId);
+          const url = buildStreamerHookQueryUrl(
+            h.webhookUrl!,
+            webhookBaseUsesOpaqueSecret(h.webhookUrl!) ? null : token,
+            params
+          );
+          lines.push(preset.label);
+          lines.push(url);
+          lines.push("");
+        }
       }
       blocks.push(lines.join("\n").trimEnd());
     }
     if (blocks.length === 0) {
-      setErr("Reveal webhook URLs under Game servers first (each server needs Copy webhook URL or Regenerate URL).");
+      setErr("Add or refresh webhooks under Game servers first.");
       return;
     }
     try {
@@ -756,8 +764,7 @@ export default function StreamerDashboardPage() {
         />
         <h1 className="text-xl font-semibold text-zinc-100">Streamer interactions</h1>
         <p className="text-center text-sm text-zinc-400">
-          Add your Steam64, connect one or more servers (each gets its own TikFinity URL), then copy the lines into
-          TikFinity.
+          Link Steam, add servers, copy each webhook URL into TikFinity (rules and presets below).
         </p>
       </div>
 
@@ -771,18 +778,13 @@ export default function StreamerDashboardPage() {
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Account</h2>
         <p className="text-sm text-zinc-300">{user.email}</p>
         <p className="mt-1 text-xs text-zinc-500">
-          Streamer plan:{" "}
-          <span className="text-zinc-300 capitalize">{user.streamerTier}</span>
+          Plan <span className="text-zinc-300 capitalize">{user.streamerTier}</span>
           {" · "}
-          Webhooks: {user.streamerWebhookCount}/{user.streamerWebhookLimit}
-        </p>
-        <p className="mt-1 text-[11px] text-zinc-600">
-          Stripe subscription: {user.subscriptionStatus}
+          Webhooks {user.streamerWebhookCount}/{user.streamerWebhookLimit}
         </p>
         <p className="mt-2 text-[11px] text-zinc-500">
-          <span className="text-zinc-400">Fan club:</span>{" "}
           <Link href="/streamer/superfan" className="text-rust-cyan hover:underline">
-            Configure
+            Fan club
           </Link>
           {state.user.id ? (
             <>
@@ -794,8 +796,7 @@ export default function StreamerDashboardPage() {
                 Preview boards
               </Link>
             </>
-          ) : null}{" "}
-          — requests, tiers, and action buttons fans see.
+          ) : null}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {user.streamerTier === "free" ? (
@@ -847,9 +848,7 @@ export default function StreamerDashboardPage() {
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Steam</h2>
         <p className="mb-3 text-sm text-zinc-400">
-          Use the same Steam64 as in-game. RustMaxx uses it as the MaxxInvaders patrol anchor when your webhook URL does not
-          include <code className="rounded bg-zinc-800 px-1">anchorSteam</code> and the server owner has not set a separate
-          TikFinity patrol anchor for that server. You can also set this on{" "}
+          Use the same Steam account as in-game for spawn anchors. You can also edit this on{" "}
           <Link href="/profile#steam" className="text-rust-cyan hover:underline">
             Profile
           </Link>
@@ -864,23 +863,16 @@ export default function StreamerDashboardPage() {
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">Game servers &amp; webhooks</h2>
         <p className="mb-3 text-xs text-zinc-500">
-          Add each RustMaxx server you want TikFinity to drive — you get a <strong className="text-zinc-400">separate URL</strong>{" "}
-          per server. Servers you own or are on the team for always appear here. Other servers appear when they turn on{" "}
-          <strong className="text-zinc-400">Streamer interactions</strong>, or when you have an{" "}
-          <strong className="text-zinc-400">approved</strong> access request (you may see the server listed before the owner
-          finishes setup). Use the public{" "}
+          One webhook URL per server. Your servers and team servers show here; others appear after the owner enables{" "}
+          <strong className="text-zinc-400">Streamer interactions</strong> or approves you. Request access via the{" "}
           <Link href="/server-list" className="text-rust-cyan hover:underline">
             server list
           </Link>{" "}
-          to request access if the owner requires approval.
+          if needed.
         </p>
         <p className="mb-4 rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-400">
-          <strong className="text-zinc-200">Copy the full webhook URL</strong> from the green box into TikFinity — it includes
-          a long secret in the path (no <code className="text-emerald-400">?token=</code> needed).{" "}
-          <strong className="text-zinc-200">Regenerate URL</strong> gives you a new link if TikFinity or a leak exposed the old
-          one; update every TikFinity trigger after regenerating.{" "}
-          <strong className="text-zinc-200">502</strong> / <strong className="text-zinc-200">spawn_position</strong> come from
-          the Rust server (RCON / MaxxInvaders), not from a wrong RustMaxx link.
+          <strong className="text-zinc-200">Paste the full URL</strong> from the green box into TikFinity.{" "}
+          <strong className="text-zinc-200">Regenerate URL</strong> if you need a new link — then update TikFinity to match.
         </p>
         {serversLoadError ? (
           <p className="mb-4 rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
@@ -889,14 +881,11 @@ export default function StreamerDashboardPage() {
         ) : null}
         {!serversLoadError && servers.length === 0 ? (
           <p className="mb-4 rounded-lg border border-amber-800/60 bg-amber-950/30 p-3 text-sm text-amber-100/95">
-            No servers are available yet. If this is your server, open{" "}
+            No servers yet. Owners: enable <strong className="text-zinc-100">Streamer interactions</strong> under{" "}
             <Link href="/servers" className="text-rust-cyan hover:underline">
               Servers
-            </Link>
-            , pick it, go to <strong className="text-zinc-100">Streamer interactions</strong>, and turn on{" "}
-            <em>Allow streamers to use this server for TikFinity webhooks</em> (Pro plan may be required), then save and
-            refresh this page. If you requested access from the server list, wait for the owner to approve and enable
-            TikFinity — the server will show here once you are approved.
+            </Link>{" "}
+            and refresh. Guests: wait for approval after requesting on the server list.
           </p>
         ) : null}
 
@@ -914,7 +903,7 @@ export default function StreamerDashboardPage() {
                       <p className="text-sm font-medium text-zinc-200">
                         {h.serverName ?? "Server"}
                       </p>
-                      <p className="text-[11px] text-zinc-500">One TikFinity URL per server — use a different RustMaxx preset in TikFinity if you run multiple channels.</p>
+                      <p className="text-[11px] text-zinc-500">One URL per server.</p>
                     </div>
                     <button
                       type="button"
@@ -945,26 +934,18 @@ export default function StreamerDashboardPage() {
                           Regenerate URL
                         </button>
                       </div>
-                      {h.webhookUrl &&
-                      !webhookBaseUsesOpaqueSecret(h.webhookUrl) &&
-                      fullUrl ? (
-                        <p className="mt-2 text-[10px] text-zinc-600">
-                          Legacy <code className="text-zinc-400">?token=</code> in URL — new webhooks use one line with no
-                          query string.
-                        </p>
-                      ) : null}
                     </>
                   ) : (
                     <>
-                      <code className="mb-2 block break-all rounded border border-zinc-800 bg-black/30 p-2 text-[11px] text-zinc-600">
-                        {h.webhookUrl}?token=…
-                      </code>
+                      <p className="mb-2 text-[11px] text-zinc-500">
+                        Webhook link isn’t ready in this browser — tap Regenerate URL.
+                      </p>
                       <button
                         type="button"
                         onClick={() => void rotateSecretForHook(h.id)}
                         className="rounded-lg border border-emerald-800/80 bg-emerald-950/40 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-900/40"
                       >
-                        Reveal URL (new secret)
+                        Regenerate URL
                       </button>
                     </>
                   )}
@@ -979,9 +960,8 @@ export default function StreamerDashboardPage() {
         {hooks.length > 0 && fullTikfinityUrlWithRuleAction ? (
           <div className="mb-6 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-100/95">
             <p className="mb-2 font-medium text-amber-50">
-              Seeing{" "}
-              <code className="rounded bg-zinc-900 px-1 text-[11px] text-amber-200">skipped / empty body</code> in
-              TikFinity? (example for your first server)
+              TikFinity not firing the action? Try a URL that sets <code className="rounded bg-zinc-900 px-1 text-amber-200">&amp;action=…</code>{" "}
+              (example — first server):
             </p>
             {fullTikfinityUrlWithRuleAction ? (
               <>
@@ -1056,36 +1036,25 @@ export default function StreamerDashboardPage() {
       </section>
 
       <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
-          MaxxInvaders &amp; viewer bots
+        <h2 className="mb-1 text-sm font-medium uppercase tracking-wide text-zinc-500">
+          Viewer bots <span className="text-zinc-600">·</span>{" "}
+          <span className="normal-case text-zinc-400">MaxxInvaders webhook lines</span>
         </h2>
         <p className="mb-3 text-xs text-zinc-500">
-          All TikFinity webhook lines below use the same{" "}
-          <code className="rounded bg-zinc-800 px-1">?token=…</code> as{" "}
-          <strong className="text-zinc-400">Game servers &amp; webhooks</strong>. When you click{" "}
-          <strong className="text-zinc-400">New secret</strong>, this page rebuilds every URL from the new token — use{" "}
-          <strong className="text-zinc-300">Copy all MaxxInvaders URLs</strong> (or copy per server / per row) and replace
-          the old lines in TikFinity.
+          Same base URL as <strong className="text-zinc-400">Game servers</strong> — each row is a ready-made line for TikFinity. Re-copy after{" "}
+          <strong className="text-zinc-300">Regenerate URL</strong>.
         </p>
         {user.steamId && /^\d{17}$/.test(user.steamId.trim()) ? (
           <p className="mb-3 rounded-lg border border-emerald-900/40 bg-emerald-950/25 px-3 py-2 text-xs text-emerald-100/95">
-            Your saved <strong className="text-emerald-50">Steam64</strong> is embedded in each URL as{" "}
-            <code className="rounded bg-zinc-900 px-1">anchorSteam=…</code> — paste into TikFinity as-is (no manual edits).
-            Server owners can still override patrol anchor on the server; <code className="rounded bg-zinc-900 px-1">anchorSteam</code>{" "}
-            in the URL takes priority.
+            Preset URLs include your Steam ID for spawn anchoring when the server allows it — paste as copied.
           </p>
         ) : (
           <p className="mb-3 rounded-lg border border-amber-900/50 bg-amber-950/25 px-3 py-2 text-xs text-amber-100/95">
-            <strong className="text-amber-50">Save your Steam64</strong> in the section above — then every preset URL here will
-            include <code className="rounded bg-zinc-900 px-1">anchorSteam=…</code> automatically so MaxxInvaders can place
-            spawns without extra query params.
+            Add your Steam ID above so preset links can anchor spawns correctly.
           </p>
         )}
-        <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">
-          <strong className="text-zinc-400">502 / spawn_position is usually the game server, not your URL.</strong> RustMaxx only
-          forwards the spawn to your host over RCON. You must be on <strong className="text-zinc-400">that same Rust server’s map</strong>{" "}
-          with the anchor Steam account (online or in a sleeping bag/bed). Cliffs and monuments often fail until you move to open
-          ground or the host widens spawn radius in MaxxInvaders.json.
+        <p className="mb-3 text-[11px] text-zinc-500">
+          In-game spawn errors are usually from the Rust server (terrain / position), not a broken RustMaxx link.
         </p>
         {hooks.length === 0 ? (
           <p className="text-sm text-zinc-500">Add a webhook under Game servers first.</p>
@@ -1096,18 +1065,16 @@ export default function StreamerDashboardPage() {
                 type="button"
                 disabled={maxxReadyHooks.length === 0}
                 title={
-                  maxxReadyHooks.length === 0 ? "Reveal each server’s webhook URL under Game servers first" : undefined
+                  maxxReadyHooks.length === 0 ? "Finish webhooks under Game servers first" : undefined
                 }
                 onClick={() => void copyAllMaxxUrlsAllHooks()}
                 className="rounded-lg border border-violet-800/80 bg-violet-950/40 px-3 py-2 text-xs font-medium text-violet-100 hover:bg-violet-900/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {maxxAllServersCopied
                   ? "Copied all servers"
-                  : "Copy all MaxxInvaders URLs (every server)"}
+                  : "Copy all viewer-bot lines (every server)"}
               </button>
-              <span className="text-[11px] text-zinc-600">
-                Includes every preset row for each server that has a revealed token.
-              </span>
+              <span className="text-[11px] text-zinc-600">All rows below, every server.</span>
             </div>
             <ul className="space-y-5">
               {hooks.map((h) => {
@@ -1126,59 +1093,69 @@ export default function StreamerDashboardPage() {
                         onClick={() => void copyAllMaxxUrlsForHook(h.id)}
                         className="shrink-0 rounded-lg border border-violet-700/70 bg-violet-950/50 px-3 py-1.5 text-xs font-medium text-violet-100 hover:bg-violet-900/40 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {maxxCopiedHookId === h.id ? "Copied" : "Copy all presets (this server)"}
+                        {maxxCopiedHookId === h.id ? "Copied" : "Copy all lines (this server)"}
                       </button>
                     </div>
                     {!ready ? (
                       <p className="text-xs text-amber-200/90">
-                        Reveal this server’s legacy <code className="text-amber-200">?token=</code> URL or use{" "}
-                        <strong className="text-amber-100">Regenerate URL</strong> above
-                        so this page can build the preset URLs.
+                        Copy or <strong className="text-amber-100">Regenerate URL</strong> under Game servers first.
                       </p>
                     ) : (
                       <div className="max-h-[min(28rem,50vh)] overflow-auto rounded border border-zinc-800/80">
                         <table className="w-full min-w-[280px] text-left text-[11px]">
                           <thead className="sticky top-0 z-10 bg-zinc-900/95 text-zinc-500">
                             <tr>
-                              <th className="px-2 py-1.5 font-medium">Preset</th>
-                              <th className="px-2 py-1.5 font-medium">URL</th>
+                              <th className="px-2 py-1.5 font-medium">Use for</th>
+                              <th className="px-2 py-1.5 font-medium">Webhook line</th>
                               <th className="w-14 px-2 py-1.5 font-medium"> </th>
                             </tr>
                           </thead>
                           <tbody className="text-zinc-300">
-                            {STREAMER_MAXXINVADERS_URL_PRESETS.map((preset) => {
-                              const base = h.webhookUrl as string;
-                              const fullUrl = buildStreamerHookQueryUrl(
-                                base,
-                                webhookBaseUsesOpaqueSecret(base) ? null : token,
-                                mergePresetParamsWithProfileAnchor(preset.params, user.steamId)
-                              );
-                              const rowKey = `${h.id}:${preset.id}`;
-                              return (
-                                <tr key={preset.id} className="border-t border-zinc-800/90 align-top">
-                                  <td className="px-2 py-2 text-zinc-200">
-                                    <span className="font-medium">{preset.label}</span>
-                                    {preset.hint ? (
-                                      <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">
-                                        {preset.hint}
-                                      </span>
-                                    ) : null}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    <code className="break-all text-emerald-600/90">{fullUrl}</code>
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => void copyMaxxPresetUrl(fullUrl, rowKey)}
-                                      className="whitespace-nowrap rounded border border-zinc-600 px-2 py-1 text-[10px] text-zinc-300 hover:bg-zinc-800"
-                                    >
-                                      {maxxCopiedRowKey === rowKey ? "Copied" : "Copy"}
-                                    </button>
+                            {MAXX_GROUP_ORDER.map((group) => (
+                              <Fragment key={`${h.id}:${group}`}>
+                                <tr className="border-t border-zinc-800/90 bg-zinc-900/70">
+                                  <td
+                                    colSpan={3}
+                                    className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500"
+                                  >
+                                    {MAXX_GROUP_TITLE[group]}
                                   </td>
                                 </tr>
-                              );
-                            })}
+                                {STREAMER_MAXXINVADERS_URL_PRESETS.filter((p) => p.group === group).map((preset) => {
+                                  const base = h.webhookUrl as string;
+                                  const fullUrl = buildStreamerHookQueryUrl(
+                                    base,
+                                    webhookBaseUsesOpaqueSecret(base) ? null : token,
+                                    mergePresetParamsWithProfileAnchor(preset.params, user.steamId)
+                                  );
+                                  const rowKey = `${h.id}:${preset.id}`;
+                                  return (
+                                    <tr key={preset.id} className="border-t border-zinc-800/90 align-top">
+                                      <td className="px-2 py-2 text-zinc-200">
+                                        <span className="font-medium">{preset.label}</span>
+                                        {preset.hint ? (
+                                          <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">
+                                            {preset.hint}
+                                          </span>
+                                        ) : null}
+                                      </td>
+                                      <td className="px-2 py-2">
+                                        <code className="break-all text-emerald-600/90">{fullUrl}</code>
+                                      </td>
+                                      <td className="px-2 py-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => void copyMaxxPresetUrl(fullUrl, rowKey)}
+                                          className="whitespace-nowrap rounded border border-zinc-600 px-2 py-1 text-[10px] text-zinc-300 hover:bg-zinc-800"
+                                        >
+                                          {maxxCopiedRowKey === rowKey ? "Copied" : "Copy"}
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </Fragment>
+                            ))}
                           </tbody>
                         </table>
                       </div>
@@ -1232,15 +1209,9 @@ export default function StreamerDashboardPage() {
           Event → action rules
         </h2>
         <p className="mb-4 text-xs text-zinc-500">
-          Rules belong to <strong className="text-zinc-400">one server webhook</strong> at a time. Pick which server below,
-          then add rules or quick spawns. <strong className="font-medium text-zinc-300">TikFinity event name</strong> is your
-          alias/label; <strong className="font-medium text-zinc-300">Server action</strong> is the in-game action key.{" "}
-          <strong className="font-medium text-zinc-300">Copy webhook</strong> builds{" "}
-          <code className="rounded bg-zinc-800 px-1">&amp;action=server_action</code> on your webhook URL (legacy accounts may still
-          show <code className="rounded bg-zinc-800 px-1">?token=</code>). For solo animal/scientist spawns, use{" "}
-          <code className="rounded bg-zinc-800 px-1">&amp;count=3</code> (or set count in the rule below). After{" "}
-          <strong className="text-zinc-300">Regenerate URL</strong>, use <strong className="text-zinc-300">Copy all rule webhooks</strong>,{" "}
-          <strong className="text-zinc-300">Copy all MaxxInvaders URLs</strong>, or each Copy so TikFinity gets the new link.
+          Pick a server, then map a <strong className="text-zinc-400">TikFinity event name</strong> to a{" "}
+          <strong className="text-zinc-400">server action</strong>. Use <strong className="text-zinc-300">Copy webhook</strong> on each
+          rule for the full URL. After <strong className="text-zinc-300">Regenerate URL</strong>, copy rules again.
         </p>
         {rotateHint ? (
           <p className="mb-4 rounded-lg border border-emerald-900/50 bg-emerald-950/30 p-3 text-xs text-emerald-100/95">
@@ -1256,9 +1227,7 @@ export default function StreamerDashboardPage() {
             >
               {allRulesCopied ? "Copied all" : "Copy all rule webhooks"}
             </button>
-            <span className="text-[11px] text-zinc-600">
-              One block to paste into notes / TikFinity — copy again after <strong className="text-zinc-500">Regenerate URL</strong>.
-            </span>
+            <span className="text-[11px] text-zinc-600">Re-copy after regenerating your webhook URL.</span>
           </div>
         ) : null}
 
@@ -1286,10 +1255,8 @@ export default function StreamerDashboardPage() {
             Quick spawns (Rust)
           </h3>
           <p className="mb-3 text-xs text-zinc-500">
-            One-click rules for common RustChaos spawns. TikFinity should send an event name that matches the rule (e.g.{" "}
-            <code className="rounded bg-zinc-800 px-1">bear</code>, <code className="rounded bg-zinc-800 px-1">wolf</code>
-            , <code className="rounded bg-zinc-800 px-1">scientist</code>) or use{" "}
-            <code className="rounded bg-zinc-800 px-1">?action=bear</code> on your webhook URL.
+            Adds a rule whose event name matches the preset (e.g. bear, wolf). Or use{" "}
+            <code className="rounded bg-zinc-800 px-1">&amp;action=…</code> on your webhook URL.
           </p>
           <div className="mb-3 flex max-w-xs flex-col gap-1">
             <label className="text-xs text-zinc-500">
@@ -1354,7 +1321,6 @@ export default function StreamerDashboardPage() {
                 </optgroup>
               ))}
             </select>
-            <p className="mt-1 text-[11px] text-zinc-600">Grouped by plugin/type for faster setup.</p>
           </div>
           {ruleAction === "npcmaxx" || ruleAction === "maxxinvaders" ? (
             <div className="sm:col-span-2">
@@ -1396,8 +1362,7 @@ export default function StreamerDashboardPage() {
                 className="w-full max-w-[10rem] rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
               />
               <p className="mt-1 text-[11px] text-zinc-600">
-                RustChaos spawns one entity per command; RustMaxx runs the same RCON line this many times. Override anytime with{" "}
-                <code className="rounded bg-zinc-900 px-0.5">&amp;count=</code> on the URL.
+                Optional <code className="rounded bg-zinc-900 px-0.5">&amp;count=</code> on the URL overrides this.
               </p>
             </div>
           ) : null}
@@ -1450,7 +1415,7 @@ export default function StreamerDashboardPage() {
                   ) : (
                     <span
                       className="text-[11px] text-zinc-600"
-                      title="Open Game servers above — copy URL or Regenerate URL (legacy: reveal ?token=)"
+                      title="Set up the webhook under Game servers above"
                     >
                       Webhook URL unavailable
                     </span>

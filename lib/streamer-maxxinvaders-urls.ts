@@ -1,14 +1,31 @@
 /**
  * TikFinity webhook query presets for MaxxInvaders / Roaming viewer bots (streamer per-hook URLs).
- * Token is always first in the query string for readability.
  */
+
+export type MaxxPresetGroup = "templates" | "outfits" | "characters";
 
 export type StreamerMaxxPreset = {
   id: string;
+  /** Groups rows under a heading on the streamer dashboard */
+  group: MaxxPresetGroup;
+  /** Short label in the copy UI */
   label: string;
-  /** Short hint for the dashboard row. */
+  /** Optional subtext under the label */
   hint?: string;
   params: Record<string, string>;
+};
+
+/** Section order and titles on /streamer → Viewer bots */
+export const MAXX_GROUP_ORDER: MaxxPresetGroup[] = [
+  "templates",
+  "outfits",
+  "characters",
+];
+
+export const MAXX_GROUP_TITLE: Record<MaxxPresetGroup, string> = {
+  templates: "Templates — patrol & jobs",
+  outfits: "Outfits",
+  characters: "Character shortcuts",
 };
 
 /** True if we can build TikFinity URLs (opaque path, or legacy path with token). */
@@ -75,86 +92,100 @@ export function mergePresetParamsWithProfileAnchor(
 }
 
 /**
- * All common MaxxInvaders-related setups for TikFinity “Trigger Webhook”.
- * Same hook base URL + secret as “Game servers & webhooks”; only query params differ.
+ * MaxxInvaders-related TikFinity lines — same webhook base as Game servers; query params vary.
  */
 export const STREAMER_MAXXINVADERS_URL_PRESETS: StreamerMaxxPreset[] = [
   {
     id: "maxx-default",
-    label: "MaxxInvaders — default patrol",
-    hint: "Uses dashboard / env default Roaming template (usually streamer_patrol).",
+    group: "templates",
+    label: "Default patrol",
+    hint: "Server default Roaming template (often streamer_patrol).",
     params: { action: "maxxinvaders" },
   },
   {
     id: "maxx-patrol",
-    label: "MaxxInvaders — template streamer_patrol",
+    group: "templates",
+    label: "Patrol (streamer_patrol)",
     params: { action: "maxxinvaders", template: "streamer_patrol" },
   },
   {
     id: "maxx-medic",
-    label: "MaxxInvaders — template streamer_medic (field medic)",
-    hint: "Use ?action=maxxinvaders (not npcmaxx) for streamer TikFinity allowlists.",
+    group: "templates",
+    label: "Field medic",
+    hint: "Use action maxxinvaders on streamer allowlists.",
     params: { action: "maxxinvaders", template: "streamer_medic" },
   },
   {
     id: "maxx-miner",
-    label: "MaxxInvaders — template streamer_miner (Kick hazmat + backpack + ore)",
+    group: "templates",
+    label: "Miner kit",
     params: { action: "maxxinvaders", template: "streamer_miner" },
   },
   {
     id: "maxx-lumberjack",
-    label: "MaxxInvaders — template streamer_lumberjack (Lumberjack hazmat + chainsaw)",
+    group: "templates",
+    label: "Lumberjack kit",
     params: { action: "maxxinvaders", template: "streamer_lumberjack" },
   },
   {
     id: "outfit-default",
-    label: "MaxxInvaders — outfit default (template clothes)",
+    group: "outfits",
+    label: "Template clothes",
     params: { action: "maxxinvaders", outfit: "default" },
   },
   {
     id: "outfit-crew",
-    label: "MaxxInvaders — outfit crew",
+    group: "outfits",
+    label: "Crew look",
     params: { action: "maxxinvaders", outfit: "crew" },
   },
   {
     id: "outfit-bunny1",
-    label: "MaxxInvaders — outfit bunny1",
+    group: "outfits",
+    label: "Bunny",
     params: { action: "maxxinvaders", outfit: "bunny1" },
   },
   {
     id: "outfit-gingy",
-    label: "MaxxInvaders — outfit gingy",
+    group: "outfits",
+    label: "Gingerbread",
     params: { action: "maxxinvaders", outfit: "gingy" },
   },
   {
     id: "outfit-egg",
-    label: "MaxxInvaders — outfit egg",
+    group: "outfits",
+    label: "Egg",
     params: { action: "maxxinvaders", outfit: "egg" },
   },
   {
     id: "outfit-vamp",
-    label: "MaxxInvaders — outfit vamp",
+    group: "outfits",
+    label: "Vamp",
     params: { action: "maxxinvaders", outfit: "vamp" },
   },
   {
     id: "bunny1npc",
-    label: "Action bunny1npc (patrol + bunny wear)",
-    hint: "Same spawn engine; fixed bunny outfit profile.",
+    group: "characters",
+    label: "Bunny NPC pack",
+    hint: "Patrol + bunny outfit profile.",
     params: { action: "bunny1npc" },
   },
   {
     id: "gingynpc",
-    label: "Action gingynpc",
+    group: "characters",
+    label: "Gingerbread NPC",
     params: { action: "gingynpc" },
   },
   {
     id: "eggnpc",
-    label: "Action eggnpc",
+    group: "characters",
+    label: "Egg NPC",
     params: { action: "eggnpc" },
   },
   {
     id: "vampnpc",
-    label: "Action vampnpc",
+    group: "characters",
+    label: "Vamp NPC",
     params: { action: "vampnpc" },
   },
 ];
