@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { findUserById } from "@/lib/users";
-import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
+import {
+  canAccessStreamerDashboard,
+  canUsePerStreamerTikfinityWebhook,
+} from "@/lib/streamer-guard";
 import { query } from "@/lib/db";
 import { createWebhookForServer } from "@/lib/streamer-webhooks";
 import { isStreamerAllowedForServerHooks } from "@/lib/streamer-server-allowlist";
@@ -16,6 +19,15 @@ export async function POST(request: NextRequest) {
   if (!user || !canAccessStreamerDashboard(user)) {
     return NextResponse.json(
       { error: "Forbidden: active subscription and streamer access required" },
+      { status: 403 }
+    );
+  }
+  if (!(await canUsePerStreamerTikfinityWebhook(user))) {
+    return NextResponse.json(
+      {
+        error:
+          "RustMaxx staff must approve your streamer application before you can create TikFinity webhooks.",
+      },
       { status: 403 }
     );
   }

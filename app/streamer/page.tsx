@@ -768,6 +768,32 @@ export default function StreamerDashboardPage() {
         </p>
       </div>
 
+      <section className="mb-6 rounded-xl border border-emerald-900/40 bg-emerald-950/25 p-4">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-300/90">
+          Approval · server · webhook
+        </h2>
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-zinc-300">
+          <li>
+            <strong className="text-zinc-100">RustMaxx staff approves</strong> your{" "}
+            <Link href="/streamer/register" className="text-rust-cyan hover:underline">
+              streamer application
+            </Link>
+            . Until approval, TikFinity hits to your webhook URL return{" "}
+            <code className="rounded bg-zinc-800 px-1 text-xs">403</code>.
+          </li>
+          <li>
+            Each <strong className="text-zinc-100">server owner</strong> turns on Streamer interactions under{" "}
+            <strong>RustMaxx → Servers → [their server]</strong>, chooses allowed actions for streamers, and optionally
+            requires approval or allowlists you there.
+          </li>
+          <li>
+            You add a webhook per server here, then paste the URL into TikFinity and map gifts/events to{" "}
+            <code className="rounded bg-zinc-800 px-1 text-xs">?action=…</code> keys the owner enabled (e.g.{" "}
+            <code className="rounded bg-zinc-800 px-1 text-xs">chaosraid_easy</code>).
+          </li>
+        </ol>
+      </section>
+
       {err ? (
         <div className="mb-4 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {err}

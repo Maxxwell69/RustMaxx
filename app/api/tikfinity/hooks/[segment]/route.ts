@@ -10,7 +10,7 @@ import {
   verifyWebhookSecret,
 } from "@/lib/streamer-webhooks";
 import { findUserById } from "@/lib/users";
-import { canAccessStreamerDashboard } from "@/lib/streamer-guard";
+import { canUsePerStreamerTikfinityWebhook } from "@/lib/streamer-guard";
 import { getStreamerRuleByEventName } from "@/lib/streamer-tikfinity-rules";
 import { getStreamerPolicyForServer } from "@/lib/streamer-action-policy";
 import { isStreamerAllowedForServerHooks } from "@/lib/streamer-server-allowlist";
@@ -98,14 +98,14 @@ async function handleHook(
   }
 
   const user = await findUserById(hook.user_id);
-  if (!user || !canAccessStreamerDashboard(user)) {
+  if (!user || !(await canUsePerStreamerTikfinityWebhook(user))) {
     return withCors(
       NextResponse.json(
         {
           ok: false,
-          error: "Streamer subscription inactive or account not eligible",
+          error: "Streamer account not approved for TikFinity webhooks",
           debug:
-            "Renew your plan in RustMaxx → Streamer dashboard, or contact support.",
+            "RustMaxx staff must approve your streamer application (Admin → Streamer applications). Then the server owner enables streamer interactions for that server and selects which actions you may run.",
         },
         { status: 403 }
       )
