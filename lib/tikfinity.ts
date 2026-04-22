@@ -3,6 +3,13 @@
  * Used by the webhook endpoint and by the admin action-maps API.
  */
 
+/** Progressive RandomRaids presets (RustChaos → RandomRaids). */
+const CHAOS_RAID_ACTIONS = new Set<string>(["chaosraid_easy", "chaosraid_medium", "chaosraid_hard"]);
+
+export function isChaosRaidAction(action: string): boolean {
+  return CHAOS_RAID_ACTIONS.has(action);
+}
+
 /** Actions supported by RustChaos plugin (must match plugin whitelist). */
 export const TIKTRIGGER_ACTIONS = [
   "test",

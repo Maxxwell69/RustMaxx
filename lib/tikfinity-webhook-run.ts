@@ -13,6 +13,7 @@ import {
   getViewerNameFromQueryString,
   parseTikfinityWebhookBody,
   TIKTRIGGER_ACTIONS,
+  isChaosRaidAction,
   type TikTriggerAction,
   isTikTokSocialOnlyAction,
   isRustChaosStatusEffectAction,
@@ -1268,8 +1269,11 @@ export async function runTikfinityWebhook(
     ? parseSoloSpawnRepeatCount(q, body, ruleSpawnDefault)
     : 1;
 
-  /** Default on: chaos / raids can exceed Railway (~60s) HTTP limits—send RCON without awaiting reply. */
-  if (tikfinityRconAsync()) {
+  /**
+   * Fire-and-forget RCON (id 0) is unreliable for some servers; chaos raids need a real RCON response
+   * from rustchaos, so we always use runAndWait for chaosraid_*.
+   */
+  if (tikfinityRconAsync() && !isChaosRaidAction(action)) {
     for (let iter = 0; iter < soloSpawnRepeats; iter++) {
       const sent = sendCommand(server.id, command);
       if (!sent.ok) {
