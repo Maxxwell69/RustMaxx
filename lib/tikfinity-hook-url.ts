@@ -12,5 +12,11 @@ export function mergePathActionIntoRequest(
   if (!clean) return request;
   const u = request.nextUrl.clone();
   u.searchParams.set("action", clean);
-  return new NextRequest(u, request);
+  // Never pass `request` as the second arg to `new NextRequest` after the body may have been read
+  // (e.g. POST `await request.text()` in the route) — that locks the stream and throws on Railway.
+  // TikFinity handlers use the parsed `body` argument only, not `request.json()` / `request.text()`.
+  return new NextRequest(u.toString(), {
+    method: request.method,
+    headers: new Headers(request.headers),
+  });
 }

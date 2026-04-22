@@ -1,9 +1,8 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { parseTikfinityWebhookBody } from "@/lib/tikfinity";
 import { withCors } from "@/lib/tikfinity-webhook-run";
 import { handleTikfinityHookRequest } from "@/lib/tikfinity-hooks-handle";
 import { mergePathActionIntoRequest } from "@/lib/tikfinity-hook-url";
-import { NextResponse } from "next/server";
 
 export async function OPTIONS() {
   return withCors(new NextResponse(null, { status: 204 }));
@@ -27,6 +26,7 @@ export async function POST(
   context: { params: Promise<{ segment: string; wiredAction: string }> }
 ) {
   const { segment, wiredAction } = await context.params;
+  const merged = mergePathActionIntoRequest(request, wiredAction);
   let body: unknown;
   try {
     const text = await request.text();
@@ -35,6 +35,5 @@ export async function POST(
   } catch {
     body = {};
   }
-  const merged = mergePathActionIntoRequest(request, wiredAction);
   return handleTikfinityHookRequest(merged, segment, body);
 }
