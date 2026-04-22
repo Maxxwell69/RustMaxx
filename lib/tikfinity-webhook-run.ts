@@ -68,6 +68,19 @@ export type TikfinityWebhookRunContext = {
 const TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID =
   process.env.TIKFINITY_MAXXINVADERS_ANCHOR_STEAM_ID?.trim() ?? undefined;
 
+/**
+ * WebRCON reply wait for TikFinity hooks (rustchaos / oxide). Chaos raids and busy servers can exceed 15s.
+ * Override with TIKFINITY_RCON_TIMEOUT_MS (5000–300000). Default 60s.
+ */
+function tikfinityRconCommandTimeoutMs(): number {
+  const raw = process.env.TIKFINITY_RCON_TIMEOUT_MS?.trim();
+  if (raw) {
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 5000 && n <= 300000) return n;
+  }
+  return 60_000;
+}
+
 /** Single source for MaxxInvaders anchor resolution on every path (npcmaxx→MI, maxxinvaders, crew). */
 function buildAnchorResolveOptions(
   server: Pick<ServerRow, "tikfinity_anchor_steam_id">,
@@ -1245,10 +1258,11 @@ export async function runTikfinityWebhook(
     ? parseSoloSpawnRepeatCount(q, body, ruleSpawnDefault)
     : 1;
 
+  const rconCmdTimeoutMs = tikfinityRconCommandTimeoutMs();
   let rconResponse = "";
   try {
     for (let iter = 0; iter < soloSpawnRepeats; iter++) {
-      rconResponse = (await runAndWait(server.id, command, 15000)).trim();
+      rconResponse = (await runAndWait(server.id, command, rconCmdTimeoutMs)).trim();
       const chunkFailed =
         /^FAILED:/i.test(rconResponse) ||
         /^Unknown action:/i.test(rconResponse) ||
@@ -1267,17 +1281,19 @@ export async function runTikfinityWebhook(
       serverId: server.id,
       command,
     }).catch(() => {});
+    const sec = Math.round(rconCmdTimeoutMs / 1000);
     return withCors(
       NextResponse.json(
         {
           ok: false,
           error: msg,
           debug:
-            "RCON did not return within 15s or the socket errored. If the server is busy, try again; otherwise check WebRCON and RustChaos console output.",
+            `RCON did not return within ${sec}s or the socket errored. Increase TIKFINITY_RCON_TIMEOUT_MS if chaos raids need longer; otherwise check WebRCON and RustChaos console.`,
           step: "rcon_wait",
           command,
+          rconTimeoutMs: rconCmdTimeoutMs,
         },
-        { status: 502 }
+        { status: 504 }
       )
     );
   }
