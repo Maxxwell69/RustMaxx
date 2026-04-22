@@ -352,7 +352,7 @@ namespace Oxide.Plugins
         private const string LogPrefix = "[RustChaos]";
 
         // Whitelist of allowed actions. Only these are executed; no arbitrary commands.
-        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "crocodile", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50", "statuspoison", "statusdehydrated", "statushungry", "statusbleeding", "statusdart", "statusgodmode", "statusbullethell", "statusflippers", "statusflash", "statushealthx3" };
+        private static readonly string[] AllowedActions = { "test", "rose", "smoke", "fireworks", "scientist", "scientistflame", "wolf", "bear", "tiger", "panther", "crocodile", "shark", "pig", "chicken", "supply", "likes", "chaos", "scientistboat", "chaoswave", "chaoswavewolf", "chaoswavepig", "chaoswavetiger", "chaoswavepanther", "chaoswaverandom", "chaoswavecancel", "chaosraid_easy", "chaosraid_medium", "chaosraid_hard", "healinghands", "fullheal", "revivechaos", "chaosheli", "bunny1", "pistolammo50", "statuspoison", "statusdehydrated", "statushungry", "statusbleeding", "statusdart", "statusgodmode", "statusbullethell", "statusflippers", "statusflash", "statushealthx3" };
 
         // Land chaos wave: 1 bear, then 2, then 3 … up to 10 (next wave when all current bears dead). 10s countdown between waves.
         private const string ChaosWaveUiName = "RustChaos_WaveUI";
