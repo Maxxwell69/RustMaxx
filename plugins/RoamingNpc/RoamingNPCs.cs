@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.62")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.63")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -5684,6 +5684,14 @@ namespace Oxide.Plugins
             {
                 float t = Data?.Setup?.GetTimerRespawn() ?? 0;
                 Data?.OnDied();
+                // MaxxInvaders bridge bots: do not schedule timer respawn — death should clear the viewer bot until the next spawn/webhook.
+                // (Plain Kill was scheduling Respawn(data,true) and they returned to base/patrol anchor after a few seconds.)
+                if (Data?.SpawnedFromMaxxInvadersBridge == true)
+                {
+                    base.OnDied(info);
+                    return;
+                }
+
                 if(t > 0)
                 {
                     ulong user = userID;
