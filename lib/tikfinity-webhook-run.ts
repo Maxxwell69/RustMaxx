@@ -44,6 +44,7 @@ import {
   resolveRoamingWearPipeForOutfit,
 } from "@/lib/maxxinvaders-outfit-profiles";
 import {
+  parseSteam64Anchor,
   resolveMaxxInvadersAnchorSteam,
   type MaxxInvadersAnchorOptions,
 } from "@/lib/maxxinvaders-anchor-steam";
@@ -1223,10 +1224,10 @@ export async function runTikfinityWebhook(
     );
   }
 
-  const command =
-    messageArg != null
-      ? `rustchaos ${action} ${viewerArg} ${giftArg} ${rustChaosFourthArg} ${messageArg}`
-      : `rustchaos ${action} ${viewerArg} ${giftArg} ${rustChaosFourthArg}`;
+  const streamerSteamToken = parseSteam64Anchor(ctx.streamerProfileSteam64 ?? null);
+  let command = `rustchaos ${action} ${viewerArg} ${giftArg} ${rustChaosFourthArg}`;
+  if (streamerSteamToken != null) command += ` ${streamerSteamToken}`;
+  if (messageArg != null) command += ` ${messageArg}`;
 
   if (isRustChaosStatusEffectAction(action)) {
     console.log("[tikfinity webhook] status duration (s):", rustChaosFourthArg, "action:", action);

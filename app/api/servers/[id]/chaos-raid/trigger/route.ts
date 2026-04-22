@@ -4,6 +4,8 @@ import { pool } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireSession, getSessionFromRequest } from "@/lib/api-auth";
 import { getServerIfAccessible } from "@/lib/server-access";
+import { parseSteam64Anchor } from "@/lib/maxxinvaders-anchor-steam";
+import { findUserById } from "@/lib/users";
 
 const PRESETS = {
   easy: "chaosraid_easy",
@@ -53,7 +55,10 @@ export async function POST(
   const action = PRESETS[p];
   const viewerArg = sanitizeArg(body.viewerName ?? "Streamer");
   const giftArg = sanitizeArg(body.giftName ?? action);
-  const command = `rustchaos ${action} ${viewerArg} ${giftArg} 0`;
+  const userRow = await findUserById(session.userId);
+  const steamToken = parseSteam64Anchor(userRow?.steam_id ?? null);
+  let command = `rustchaos ${action} ${viewerArg} ${giftArg} 0`;
+  if (steamToken != null) command += ` ${steamToken}`;
 
   try {
     const connected = await ensureConnection(

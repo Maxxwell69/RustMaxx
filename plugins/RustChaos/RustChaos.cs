@@ -558,16 +558,38 @@ namespace Oxide.Plugins
 
             if (!arg.HasArgs(3))
             {
-                arg.ReplyWith("Usage: rustchaos <action> <viewerName> <giftName> [scrapOrDurationSec] [customMessage] — statuspoison/statusdehydrated/statushungry/statusbleeding/statusdart use arg4 as duration (default 10, max 120).");
+                arg.ReplyWith("Usage: rustchaos <action> <viewerName> <giftName> [scrapOrDurationSec] [17digitSteam64] [customMessage] — optional Steam64 (RustMaxx per-streamer webhook) targets that player instead of RustChaos.json StreamerName. status* actions use arg4 as duration.");
                 return;
             }
 
             string action = arg.GetString(0).ToLowerInvariant();
             string viewerName = arg.GetString(1);
             string giftName = arg.GetString(2);
-            int scrapAmount = arg.HasArgs(4) || arg.HasArgs(5) ? ParseRustChaosFourthNumericToken(arg) : 0;
-            string customMessage = arg.HasArgs(5) ? arg.GetString(4) : null;
-            if (string.IsNullOrWhiteSpace(customMessage)) customMessage = null;
+            int scrapAmount = arg.HasArgs(4) ? ParseRustChaosFourthNumericToken(arg) : 0;
+            ulong? streamerSteamFromWebhook = null;
+            string customMessage = null;
+            if (arg.HasArgs(6))
+            {
+                string tokenSteam = arg.GetString(4)?.Trim();
+                string tokenMsg = arg.GetString(5)?.Trim();
+                if (TryParseSteam64(tokenSteam, out ulong sidFrom6))
+                {
+                    streamerSteamFromWebhook = sidFrom6;
+                    customMessage = string.IsNullOrWhiteSpace(tokenMsg) ? null : tokenMsg;
+                }
+                else
+                {
+                    customMessage = string.IsNullOrWhiteSpace(tokenSteam) ? null : tokenSteam;
+                }
+            }
+            else if (arg.HasArgs(5))
+            {
+                string token5 = arg.GetString(4)?.Trim();
+                if (TryParseSteam64(token5, out ulong sidFrom5))
+                    streamerSteamFromWebhook = sidFrom5;
+                else
+                    customMessage = string.IsNullOrWhiteSpace(token5) ? null : token5;
+            }
 
             if (!IsAllowedAction(action))
             {
@@ -579,7 +601,7 @@ namespace Oxide.Plugins
             // Log every trigger to server console.
             Puts($"{LogPrefix} {viewerName} triggered action '{action}' from gift '{giftName}'" + (scrapAmount > 0 ? $" (+{scrapAmount} scrap)" : ""));
 
-            string failReply = ExecuteAction(action, viewerName, giftName, scrapAmount, customMessage);
+            string failReply = ExecuteAction(action, viewerName, giftName, scrapAmount, customMessage, streamerSteamFromWebhook);
             if (!string.IsNullOrEmpty(failReply))
             {
                 arg.ReplyWith(failReply);
@@ -625,14 +647,20 @@ namespace Oxide.Plugins
         #region Action execution
 
         /// <summary>Runs the action. Returns null on success; otherwise a single-line RCON reply starting with FAILED: (or other error) for webhooks.</summary>
-        private string ExecuteAction(string action, string viewerName, string giftName, int scrapAmount, string customMessage = null)
+        private string ExecuteAction(string action, string viewerName, string giftName, int scrapAmount, string customMessage = null, ulong? streamerSteamFromWebhook = null)
         {
-            BasePlayer target = GetStreamerPlayer();
+            BasePlayer target = ResolveStreamerTarget(streamerSteamFromWebhook);
             if (target == null && ActionRequiresPlayer(action))
             {
+                if (streamerSteamFromWebhook != null && streamerSteamFromWebhook.Value != 0UL)
+                {
+                    PrintWarning($"{LogPrefix} Streamer Steam64 {streamerSteamFromWebhook} not on server (online/sleeping). Action '{action}' cancelled.");
+                    return $"FAILED: Streamer not found for Steam64 {streamerSteamFromWebhook}. They must be online or sleeping on this server.";
+                }
+
                 string sn = _config?.StreamerName?.Trim() ?? "(empty)";
                 PrintWarning($"{LogPrefix} Streamer '{sn}' not online or name mismatch. Action '{action}' cancelled.");
-                return $"FAILED: Streamer not found. Set RustChaos.json StreamerName to their exact display name; they must be awake online OR sleeping on the server (not fully disconnected). Configured: '{sn}'.";
+                return $"FAILED: Streamer not found. Use a per-streamer RustMaxx webhook (sends Steam64) or set RustChaos.json StreamerName to their exact display name; they must be awake online OR sleeping on the server (not fully disconnected). Configured: '{sn}'.";
             }
 
             string ChatMsg(string fallback) => !string.IsNullOrEmpty(customMessage) ? customMessage : fallback;
@@ -4087,6 +4115,43 @@ namespace Oxide.Plugins
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Target streamer for TikFinity effects: optional Steam64 from RustMaxx per-streamer webhook, else config display name.
+        /// </summary>
+        private BasePlayer ResolveStreamerTarget(ulong? streamerSteamFromWebhook)
+        {
+            if (streamerSteamFromWebhook != null && streamerSteamFromWebhook.Value != 0UL)
+            {
+                ulong uid = streamerSteamFromWebhook.Value;
+                foreach (var player in BasePlayer.activePlayerList)
+                {
+                    if (player == null || !player.IsConnected || player.IsDead()) continue;
+                    if (player.userID == uid) return player;
+                }
+
+                foreach (var player in BasePlayer.sleepingPlayerList)
+                {
+                    if (player == null || player.IsDestroyed || player.IsDead()) continue;
+                    if (player.userID == uid) return player;
+                }
+
+                return null;
+            }
+
+            return GetStreamerPlayer();
+        }
+
+        private static bool TryParseSteam64(string s, out ulong steam64)
+        {
+            steam64 = 0UL;
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            s = s.Trim();
+            if (s.Length != 17) return false;
+            for (int i = 0; i < s.Length; i++)
+                if (!char.IsDigit(s[i])) return false;
+            return ulong.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out steam64) && steam64 != 0UL;
         }
 
         /// <summary>
