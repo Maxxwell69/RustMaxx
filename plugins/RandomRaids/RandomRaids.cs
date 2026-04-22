@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("RandomRaids", "Razor", "2.0.7")]
+    [Info("RandomRaids", "Razor", "2.0.8")]
     [Description("Npc's that randomly raid bases")]
     public class RandomRaids : RustPlugin
     {
@@ -1120,7 +1120,7 @@ namespace Oxide.Plugins
 
                     QueuedRoutine = StartCoroutine(GenerateEventMembers());
 
-                    // Attack heli is spawned after wave 1 ground troops finish (see GenerateEventMembers) so raiders arrive first.
+                    // Attack heli is spawned after wave 10 ground troops finish — see GenerateEventMembers (needs TotalNpcWaves >= 10).
 
                     if (_.configData.settings.useMarker)
                         marker = SpawnRaidMarker(location, EndEventTime);
@@ -1683,8 +1683,9 @@ namespace Oxide.Plugins
                    raidernewID = "";*/
                 stopSpawning();
 
-                // First wave only: spawn patrol heli after ground NPCs are out (StartEvent no longer spawns it immediately).
-                if (currentWave == 1 && config != null && config.attackCopter && heli == null && config.spawnCopter != null &&
+                // Wave 10 only: waves 1–9 are ground troops only; attack heli departs after wave 10 NPCs spawn. Set TotalNpcWaves >= 10 on the raid type.
+                if (currentWave == 10 && config != null && config.TotalNpcWaves >= 10 && config.attackCopter && heli == null &&
+                    config.spawnCopter != null &&
                     config.spawnCopter.Count > 0 && _ != null &&
                     _.configData.copterSettings.copterProfile != null)
                 {

@@ -1,0 +1,501 @@
+{
+  "Random settings": {
+    "GUI AnchorMin": "0.807 0.96",
+    "GUI AnchorMax": "0.996 0.99",
+    "GUI2 AnchorMin": "0.807 0.92",
+    "GUI2 AnchorMax": "0.996 0.95",
+    "GameTip display time in seconds": 2.0,
+    "Total raids allowed at once": 2,
+    "A player on the tc must be online": true,
+    "Use random raid timer": false,
+    "Random raid timer time": 3600,
+    "Chance of random raid at time (1-100)": 10,
+    "Authorized players Cooldown minutes before random raided again by chance": 1440,
+    "The maximum amount of time a rocket will fly before exploding": 4.0,
+    "Npc spawn damage delay": 2.0,
+    "Display global chat message on raid start": true,
+    "Display global map marker on raid start": true,
+    "Display Gui to base owners": false,
+    "Use GameTip announcement to player": false,
+    "Disable radio chatter": false,
+    "Wait until all NPC are dead before sending in next wave": false,
+    "Player must have randomraids.use inorder to get raided": false,
+    "Use world text to show base location": false,
+    "World text display time": 60.0,
+    "Lock airdrop to event players": false,
+    "Use discord Webhook": false,
+    "Discord Webhook URL": "",
+    "Discord Avatar URL": "http://images.myvector.xyz/discordimage.png"
+  },
+  "All Random Raid Types": {
+    "Random raid types": {
+      "easy": {
+        "Total auth players on tc needed": 1,
+        "Total npcs per wave": 10,
+        "How many extra waves": 1,
+        "Seconds untell next wave": 120,
+        "Npc fires Mlrs at base": false,
+        "Send in Attack Copter support": false,
+        "Total event time in seconds": 640,
+        "Npc drop loot on death": true,
+        "Spawn health of the npc": 100.0,
+        "Total rockets npc can fire": 20,
+        "Total explosives npc can toss": 10,
+        "Total AirDrops on event win": 1,
+        "Rocket damage scale": 1.0,
+        "Player damage scale from npc": 1.0,
+        "Auto turret damage scale to npc": 1.0,
+        "Raiders aimConeScale": 2.0,
+        "Throw Explosive item shortnames": [
+          "explosive.timed",
+          "explosive.satchel"
+        ],
+        "Spawn Attack Heli profile": [
+          "easy"
+        ],
+        "Spawn kits for the npcs": [],
+        "All npc receive the same kit": false,
+        "Names to give the npcs": [
+          "Cobalt Scientist"
+        ],
+        "CustomLoot config profile name": [],
+        "CustomLoot config profile names for AirDrop": [],
+        "AlphaLoot config profile names": [],
+        "AlphaLoot config profile names for AirDrop": [],
+        "Juggernaut config": [
+          "easy"
+        ],
+        "Surrender Item": "scrap",
+        "Surrender Item Name": "Scrap",
+        "Surrender costs": 200,
+        "Notify owners of incoming Random Raid Triggered By Timer": false,
+        "Min Base Blocks Size": 12
+      },
+      "medium": {
+        "Total auth players on tc needed": 2,
+        "Total npcs per wave": 15,
+        "How many extra waves": 1,
+        "Seconds untell next wave": 120,
+        "Npc fires Mlrs at base": false,
+        "Send in Attack Copter support": true,
+        "Total event time in seconds": 900,
+        "Npc drop loot on death": true,
+        "Spawn health of the npc": 200.0,
+        "Total rockets npc can fire": 20,
+        "Total explosives npc can toss": 10,
+        "Total AirDrops on event win": 1,
+        "Rocket damage scale": 1.0,
+        "Player damage scale from npc": 1.0,
+        "Auto turret damage scale to npc": 1.0,
+        "Raiders aimConeScale": 2.0,
+        "Throw Explosive item shortnames": [
+          "explosive.timed",
+          "explosive.satchel"
+        ],
+        "Spawn Attack Heli profile": [
+          "easy"
+        ],
+        "Spawn kits for the npcs": [],
+        "All npc receive the same kit": false,
+        "Names to give the npcs": [
+          "Cobalt Scientist"
+        ],
+        "CustomLoot config profile name": [],
+        "CustomLoot config profile names for AirDrop": [],
+        "AlphaLoot config profile names": [],
+        "AlphaLoot config profile names for AirDrop": [],
+        "Juggernaut config": [
+          "easy"
+        ],
+        "Surrender Item": "scrap",
+        "Surrender Item Name": "Scrap",
+        "Surrender costs": 400,
+        "Notify owners of incoming Random Raid Triggered By Timer": false,
+        "Min Base Blocks Size": 24
+      },
+      "hard": {
+        "Total auth players on tc needed": 3,
+        "Total npcs per wave": 20,
+        "How many extra waves": 10,
+        "Seconds untell next wave": 120,
+        "Npc fires Mlrs at base": false,
+        "Send in Attack Copter support": true,
+        "Total event time in seconds": 7200,
+        "Npc drop loot on death": true,
+        "Spawn health of the npc": 400.0,
+        "Total rockets npc can fire": 20,
+        "Total explosives npc can toss": 10,
+        "Total AirDrops on event win": 1,
+        "Rocket damage scale": 1.0,
+        "Player damage scale from npc": 1.0,
+        "Auto turret damage scale to npc": 1.0,
+        "Raiders aimConeScale": 2.0,
+        "Throw Explosive item shortnames": [
+          "explosive.timed",
+          "explosive.satchel"
+        ],
+        "Spawn Attack Heli profile": [
+          "easy"
+        ],
+        "Spawn kits for the npcs": [],
+        "All npc receive the same kit": false,
+        "Names to give the npcs": [
+          "Cobalt Scientist"
+        ],
+        "CustomLoot config profile name": [],
+        "CustomLoot config profile names for AirDrop": [],
+        "AlphaLoot config profile names": [],
+        "AlphaLoot config profile names for AirDrop": [],
+        "Juggernaut config": [
+          "easy"
+        ],
+        "Surrender Item": "scrap",
+        "Surrender Item Name": "Scrap",
+        "Surrender costs": 600,
+        "Notify owners of incoming Random Raid Triggered By Timer": false,
+        "Min Base Blocks Size": 32
+      },
+      "expert": {
+        "Total auth players on tc needed": 4,
+        "Total npcs per wave": 30,
+        "How many extra waves": 1,
+        "Seconds untell next wave": 120,
+        "Npc fires Mlrs at base": false,
+        "Send in Attack Copter support": true,
+        "Total event time in seconds": 1500,
+        "Npc drop loot on death": true,
+        "Spawn health of the npc": 400.0,
+        "Total rockets npc can fire": 20,
+        "Total explosives npc can toss": 10,
+        "Total AirDrops on event win": 1,
+        "Rocket damage scale": 1.0,
+        "Player damage scale from npc": 1.0,
+        "Auto turret damage scale to npc": 1.0,
+        "Raiders aimConeScale": 2.0,
+        "Throw Explosive item shortnames": [
+          "explosive.timed",
+          "explosive.satchel"
+        ],
+        "Spawn Attack Heli profile": [
+          "easy"
+        ],
+        "Spawn kits for the npcs": [],
+        "All npc receive the same kit": false,
+        "Names to give the npcs": [
+          "Cobalt Scientist"
+        ],
+        "CustomLoot config profile name": [],
+        "CustomLoot config profile names for AirDrop": [],
+        "AlphaLoot config profile names": [],
+        "AlphaLoot config profile names for AirDrop": [],
+        "Juggernaut config": [
+          "medium"
+        ],
+        "Surrender Item": "scrap",
+        "Surrender Item Name": "Scrap",
+        "Surrender costs": 800,
+        "Notify owners of incoming Random Raid Triggered By Timer": false,
+        "Min Base Blocks Size": 42
+      },
+      "nightmare": {
+        "Total auth players on tc needed": 5,
+        "Total npcs per wave": 30,
+        "How many extra waves": 1,
+        "Seconds untell next wave": 120,
+        "Npc fires Mlrs at base": false,
+        "Send in Attack Copter support": true,
+        "Total event time in seconds": 2100,
+        "Npc drop loot on death": true,
+        "Spawn health of the npc": 400.0,
+        "Total rockets npc can fire": 20,
+        "Total explosives npc can toss": 10,
+        "Total AirDrops on event win": 1,
+        "Rocket damage scale": 1.0,
+        "Player damage scale from npc": 1.0,
+        "Auto turret damage scale to npc": 1.0,
+        "Raiders aimConeScale": 2.0,
+        "Throw Explosive item shortnames": [
+          "explosive.timed",
+          "explosive.satchel"
+        ],
+        "Spawn Attack Heli profile": [
+          "easy"
+        ],
+        "Spawn kits for the npcs": [],
+        "All npc receive the same kit": false,
+        "Names to give the npcs": [
+          "Cobalt Scientist"
+        ],
+        "CustomLoot config profile name": [],
+        "CustomLoot config profile names for AirDrop": [],
+        "AlphaLoot config profile names": [],
+        "AlphaLoot config profile names for AirDrop": [],
+        "Juggernaut config": [
+          "medium"
+        ],
+        "Surrender Item": "scrap",
+        "Surrender Item Name": "Scrap",
+        "Surrender costs": 1000,
+        "Notify owners of incoming Random Raid Triggered By Timer": false,
+        "Min Base Blocks Size": 60
+      }
+    }
+  },
+  "AttackCopter profiles": {
+    "Profile Names": {
+      "easy": {
+        "Heli float health": 1000.0,
+        "Total crates to drop": 2,
+        "Heli strafe cooldown": 50.0,
+        "Heli can strafe x times": 3
+      }
+    }
+  },
+  "Block Random raid in colider": {
+    "Blocked": [
+      "iceberg",
+      "ice_berg",
+      "ice_sheet",
+      "icesheet",
+      "cliff",
+      "cave"
+    ]
+  },
+  "Raidable Base plugin settings": {
+    "Raid player on Raidable Base Completed": false,
+    "Warn player in chat of upcoming revenge on them": false,
+    "Raidable Base Settings": {
+      "0": {
+        "Total amount of mode complete before ever has chance": 3,
+        "Reset kill count after chance happened": true,
+        "Raidable Base Completed Delay Before Raid chance happens": 320.0,
+        "raid chance (1-100)": 10,
+        "Cooldown minutes after raid chance happenes": 1440,
+        "Random raid to send them if chance": [
+          "easy"
+        ]
+      },
+      "1": {
+        "Total amount of mode complete before ever has chance": 3,
+        "Reset kill count after chance happened": true,
+        "Raidable Base Completed Delay Before Raid chance happens": 320.0,
+        "raid chance (1-100)": 10,
+        "Cooldown minutes after raid chance happenes": 1440,
+        "Random raid to send them if chance": [
+          "easy",
+          "medium"
+        ]
+      },
+      "2": {
+        "Total amount of mode complete before ever has chance": 3,
+        "Reset kill count after chance happened": true,
+        "Raidable Base Completed Delay Before Raid chance happens": 320.0,
+        "raid chance (1-100)": 10,
+        "Cooldown minutes after raid chance happenes": 1440,
+        "Random raid to send them if chance": [
+          "easy",
+          "medium"
+        ]
+      },
+      "3": {
+        "Total amount of mode complete before ever has chance": 3,
+        "Reset kill count after chance happened": true,
+        "Raidable Base Completed Delay Before Raid chance happens": 320.0,
+        "raid chance (1-100)": 10,
+        "Cooldown minutes after raid chance happenes": 1440,
+        "Random raid to send them if chance": [
+          "easy",
+          "medium",
+          "hard"
+        ]
+      },
+      "4": {
+        "Total amount of mode complete before ever has chance": 3,
+        "Reset kill count after chance happened": true,
+        "Raidable Base Completed Delay Before Raid chance happens": 320.0,
+        "raid chance (1-100)": 10,
+        "Cooldown minutes after raid chance happenes": 1440,
+        "Random raid to send them if chance": [
+          "hard",
+          "expert",
+          "nightmare"
+        ]
+      }
+    }
+  },
+  "Trigger by npc kills": {
+    "Enable log kills and random raid on kills": false,
+    "Reset npc kills on player raided.": false,
+    "Warn player in chat of upcoming revenge on them": false,
+    "Use total players on tc check on type": false,
+    "Use min Base size check on type": false,
+    "Enable combine npc kills list": false,
+    "Combine npc kills list": [
+      "scientistnpc_patrol",
+      "scientistnpc_oilrig",
+      "scientistnpc_heavy",
+      "sentry.scientist.barge",
+      "sentry.scientist.barge.static",
+      "sentry.scientist.static",
+      "heavyscientist_youtooz.deployed",
+      "ch47scientists.entity",
+      "scientist_corpse",
+      "scientistnpc_arena",
+      "scientistnpc_cargo",
+      "scientistnpc_cargo_turret_any",
+      "scientistnpc_cargo_turret_lr300",
+      "scientistnpc_ch47_gunner",
+      "scientistnpc_excavator",
+      "scientistnpc_full_any",
+      "scientistnpc_full_lr300",
+      "scientistnpc_full_mp5",
+      "scientistnpc_full_pistol",
+      "scientistnpc_full_shotgun",
+      "scientistnpc_junkpile",
+      "sientistnpc_peacekeeper",
+      "scientistnpc_roam",
+      "scientistnpc_roam_nvg_variant",
+      "scientistnpc_roamtethered",
+      "npc_tunneldweller",
+      "npc_tunneldwellerspawned",
+      "npc_underwaterdweller",
+      "scarecrow"
+    ],
+    "Combine Profile to use": {
+      "Total amount of Npc killed before chance can happen": 70,
+      "Reset kill count after chance happened": false,
+      "Delay before chance happens": 320.0,
+      "Raid chance (1-100)": 10,
+      "Cooldown minutes before chance can happen again": 1440,
+      "Random raid to send them if chance": [
+        "easy"
+      ]
+    },
+    "Npc kills settings": {
+      "scientistnpc_heavy": {
+        "Total amount of Npc killed before chance can happen": 30,
+        "Reset kill count after chance happened": false,
+        "Delay before chance happens": 320.0,
+        "Raid chance (1-100)": 10,
+        "Cooldown minutes before chance can happen again": 1440,
+        "Random raid to send them if chance": [
+          "medium"
+        ]
+      },
+      "scientistnpc_oilrig": {
+        "Total amount of Npc killed before chance can happen": 60,
+        "Reset kill count after chance happened": false,
+        "Delay before chance happens": 320.0,
+        "Raid chance (1-100)": 10,
+        "Cooldown minutes before chance can happen again": 1440,
+        "Random raid to send them if chance": [
+          "easy"
+        ]
+      },
+      "scientistnpc_patrol": {
+        "Total amount of Npc killed before chance can happen": 60,
+        "Reset kill count after chance happened": false,
+        "Delay before chance happens": 320.0,
+        "Raid chance (1-100)": 10,
+        "Cooldown minutes before chance can happen again": 1440,
+        "Random raid to send them if chance": [
+          "easy"
+        ]
+      },
+      "scientistnpc_junkpile": {
+        "Total amount of Npc killed before chance can happen": 60,
+        "Reset kill count after chance happened": false,
+        "Delay before chance happens": 320.0,
+        "Raid chance (1-100)": 10,
+        "Cooldown minutes before chance can happen again": 1440,
+        "Random raid to send them if chance": [
+          "easy"
+        ]
+      }
+    }
+  },
+  "Juggernaut profiles": {
+    "easy": {
+      "Juggernaut spawns on witch Wave number/Total to spawn": {
+        "1": 1
+      },
+      "Spawn health of the juggernaut": 500.0,
+      "Player damage scale from the juggernaut": 1.0,
+      "juggernaut aimConeScale": 2.0,
+      "Names to give the juggernaut": [
+        "Juggernaut Raider"
+      ],
+      "Spawn kits for the juggernaut": []
+    },
+    "medium": {
+      "Juggernaut spawns on witch Wave number/Total to spawn": {
+        "1": 2
+      },
+      "Spawn health of the juggernaut": 700.0,
+      "Player damage scale from the juggernaut": 1.0,
+      "juggernaut aimConeScale": 2.0,
+      "Names to give the juggernaut": [
+        "Juggernaut Raider"
+      ],
+      "Spawn kits for the juggernaut": []
+    }
+  },
+  "Item profiles": {
+    "easy": {
+      "Raid call item skin": 2893480896,
+      "Raid call item name": "Npc Raid Level 1",
+      "LootContainer Spawn enabled": false,
+      "Can Spawn In LootContainer types": [
+        "crate_normal",
+        "crate_normal_2"
+      ],
+      "LootContainer Spawn Chance 1-100": 5.0
+    },
+    "medium": {
+      "Raid call item skin": 2893480635,
+      "Raid call item name": "Npc Raid Level 2",
+      "LootContainer Spawn enabled": false,
+      "Can Spawn In LootContainer types": [
+        "crate_normal",
+        "crate_normal_2",
+        "heli_crate"
+      ],
+      "LootContainer Spawn Chance 1-100": 5.0
+    },
+    "hard": {
+      "Raid call item skin": 2893481009,
+      "Raid call item name": "Npc Raid Level 3",
+      "LootContainer Spawn enabled": false,
+      "Can Spawn In LootContainer types": [
+        "bradley_crate",
+        "crate_elite"
+      ],
+      "LootContainer Spawn Chance 1-100": 5.0
+    },
+    "expert": {
+      "Raid call item skin": 2893481137,
+      "Raid call item name": "Npc Raid Level 4",
+      "LootContainer Spawn enabled": false,
+      "Can Spawn In LootContainer types": [
+        "bradley_crate",
+        "crate_elite"
+      ],
+      "LootContainer Spawn Chance 1-100": 5.0
+    },
+    "nightmare": {
+      "Raid call item skin": 2893482048,
+      "Raid call item name": "Npc Raid Level 5",
+      "LootContainer Spawn enabled": false,
+      "Can Spawn In LootContainer types": [
+        "bradley_crate",
+        "crate_elite"
+      ],
+      "LootContainer Spawn Chance 1-100": 5.0
+    }
+  },
+  "Version": {
+    "Major": 2,
+    "Minor": 0,
+    "Patch": 1
+  }
+}
