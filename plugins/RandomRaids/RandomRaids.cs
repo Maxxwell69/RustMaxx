@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("RandomRaids", "Razor", "2.0.4")]
+    [Info("RandomRaids", "Razor", "2.0.5")]
     [Description("Npc's that randomly raid bases")]
     public class RandomRaids : RustPlugin
     {
@@ -581,13 +581,13 @@ namespace Oxide.Plugins
                 [JsonProperty(PropertyName = "Display Gui to base owners")]
                 public bool useGUI { get; set; }
                 [JsonProperty(PropertyName = "GUI AnchorMin")]
-                public string AnchorMin = "0.807 0.96";
+                public string AnchorMin = "0.56 0.862";
                 [JsonProperty(PropertyName = "GUI AnchorMax")]
-                public string AnchorMax = "0.996 0.99";
+                public string AnchorMax = "0.998 0.992";
                 [JsonProperty(PropertyName = "GUI2 AnchorMin")]
-                public string AnchorMin2 = "0.807 0.92";
+                public string AnchorMin2 = "0.56 0.778";
                 [JsonProperty(PropertyName = "GUI2 AnchorMax")]
-                public string AnchorMax2 = "0.996 0.95";
+                public string AnchorMax2 = "0.998 0.852";
                 [JsonProperty(PropertyName = "Use GameTip announcement to player")]
                 public bool gameTip { get; set; }
                 [JsonProperty(PropertyName = "GameTip display time in seconds")]
@@ -972,6 +972,43 @@ namespace Oxide.Plugins
             }
         }
         #endregion Config
+
+        /// <summary>Parses Cui anchor "minX minY" / "maxX maxY" (normalized 0–1).</summary>
+        private static bool TryParseHudAnchor(string raw, out float x, out float y)
+        {
+            x = y = 0f;
+            if (string.IsNullOrWhiteSpace(raw)) return false;
+            string[] parts = raw.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2) return false;
+            return float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)
+                && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y);
+        }
+
+        /// <summary>
+        /// Oxide configs often used a ~3% tall strip for the wave panel — chaos HUD is two lines + countdown and was clipped (invisible).
+        /// When the configured wave panel is shorter than ~7.5% of the screen, use a readable fallback layout (timer above surrender).
+        /// </summary>
+        private static void ResolveRaidHudPanels(ConfigData.Settings settings,
+            out string waveAnchorMin, out string waveAnchorMax,
+            out string surrenderAnchorMin, out string surrenderAnchorMax)
+        {
+            waveAnchorMin = settings.AnchorMin ?? "0.56 0.862";
+            waveAnchorMax = settings.AnchorMax ?? "0.998 0.992";
+            surrenderAnchorMin = settings.AnchorMin2 ?? "0.56 0.778";
+            surrenderAnchorMax = settings.AnchorMax2 ?? "0.998 0.852";
+
+            if (TryParseHudAnchor(settings.AnchorMin, out _, out float ymin) &&
+                TryParseHudAnchor(settings.AnchorMax, out _, out float ymax))
+            {
+                if (ymax - ymin >= 0.075f)
+                    return;
+            }
+
+            waveAnchorMin = "0.56 0.862";
+            waveAnchorMax = "0.998 0.992";
+            surrenderAnchorMin = "0.56 0.778";
+            surrenderAnchorMax = "0.998 0.852";
+        }
 
         #region EventRandomManager
         public static float ProjectileDistToGravity(float x, float y, float θ, float v)
@@ -1406,10 +1443,13 @@ namespace Oxide.Plugins
 
                 var elements = new CuiElementContainer();
 
+                ResolveRaidHudPanels(_.configData.settings,
+                    out string waveMin, out string waveMax, out string surrenderMin, out string surrenderMax);
+
                 var BlockMsg = elements.Add(new CuiPanel
                 {
                     Image = { Color = "0.22 0.12 0.04 0.94" },
-                    RectTransform = { AnchorMin = _.configData.settings.AnchorMin, AnchorMax = _.configData.settings.AnchorMax } }, "Hud", "RtimerS" + BlockName);
+                    RectTransform = { AnchorMin = waveMin, AnchorMax = waveMax } }, "Hud", "RtimerS" + BlockName);
 
                 elements.Add(new CuiElement
                 {
@@ -1420,20 +1460,20 @@ namespace Oxide.Plugins
 
                 elements.Add(new CuiLabel
                 {
-                    RectTransform = { AnchorMin = "0.15 0", AnchorMax = "1 1" },
-                    Text = { Text = message, FontSize = isChaosRaid ? 12 : 11, Align = TextAnchor.MiddleLeft, Color = "1 0.58 0.12 1" }
+                    RectTransform = { AnchorMin = "0.14 0.04", AnchorMax = "0.99 0.96" },
+                    Text = { Text = message, FontSize = isChaosRaid ? 15 : 14, Align = TextAnchor.UpperLeft, Color = "1 0.58 0.12 1" }
                 }, BlockMsg);
 
                 var BlockSurrender = elements.Add(new CuiPanel
                 {
                     Image = { Color = "0.22 0.12 0.04 0.94" },
-                    RectTransform = { AnchorMin = _.configData.settings.AnchorMin2, AnchorMax = _.configData.settings.AnchorMax2 } }, "Hud", "RsurrenderS" + BlockName);
+                    RectTransform = { AnchorMin = surrenderMin, AnchorMax = surrenderMax } }, "Hud", "RsurrenderS" + BlockName);
 
 
                 elements.Add(new CuiLabel
                 {
-                    RectTransform = { AnchorMin = "0.05 0", AnchorMax = "1 1" },
-                    Text = { Text = message2, FontSize = 11, Align = TextAnchor.MiddleLeft, Color = "1 0.58 0.12 1" }
+                    RectTransform = { AnchorMin = "0.05 0.08", AnchorMax = "0.98 0.92" },
+                    Text = { Text = message2, FontSize = 12, Align = TextAnchor.MiddleLeft, Color = "1 0.58 0.12 1" }
                 }, BlockSurrender);
 
                 CuiHelper.AddUi(current, elements);
