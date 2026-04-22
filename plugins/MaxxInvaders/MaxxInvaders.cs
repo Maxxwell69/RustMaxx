@@ -24,7 +24,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.57")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.58")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1667,9 +1667,9 @@ namespace Oxide.Plugins
                 return cup != null && AuthEnumerableContainsSteam(cup.authorizedPlayers, steamId);
             }
 
+            // Flame turret: no per-deployable authorizedPlayers on all Rust builds — use linked TC only.
             if (initiator is FlameTurret ft)
             {
-                if (AuthEnumerableContainsSteam(ft.authorizedPlayers, steamId)) return true;
                 var cup2 = ft.GetBuildingPrivilege();
                 return cup2 != null && AuthEnumerableContainsSteam(cup2.authorizedPlayers, steamId);
             }
