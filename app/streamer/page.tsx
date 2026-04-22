@@ -12,6 +12,7 @@ import {
 } from "@/lib/tikfinity";
 import {
   buildStreamerHookQueryUrl,
+  buildStreamerHookPathActionUrl,
   canBuildStreamerHookUrl,
   mergePresetParamsWithProfileAnchor,
   MAXX_GROUP_ORDER,
@@ -743,6 +744,10 @@ export default function StreamerDashboardPage() {
           { action: exampleRuleForUrl }
         )
       : null;
+  const pathActionChaosExample =
+    firstHook?.webhookUrl && canBuildStreamerHookUrl(firstHook.webhookUrl, firstToken)
+      ? buildStreamerHookPathActionUrl(firstHook.webhookUrl, "chaosraid_easy")
+      : null;
 
   const serverIdsWithHooks = new Set(hooks.map((h) => h.serverId));
   const serversAvailableToAdd = servers.filter((s) => !serverIdsWithHooks.has(s.id));
@@ -790,6 +795,20 @@ export default function StreamerDashboardPage() {
             You add a webhook per server here, then paste the URL into TikFinity and map gifts/events to{" "}
             <code className="rounded bg-zinc-800 px-1 text-xs">?action=…</code> keys the owner enabled (e.g.{" "}
             <code className="rounded bg-zinc-800 px-1 text-xs">chaosraid_easy</code>).
+          </li>
+          <li>
+            <strong className="text-zinc-100">Chaos raids &amp; long actions:</strong> TikFinity often POSTs without your{" "}
+            <code className="rounded bg-zinc-800 px-1 text-xs">?query</code>. Put the action{" "}
+            <strong className="text-zinc-100">in the path</strong> instead — same hook key, then{" "}
+            <code className="rounded bg-zinc-800 px-1 text-xs">/chaosraid_easy</code> (or medium/hard).{" "}
+            {pathActionChaosExample ? (
+              <>
+                Example:{" "}
+                <code className="break-all rounded bg-zinc-900 px-1 py-0.5 text-[11px] text-emerald-500/95">
+                  {pathActionChaosExample}
+                </code>
+              </>
+            ) : null}
           </li>
         </ol>
       </section>

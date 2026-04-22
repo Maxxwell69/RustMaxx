@@ -76,6 +76,18 @@ export function buildStreamerHookQueryUrl(
   return parts.length ? `${webhookBase}?${parts.join("&")}` : webhookBase;
 }
 
+/**
+ * Action in the path (avoids TikFinity / some clients dropping `?action=` on POST). See
+ * `app/api/tikfinity/hooks/[segment]/[wiredAction]/route.ts`.
+ * Example: `https://www.rustmaxx.com/api/tikfinity/hooks/{opaqueKey}/chaosraid_easy`
+ */
+export function buildStreamerHookPathActionUrl(webhookBase: string, actionKey: string): string {
+  const b = webhookBase.replace(/\/$/, "");
+  const a = actionKey.replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase();
+  if (!a) return b;
+  return `${b}/${a}`;
+}
+
 const STEAM64_RE = /^\d{17}$/;
 
 /**
