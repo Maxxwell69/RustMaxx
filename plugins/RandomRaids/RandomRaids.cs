@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("RandomRaids", "Razor", "2.0.3")]
+    [Info("RandomRaids", "Razor", "2.0.4")]
     [Description("Npc's that randomly raid bases")]
     public class RandomRaids : RustPlugin
     {
@@ -694,6 +694,7 @@ namespace Oxide.Plugins
                     damageDelay = 2f,
                     useChat = true,
                     useMarker = true,
+                    useGUI = true,
                     disableChatter = false,
                     pauseWave = false,
                     musthavePerm = false,
@@ -1058,7 +1059,9 @@ namespace Oxide.Plugins
                         }
                     }
                 }
-                manager.sendGUI = _.configData.settings.useGUI;
+                bool chaosRaidHud =
+                    t != null && t.StartsWith("chaos_", StringComparison.OrdinalIgnoreCase);
+                manager.sendGUI = _.configData.settings.useGUI || chaosRaidHud;
                 return manager;
             }
 
@@ -1256,16 +1259,10 @@ namespace Oxide.Plugins
                     if (send)
                     {
                         lastUINotification = DateTime.Now;
-                        if (_onlinePlayers.Count <= 0)
-                        {
-                            updatePlayers();
-                        }
-                        else
-                        {
-                            foreach (BasePlayer onPlayers in _onlinePlayers)
-                                if (onPlayers != null && onPlayers.IsConnected)
-                                    SendClockGUI(onPlayers);
-                        }
+                        updatePlayers();
+                        foreach (BasePlayer onPlayers in _onlinePlayers)
+                            if (onPlayers != null && onPlayers.IsConnected)
+                                SendClockGUI(onPlayers);
                     }
                 }
 
@@ -1359,10 +1356,17 @@ namespace Oxide.Plugins
 
             public void updatePlayers()
             {
+                for (int i = _onlinePlayers.Count - 1; i >= 0; i--)
+                {
+                    BasePlayer p = _onlinePlayers[i];
+                    if (p == null || !p.IsConnected)
+                        _onlinePlayers.RemoveAt(i);
+                }
+
                 foreach (var user in _authedPlayers)
                 {
                     BasePlayer TCplayer = BasePlayer.FindByID(user);
-                    if (TCplayer != null && !_onlinePlayers.Contains(TCplayer))
+                    if (TCplayer != null && TCplayer.IsConnected && !_onlinePlayers.Contains(TCplayer))
                         _onlinePlayers.Add(TCplayer);
                 }
             }
