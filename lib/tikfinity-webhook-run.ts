@@ -164,7 +164,7 @@ function logMaxxInvadersSpawnFailure(
       : spawnPos && anchored
         ? " — anchor Steam must be online/sleeping on map; try open ground or DefaultSpawnRadius/SpawnAttempts in MaxxInvaders.json"
         : "";
-  const head = `[tikfinity webhook] ${route} ${spawnMi.step} server=${meta.serverId} anchor=${anchored ? "set" : "MISSING"}`;
+  const head = `[tikfinity webhook] ${route} ${spawnMi.step} server=${meta.serverId} steam_anchor=${anchored ? "resolved" : "missing"}`;
   if (spawnPos) {
     console.warn(`${head}${hint}${ctxHint}`);
   } else {

@@ -2,6 +2,8 @@
  * TikFinity webhook query presets for MaxxInvaders / Roaming viewer bots (streamer per-hook URLs).
  */
 
+import { coerceSteam64Anchor } from "@/lib/maxxinvaders-anchor-steam";
+
 export type MaxxPresetGroup = "templates" | "outfits" | "characters";
 
 export type StreamerMaxxPreset = {
@@ -88,8 +90,6 @@ export function buildStreamerHookPathActionUrl(webhookBase: string, actionKey: s
   return `${b}/${a}`;
 }
 
-const STEAM64_RE = /^\d{17}$/;
-
 /**
  * Adds `anchorSteam` so TikFinity paste-in URLs match resolveMaxxInvadersAnchorSteam (query wins over Profile DB).
  * Call with Profile Steam64 from streamer state when building dashboard URLs.
@@ -98,8 +98,10 @@ export function mergePresetParamsWithProfileAnchor(
   presetParams: Record<string, string>,
   profileSteam64: string | null | undefined
 ): Record<string, string> {
-  const id = typeof profileSteam64 === "string" ? profileSteam64.trim() : "";
-  if (!STEAM64_RE.test(id)) return { ...presetParams };
+  const id = coerceSteam64Anchor(
+    typeof profileSteam64 === "string" ? profileSteam64 : null
+  );
+  if (!id) return { ...presetParams };
   return { ...presetParams, anchorSteam: id };
 }
 
