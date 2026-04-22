@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.55")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.56")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -100,6 +100,8 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermDebug, this);
             permission.RegisterPermission(PermApprovedStreamer, this);
             Subscribe(nameof(OnEntityTakeDamage));
+            Subscribe(nameof(OnTurretTarget));
+            Subscribe(nameof(CanBeTargeted));
             Subscribe(nameof(OnPlayerDisconnected));
             Subscribe(nameof(OnPlayerInput));
         }
@@ -225,6 +227,13 @@ namespace Oxide.Plugins
             /// When true, new Roaming bridge bots start on bridge task <c>protect</c> (defensive near streamer/home) until you assign wood/gather/etc. Requires a resolvable anchor Steam ID (spawn arg or <see cref="DefaultAnchorSteamId"/>).
             /// </summary>
             public bool SpawnWithProtectNearHome { get; set; } = true;
+
+            /// <summary>
+            /// When true, auto turrets (and flame turrets) that are authorized for the invader anchor Steam ID
+            /// do not damage or acquire MaxxInvaders NPCs. Other damage sources unchanged. RandomRaids RandomRaider NPCs are not
+            /// registered here, so raid bots still take full turret damage.
+            /// </summary>
+            public bool ProtectInvadersFromAnchorAuthorizedTurrets { get; set; } = true;
 
             /// <summary>
             /// Roaming bridge: tool cupboard net ID saved from the Tasks tab (or chat). Applied to new spawns and on plugin load.
@@ -1600,11 +1609,101 @@ namespace Oxide.Plugins
             return m == "hostile" || m == "attackplayer";
         }
 
+        /// <summary>
+        /// True if steamId appears on the deployable turret auth list or its current building privilege
+        /// (same idea as players the turret is configured not to shoot).
+        /// </summary>
+        private static bool DeployableTurretAuthedForSteam(BaseEntity initiator, ulong steamId)
+        {
+            if (initiator == null || steamId == 0UL) return false;
+            if (initiator is AutoTurret at)
+            {
+                foreach (var e in at.authorizedPlayers)
+                {
+                    if (e.userid == steamId) return true;
+                }
+
+                var cup = at.GetBuildingPrivilege();
+                if (cup != null)
+                {
+                    foreach (var e in cup.authorizedPlayers)
+                    {
+                        if (e.userid == steamId) return true;
+                    }
+                }
+
+                return false;
+            }
+
+            if (initiator is FlameTurret ft)
+            {
+                foreach (var e in ft.authorizedPlayers)
+                {
+                    if (e.userid == steamId) return true;
+                }
+
+                var cup2 = ft.GetBuildingPrivilege();
+                if (cup2 != null)
+                {
+                    foreach (var e in cup2.authorizedPlayers)
+                    {
+                        if (e.userid == steamId) return true;
+                    }
+                }
+
+                return false;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Prevents auto turrets from locking viewer bots that belong to an anchor on the turret auth list.
+        /// </summary>
+        private object OnTurretTarget(AutoTurret turret, BaseCombatEntity target)
+        {
+            if (!_cfg.ProtectInvadersFromAnchorAuthorizedTurrets || turret == null || target == null) return null;
+            var bp = target as BasePlayer;
+            if (bp == null || !bp.IsNpc) return null;
+            if (!_registry.TryGetByEntity(target.net.ID.Value, out var r) || r.AnchorSteamId == 0UL) return null;
+            if (DeployableTurretAuthedForSteam(turret, r.AnchorSteamId)) return true;
+            return null;
+        }
+
+        /// <summary>Oxide: AutoTurret.ObjectVisible — return false so the turret does not treat this entity as a valid target.</summary>
+        private object CanBeTargeted(BaseCombatEntity entity, AutoTurret turret)
+        {
+            if (!_cfg.ProtectInvadersFromAnchorAuthorizedTurrets || entity == null || turret == null) return null;
+            var bp = entity as BasePlayer;
+            if (bp == null || !bp.IsNpc) return null;
+            if (!_registry.TryGetByEntity(entity.net.ID.Value, out var r) || r.AnchorSteamId == 0UL) return null;
+            if (DeployableTurretAuthedForSteam(turret, r.AnchorSteamId)) return false;
+            return null;
+        }
+
+        /// <summary>Same team rule for flame turrets (RandomRaids raiders are not in the MaxxInvaders registry).</summary>
+        private object CanBeTargeted(BaseCombatEntity entity, FlameTurret turret)
+        {
+            if (!_cfg.ProtectInvadersFromAnchorAuthorizedTurrets || entity == null || turret == null) return null;
+            var bp = entity as BasePlayer;
+            if (bp == null || !bp.IsNpc) return null;
+            if (!_registry.TryGetByEntity(entity.net.ID.Value, out var r) || r.AnchorSteamId == 0UL) return null;
+            if (DeployableTurretAuthedForSteam(turret, r.AnchorSteamId)) return false;
+            return null;
+        }
+
         /// <summary>Block invader NPC damage to real players when mode is not explicitly hostile.</summary>
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null || info == null) return null;
             var victim = entity as BasePlayer;
+
+            if (_cfg.ProtectInvadersFromAnchorAuthorizedTurrets && victim != null && victim.IsNpc &&
+                _registry.TryGetByEntity(entity.net.ID.Value, out var invaderForTurret) &&
+                invaderForTurret.AnchorSteamId != 0UL && info.Initiator != null &&
+                DeployableTurretAuthedForSteam(info.Initiator, invaderForTurret.AnchorSteamId))
+                return true;
+
             if (victim == null || victim.IsNpc) return null;
             var attacker = info.InitiatorPlayer as BasePlayer ?? info.Initiator as BasePlayer;
             if (attacker == null || !attacker.IsNpc) return null;
@@ -4669,6 +4768,10 @@ namespace Oxide.Plugins
                 case nameof(InvaderConfig.SpawnWithProtectNearHome):
                     _cfg.SpawnWithProtectNearHome = !_cfg.SpawnWithProtectNearHome;
                     break;
+                case nameof(InvaderConfig.ProtectInvadersFromAnchorAuthorizedTurrets):
+                    _cfg.ProtectInvadersFromAnchorAuthorizedTurrets =
+                        !_cfg.ProtectInvadersFromAnchorAuthorizedTurrets;
+                    break;
                 case nameof(InvaderConfig.ProtectEmergencyTeleportEnabled):
                     _cfg.ProtectEmergencyTeleportEnabled = !_cfg.ProtectEmergencyTeleportEnabled;
                     break;
@@ -5002,6 +5105,10 @@ namespace Oxide.Plugins
                 nameof(InvaderConfig.MergeSavedViewerOnSpawn));
             RowToggle("SpawnWithProtectNearHome (new Roaming bots start on protect until task)", _cfg.SpawnWithProtectNearHome,
                 nameof(InvaderConfig.SpawnWithProtectNearHome));
+            RowToggle(
+                "ProtectInvadersFromAnchorAuthorizedTurrets (no TC turret dmg vs viewer bots; RandomRaids unaffected)",
+                _cfg.ProtectInvadersFromAnchorAuthorizedTurrets,
+                nameof(InvaderConfig.ProtectInvadersFromAnchorAuthorizedTurrets));
             RowToggle("ProtectEmergencyTeleportEnabled (last-resort snap; usually leave off)", _cfg.ProtectEmergencyTeleportEnabled,
                 nameof(InvaderConfig.ProtectEmergencyTeleportEnabled));
 
