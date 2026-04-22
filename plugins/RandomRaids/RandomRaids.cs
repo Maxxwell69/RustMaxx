@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("RandomRaids", "Razor", "2.0.2")]
+    [Info("RandomRaids", "Razor", "2.0.3")]
     [Description("Npc's that randomly raid bases")]
     public class RandomRaids : RustPlugin
     {
@@ -1243,7 +1243,7 @@ namespace Oxide.Plugins
                     else
                     {
                         TimeSpan ts = DateTime.Now - lastUINotification;
-                        if (ts.TotalSeconds > 1)
+                        if (ts.TotalSeconds > 0.25)
                         {
                             send = true;
                         }
@@ -1385,7 +1385,10 @@ namespace Oxide.Plugins
                 if (currentWave >= totalWavesNext)
                     waveMessage = _.lang.GetMessage("endEvent", _);
 
+                bool isChaosRaid = waveType != null && waveType.StartsWith("chaos_", StringComparison.OrdinalIgnoreCase);
                 string message = string.Format(_.lang.GetMessage("guiMessage", _), currentWave, totalWavesNext, members.Count, waveMessage, countDownM, countDownS);
+                if (isChaosRaid)
+                    message = _.lang.GetMessage("chaosRaidHudTitle", _) + "\n" + message;
                 string message2 = string.Format(_.lang.GetMessage("guiMessageSurrenderNew", _), surrenderCost, surrenderName);
 
                 if (_.configData.settings.pauseWave)
@@ -1393,38 +1396,40 @@ namespace Oxide.Plugins
                 {
                     if (members.Count > 0 || showInfinity)
                         message = string.Format(_.lang.GetMessage("guiMessage", _), currentWave, totalWavesNext, members.Count, waveMessage, "∞", "∞");
+                    if (isChaosRaid)
+                        message = _.lang.GetMessage("chaosRaidHudTitle", _) + "\n" + message;
                 }
 
                 var elements = new CuiElementContainer();
 
                 var BlockMsg = elements.Add(new CuiPanel
                 {
-                    Image = { Color = "0.55 0.55 0.55 0.99" },
+                    Image = { Color = "0.22 0.12 0.04 0.94" },
                     RectTransform = { AnchorMin = _.configData.settings.AnchorMin, AnchorMax = _.configData.settings.AnchorMax } }, "Hud", "RtimerS" + BlockName);
 
                 elements.Add(new CuiElement
                 {
                     Parent = BlockMsg,
-                    Components = { new CuiRawImageComponent { Sprite = "assets/icons/explosion.png", Color = "0.95 0.4 0.02 0.99"},
+                    Components = { new CuiRawImageComponent { Sprite = "assets/icons/explosion.png", Color = "1 0.55 0.1 0.95"},
                     new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0.13 1" } }
                 });
 
                 elements.Add(new CuiLabel
                 {
                     RectTransform = { AnchorMin = "0.15 0", AnchorMax = "1 1" },
-                    Text = { Text = message, FontSize = 11, Align = TextAnchor.MiddleLeft, }
+                    Text = { Text = message, FontSize = isChaosRaid ? 12 : 11, Align = TextAnchor.MiddleLeft, Color = "1 0.58 0.12 1" }
                 }, BlockMsg);
 
                 var BlockSurrender = elements.Add(new CuiPanel
                 {
-                    Image = { Color = "0.55 0.55 0.55 0.99" },
+                    Image = { Color = "0.22 0.12 0.04 0.94" },
                     RectTransform = { AnchorMin = _.configData.settings.AnchorMin2, AnchorMax = _.configData.settings.AnchorMax2 } }, "Hud", "RsurrenderS" + BlockName);
 
 
                 elements.Add(new CuiLabel
                 {
                     RectTransform = { AnchorMin = "0.05 0", AnchorMax = "1 1" },
-                    Text = { Text = message2, FontSize = 11, Align = TextAnchor.MiddleLeft, }
+                    Text = { Text = message2, FontSize = 11, Align = TextAnchor.MiddleLeft, Color = "1 0.58 0.12 1" }
                 }, BlockSurrender);
 
                 CuiHelper.AddUi(current, elements);
@@ -3737,7 +3742,7 @@ namespace Oxide.Plugins
                         return;
                 }
             }
-            SendReply(player, $"<color=red>Admin Command Usage</color>:\n\n" +
+            SendReply(player, $"<color=#FFA500>Admin Command Usage</color>:\n\n" +
                               $"<color=orange>/randomraid here <type></color> - Will start a random raid at your location.\n\n" +
                               $"<color=orange>/randomraid random</color> - Will start a searching for a random raid location.\n\n" +
                               $"<color=orange>/randomraid item <type></color> - Will give you raid item.\n\n" +
@@ -5017,10 +5022,10 @@ namespace Oxide.Plugins
         {
             if (player == null)
                 return;
-            string configitems = "<color=#ce422b>Raid Item List Usage /randomraidsitem <config name></color>\n\n";
+            string configitems = "<color=#FFA500>Raid Item List Usage /randomraidsitem <config name></color>\n\n";
             foreach (var key in configData.itemProfile)
             {
-                configitems += $"<color=#FFFF00>Config Name</color>: {key.Key} <color=#FFFF00>Item Name:</color> {key.Value.itemName}\n";
+                configitems += $"<color=#FFA500>Config Name</color>: {key.Key} <color=#FFC266>Item Name:</color> {key.Value.itemName}\n";
             }
             SendReply(player, configitems);
         }
@@ -5183,19 +5188,19 @@ namespace Oxide.Plugins
         public static void GameTipMessage(BasePlayer player, string message)
         {
             if (player != null)
-                player.ShowToast(GameTip.Styles.Error, message, true);
+                player.ShowToast(GameTip.Styles.Blue_Normal, message, true);
         }
 
         private new void LoadDefaultMessages()
         {
             lang.RegisterMessages(new Dictionary<string, string>
             {
-                ["warningRevengeGrid"] = "<color=orange>[</color><color=red>Cobalt Scientist</color><color=orange>]</color> So you raided our base at {0}, now we are coming for your base at {1} in {2}m {3}s if you don't <color=#ce422b>/surrender</color>.",
-                ["warningRevengeGridNpc"] = "<color=orange>[</color><color=red>Cobalt Scientist</color><color=orange>]</color> So you think you can keep killing us? Now we are coming for your base at {0} in {1}m {2}s if you don't <color=#ce422b>/surrender</color>.",
-                ["gridMessageDirection"] = "<color=orange>[</color><color=red>RANDOM RAID DETECTION</color><color=orange>]</color> in grid {0}, {1} of you {2} yards!",
-                ["RaidersLeaving"] = "<color=orange>[</color><color=red>Cobalt Scientist</color><color=orange>]</color> Do not make us come back here!",
-				["negotiateMessageNew"] = "<color=orange>[</color><color=red>Cobalt Scientist</color><color=orange>]</color> {0} {1} and we forget about this little mistake you made.",
-				["payedAndSurrenderedNew"] = "<color=orange>[</color><color=red>{0}</color><color=orange>]</color> surrendered by paying {1} {2}.",
+                ["warningRevengeGrid"] = "<color=#FFA500>[</color><color=#FFB84D>Cobalt Scientist</color><color=#FFA500>]</color> So you raided our base at {0}, now we are coming for your base at {1} in {2}m {3}s if you don't <color=#FFA500>/surrender</color>.",
+                ["warningRevengeGridNpc"] = "<color=#FFA500>[</color><color=#FFB84D>Cobalt Scientist</color><color=#FFA500>]</color> So you think you can keep killing us? Now we are coming for your base at {0} in {1}m {2}s if you don't <color=#FFA500>/surrender</color>.",
+                ["gridMessageDirection"] = "<color=#FFA500>[</color><color=#FFB84D>RANDOM RAID DETECTION</color><color=#FFA500>]</color> in grid {0}, {1} of you {2} yards!",
+                ["RaidersLeaving"] = "<color=#FFA500>[</color><color=#FFB84D>Cobalt Scientist</color><color=#FFA500>]</color> Do not make us come back here!",
+				["negotiateMessageNew"] = "<color=#FFA500>[</color><color=#FFB84D>Cobalt Scientist</color><color=#FFA500>]</color> {0} {1} and we forget about this little mistake you made.",
+				["payedAndSurrenderedNew"] = "<color=#FFA500>[</color><color=#FFB84D>{0}</color><color=#FFA500>]</color> surrendered by paying {1} {2}.",
                 ["msgNorth"] = "North",
                 ["msgNorthEast"] = "NorthEast",
                 ["msgEast"] = "East",
@@ -5212,9 +5217,9 @@ namespace Oxide.Plugins
                 ["terrainBlocked"] = "This base in on unradable terrain!",
                 ["usageChatAdmin"] = "/randomraid <here/random/reload>",
                 ["BaseToCose"] = "Your can not start a Npc raid when you are close to another ongoing one!",
-                ["gaveProtector"] = "<color=#ce422b>You have just got a {0}!</color>",
-                ["droped"] = "<color=#ce422b>You'r inventory was full so i dropped your {0} on the ground!</color>",
-                ["blocked"] = "<color=#ce422b>You are building blocked!</color>",
+                ["gaveProtector"] = "<color=#FFA500>You have just got a {0}!</color>",
+                ["droped"] = "<color=#FFA500>You'r inventory was full so i dropped your {0} on the ground!</color>",
+                ["blocked"] = "<color=#FFA500>You are building blocked!</color>",
                 ["NoValidItem"] = "That is not a valid config item {0}!",
                 ["NoPlayer"] = "Player not found!",
                 ["ammountNot"] = "Amount not set correctly",
@@ -5222,10 +5227,11 @@ namespace Oxide.Plugins
                 ["Blockedhere"] = "<color=orange>The Admin has blocked raids on this terrain type.</color>",
                 ["BlockedhereWater"] = "<color=orange>You can not start the event underground.</color>",
                 ["BlockedhereWaterDeep"] = "<color=orange>You can not start the event in this water depth.</color>",
-                ["guiMessage"] = "<color=#ce422b>Wave</color>: <color=#FFFF00>{0}</color>/<color=#FFFF00>{1}</color>  <color=#ce422b>Raiders</color>:<color=#FFFF00> {2}</color>  <color=#ce422b>{3}</color>: <color=#FFFF00>{4}</color>m <color=#FFFF00>{5}</color>s",
-				["guiMessageSurrenderNew"] = "<color=#ce422b>Surrender with</color> /surrender <color=#ce422b>for</color> <color=#FFFF00>{0}</color> {1}.",
-                ["nextWave"] = "Next Wave",
-                ["endEvent"] = "Ends In",
+                ["guiMessage"] = "<color=#FFA500>Wave</color> <color=#FFC266>{0}</color>/<color=#FFC266>{1}</color>  |  <color=#FFA500>Enemies left</color> <color=#FFC266>{2}</color>  |  <color=#FFA500>{3}</color> <color=#FFC266>{4}</color>m <color=#FFC266>{5}</color>s",
+				["guiMessageSurrenderNew"] = "<color=#FFA500>Surrender with</color> /surrender <color=#FFA500>for</color> <color=#FFC266>{0}</color> {1}.",
+                ["chaosRaidHudTitle"] = "<color=#FFA500>CHAOS RAID</color>",
+                ["nextWave"] = "Next wave",
+                ["endEvent"] = "Ends in",
                 ["locateBaseText"] = "Raid Incoming Here",
                 ["MaxEvents"] = "The Server Is At Max Raid Events, Please Try Again Later.",
                 ["IncomingRandom"] = "A Group of raiders are headed to your base in {0}.",
