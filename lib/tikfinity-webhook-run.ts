@@ -92,6 +92,11 @@ function tikfinityRconAsync(): boolean {
   return true;
 }
 
+/** When set to 1, chaosraid_* uses runAndWait (see RCON text). Default off — those commands often never reply in time. */
+function chaosRaidRconSyncDebug(): boolean {
+  return process.env.TIKFINITY_CHAOSRAID_SYNC?.trim().toLowerCase() === "1";
+}
+
 /** Single source for MaxxInvaders anchor resolution on every path (npcmaxx→MI, maxxinvaders, crew). */
 function buildAnchorResolveOptions(
   server: Pick<ServerRow, "tikfinity_anchor_steam_id">,
@@ -1270,10 +1275,14 @@ export async function runTikfinityWebhook(
     : 1;
 
   /**
-   * Fire-and-forget RCON (id 0) is unreliable for some servers; chaos raids need a real RCON response
-   * from rustchaos, so we always use runAndWait for chaosraid_*.
+   * Fire-and-forget for rustchaos: avoids "Command response timeout" when Oxide/RustChaos is slow or never echoes RCON text.
+   * chaosraid_* defaults here too (same issue in prod logs). Set TIKFINITY_CHAOSRAID_SYNC=1 to force runAndWait for chaos only.
    */
-  if (tikfinityRconAsync() && !isChaosRaidAction(action)) {
+  const useFireAndForgetRustChaos =
+    (!isChaosRaidAction(action) && tikfinityRconAsync()) ||
+    (isChaosRaidAction(action) && !chaosRaidRconSyncDebug());
+
+  if (useFireAndForgetRustChaos) {
     for (let iter = 0; iter < soloSpawnRepeats; iter++) {
       const sent = sendCommand(server.id, command);
       if (!sent.ok) {
@@ -1349,8 +1358,9 @@ export async function runTikfinityWebhook(
           ? rustChaosFourthArg
           : undefined,
         rconAsync: true,
-        debug:
-          "RCON command sent without waiting for the plugin reply (default). Long chaos raids no longer block the HTTP response—check [RustChaos] on the game server. Set TIKFINITY_RCON_ASYNC=0 to wait for RCON text (debug; may 504 behind CDNs).",
+        debug: isChaosRaidAction(action)
+          ? "Chaos raid: RCON sent without waiting for reply (avoids timeout while RandomRaids starts). Watch [RustChaos] on the game server. Set TIKFINITY_CHAOSRAID_SYNC=1 on RustMaxx to wait for RCON text (debug only; often times out)."
+          : "RCON command sent without waiting for the plugin reply (default). Long chaos raids no longer block the HTTP response—check [RustChaos] on the game server. Set TIKFINITY_RCON_ASYNC=0 to wait for RCON text (debug; may 504 behind CDNs).",
       })
     );
   }
