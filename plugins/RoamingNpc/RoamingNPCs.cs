@@ -26,7 +26,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.63")]
+    [Info("Roaming NPCs", "walkinrey & Max39ru", "0.5.64")]
     public partial class RoamingNPCs : CovalencePlugin
     {
         [PluginReference] private Plugin DeployableNature, Spawns, WarMode;
@@ -76,7 +76,7 @@ namespace Oxide.Plugins
 
         private readonly Dictionary<ulong, float> _roamingLootUseDebounce = new();
 
-        /// <summary>After bridge medic <see cref="BasePlayer.RecoverFromWounded"/>: block residual fall hits + re-clear bleed/poison/radiation ticks (RustChaos revivechaos pattern).</summary>
+        /// <summary>After bridge medic <see cref="BasePlayer.RecoverFromWounded"/>: short incoming-damage immunity + metabolize bleed/poison/rad clear (RustChaos revivechaos pattern).</summary>
         private readonly Dictionary<ulong, float> _bridgeMedicReviveStabilizeUntil = new();
 
         private const float BridgeMedicReviveStabilizeSeconds = 12f;
@@ -3305,21 +3305,39 @@ namespace Oxide.Plugins
                 player.inventory.containerBelt.SetLocked(false);
             }
         }
+
+        /// <summary>Same idea as RustChaos godmode/revive: zero <see cref="HitInfo"/> damage so the hook can return true.</summary>
+        private static void TryNullifyHitInfoDamage(HitInfo info)
+        {
+            if (info == null) return;
+            try
+            {
+                info.damageTypes?.Clear();
+            }
+            catch
+            {
+                /* ignored */
+            }
+
+            try
+            {
+                info.HitMaterial = 0U;
+                info.PointStart = info.PointEnd;
+            }
+            catch
+            {
+                /* ignored */
+            }
+        }
+
         private object OnEntityTakeDamage(BaseCombatEntity target, HitInfo info)
         {
             if (target is BasePlayer bp && bp.userID.IsSteamId() && !bp.IsNpc &&
                 _bridgeMedicReviveStabilizeUntil.TryGetValue(bp.userID, out var protUntil) &&
                 UnityEngine.Time.realtimeSinceStartup <= protUntil)
             {
-                try
-                {
-                    if (info?.damageTypes != null && info.damageTypes.Get(DamageType.Fall) > 0f)
-                        return true;
-                }
-                catch
-                {
-                    /* ignored */
-                }
+                TryNullifyHitInfoDamage(info);
+                return true;
             }
 
             if (target && info?.InitiatorPlayer is CustomPet customPet && !(target is BaseCorpse))

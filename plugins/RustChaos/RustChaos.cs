@@ -24,7 +24,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("RustChaos", "RustMaxx", "1.15.40")]
+    [Info("RustChaos", "RustMaxx", "1.15.41")]
     [Description("RCON-only command for TikFinity webhook: rustchaos <action> <viewerName> <giftName>. Viewer bots: use MaxxInvaders maxxinvaders.spawn from RustMaxx webhook (bunny1npc action). chaosheli: crate + patrol heli + homing launcher. chaosraid_*: RandomRaids progressive waves.")]
     public class RustChaos : RustPlugin
     {
@@ -155,7 +155,7 @@ namespace Oxide.Plugins
                 ClearStreamerTimedStatusesAndUi("streamer_disconnected", player);
         }
 
-        /// <summary>Cancel Fall damage during post-revive window (residual impact velocity / late ApplyFallDamageFromVelocity after RecoverFromWounded).</summary>
+        /// <summary>During post-revive window: cancel all incoming hit damage (fall, bullets, melee, fire, etc.). Metabolism hook still clears bleed ticks.</summary>
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null || info == null) return null;
@@ -175,16 +175,9 @@ namespace Oxide.Plugins
                 _reviveChaosProtectUntil.Remove(uid);
                 return null;
             }
-            try
-            {
-                if (info.damageTypes != null && info.damageTypes.Get(DamageType.Fall) > 0f)
-                    return true;
-            }
-            catch
-            {
-                // ignore
-            }
-            return null;
+
+            TryNullifyHitInfoDamage(info);
+            return true;
         }
 
         /// <summary>Runs after PlayerMetabolism.ServerUpdate — bleed damage may already apply this tick; clear + heal so the streamer cannot die to residual bleed right after revive.</summary>
@@ -883,7 +876,7 @@ namespace Oxide.Plugins
                                 NextTick(() => TryForceResyncRevivedPlayer(reviveUid, revivePos));
                                 timer.Once(0.15f, () => TryForceResyncRevivedPlayer(reviveUid, revivePos));
                                 BroadcastChatGiftBanner(ChatMsg($"{viewerName} triggered REVIVE CHAOS! {target.displayName} is back up — full health!"));
-                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName}, cleared bleed, full heal, {ReviveChaosProtectSeconds}s protect (bleed + fall).");
+                                Puts($"{LogPrefix} Revive Chaos: recovered {target.displayName}, cleared bleed, full heal, {ReviveChaosProtectSeconds}s incoming-damage immunity + metabolize stabilize.");
                             }
                             else
                             {
