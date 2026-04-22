@@ -16,9 +16,8 @@ import {
   validateStreamerItemShortnamesPayload,
 } from "@/lib/streamer-item-policy";
 import {
-  billingSkippedInEnv,
   coerceServerBillingTier,
-  serverTierAllowsStreamerInteraction,
+  canEnableServerStreamerInteractions,
 } from "@/lib/billing-tiers";
 import {
   absolutePathForUploadBasename,
@@ -236,7 +235,7 @@ export async function PATCH(
     }
     if (body.streamer_interactions_enabled === true) {
       const tier = coerceServerBillingTier(existing);
-      if (!billingSkippedInEnv() && !serverTierAllowsStreamerInteraction(tier)) {
+      if (!canEnableServerStreamerInteractions(tier)) {
         return NextResponse.json(
           {
             error:

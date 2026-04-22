@@ -53,6 +53,31 @@ export function serverTierAllowsStreamerInteraction(tier: ServerBillingTier): bo
   return tier === "pro" || tier === "analytics";
 }
 
+function stripeSecretConfigured(): boolean {
+  return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
+}
+
+/** True when server Pro/Analytics checkout could succeed (secret + at least one server price ID). */
+function serverPaidTierCheckoutConfigured(): boolean {
+  return (
+    stripeSecretConfigured() &&
+    Boolean(stripePriceIdServerPro() || stripePriceIdServerAnalytics())
+  );
+}
+
+/**
+ * Whether PATCH may set streamer_interactions_enabled=true for this server's billing tier.
+ * When paid server checkout is not fully configured (missing STRIPE_SECRET_KEY or server price IDs), we allow TikFinity on free tier so chaos/streamer actions work without subscriptions.
+ * Set ALLOW_FREE_STREAMER_SERVER_TIER=1 to force the same when billing is fully configured (testing / grace period).
+ */
+export function canEnableServerStreamerInteractions(tier: ServerBillingTier): boolean {
+  if (billingSkippedInEnv()) return true;
+  const forceFree = process.env.ALLOW_FREE_STREAMER_SERVER_TIER?.trim().toLowerCase();
+  if (forceFree === "1" || forceFree === "true" || forceFree === "yes") return true;
+  if (!serverPaidTierCheckoutConfigured()) return true;
+  return serverTierAllowsStreamerInteraction(tier);
+}
+
 export function serverTierAllowsAnalytics(tier: ServerBillingTier): boolean {
   return tier === "analytics";
 }
