@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("RandomRaids", "Razor", "2.0.8")]
+    [Info("RandomRaids", "Razor", "2.0.9")]
     [Description("Npc's that randomly raid bases")]
     public class RandomRaids : RustPlugin
     {
@@ -1681,9 +1681,7 @@ namespace Oxide.Plugins
                    nextWaveTime = Time.time + newTime;
                    totalWaves++; 
                    raidernewID = "";*/
-                stopSpawning();
-
-                // Wave 10 only: waves 1–9 are ground troops only; attack heli departs after wave 10 NPCs spawn. Set TotalNpcWaves >= 10 on the raid type.
+                // Wave 10 attack heli MUST schedule before stopSpawning(): stopSpawning StopCoroutine(this) and would skip any code below it in this IEnumerator.
                 if (currentWave == 10 && config != null && config.TotalNpcWaves >= 10 && config.attackCopter && heli == null &&
                     config.spawnCopter != null &&
                     config.spawnCopter.Count > 0 && _ != null &&
@@ -1702,6 +1700,8 @@ namespace Oxide.Plugins
                         });
                     }
                 }
+
+                stopSpawning();
             }
 
             #region Spawning
