@@ -49,43 +49,28 @@ export function parseStreamerBillingTier(raw: unknown): StreamerBillingTier | nu
   return null;
 }
 
-export function serverTierAllowsStreamerInteraction(tier: ServerBillingTier): boolean {
-  return tier === "pro" || tier === "analytics";
-}
-
-function stripeSecretConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
-}
-
-/** True when server Pro/Analytics checkout could succeed (secret + at least one server price ID). */
-function serverPaidTierCheckoutConfigured(): boolean {
-  return (
-    stripeSecretConfigured() &&
-    Boolean(stripePriceIdServerPro() || stripePriceIdServerAnalytics())
-  );
+export function serverTierAllowsStreamerInteraction(_tier: ServerBillingTier): boolean {
+  return true;
 }
 
 /**
  * Whether PATCH may set streamer_interactions_enabled=true for this server's billing tier.
- * When paid server checkout is not fully configured (missing STRIPE_SECRET_KEY or server price IDs), we allow TikFinity on free tier so chaos/streamer actions work without subscriptions.
- * Set ALLOW_FREE_STREAMER_SERVER_TIER=1 to force the same when billing is fully configured (testing / grace period).
+ * Billing enforcement is currently off — all tiers may enable TikFinity.
  */
-export function canEnableServerStreamerInteractions(tier: ServerBillingTier): boolean {
-  if (billingSkippedInEnv()) return true;
-  const forceFree = process.env.ALLOW_FREE_STREAMER_SERVER_TIER?.trim().toLowerCase();
-  if (forceFree === "1" || forceFree === "true" || forceFree === "yes") return true;
-  if (!serverPaidTierCheckoutConfigured()) return true;
-  return serverTierAllowsStreamerInteraction(tier);
+export function canEnableServerStreamerInteractions(_tier: ServerBillingTier): boolean {
+  return true;
 }
 
-export function serverTierAllowsAnalytics(tier: ServerBillingTier): boolean {
-  return tier === "analytics";
+export function serverTierAllowsAnalytics(_tier: ServerBillingTier): boolean {
+  return true;
 }
 
-/** When SKIP_BILLING=1, limits and gates are relaxed for local/dev. */
+/**
+ * When true, subscription/tier limits are not enforced (unlimited webhooks, no paid tier for TikFinity, etc.).
+ * Currently always on; re-enable paid checks by restoring env-based or tier-based logic here.
+ */
 export function billingSkippedInEnv(): boolean {
-  const v = process.env.SKIP_BILLING?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
+  return true;
 }
 
 export function getStreamerWebhookLimit(tier: StreamerBillingTier | string | null | undefined): number {

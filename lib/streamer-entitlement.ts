@@ -1,5 +1,6 @@
 import type { UserRole } from "./permissions";
 import { hasRoleAtLeast } from "./permissions";
+import { billingSkippedInEnv } from "./billing-tiers";
 
 export type SubscriptionStatus =
   | "inactive"
@@ -7,11 +8,6 @@ export type SubscriptionStatus =
   | "active"
   | "canceled"
   | "past_due";
-
-export function billingSkippedInEnv(): boolean {
-  const v = process.env.SKIP_BILLING?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
-}
 
 /**
  * Streamer TikFinity / webhook features: available to logged-in users (guest+).
