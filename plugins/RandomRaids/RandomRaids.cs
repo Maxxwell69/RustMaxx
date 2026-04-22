@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("RandomRaids", "Razor", "2.0.6")]
+    [Info("RandomRaids", "Razor", "2.0.7")]
     [Description("Npc's that randomly raid bases")]
     public class RandomRaids : RustPlugin
     {
@@ -1120,12 +1120,8 @@ namespace Oxide.Plugins
 
                     QueuedRoutine = StartCoroutine(GenerateEventMembers());
 
-                    if (config.attackCopter && config.spawnCopter.Count > 0)
-                    {
-                        string copterProfile = config.spawnCopter.GetRandom();
-                        if (_.configData.copterSettings.copterProfile.ContainsKey(copterProfile))
-                            heli = spawnHeli(this, location, _.configData.copterSettings.copterProfile[copterProfile]);
-                    }
+                    // Attack heli is spawned after wave 1 ground troops finish (see GenerateEventMembers) so raiders arrive first.
+
                     if (_.configData.settings.useMarker)
                         marker = SpawnRaidMarker(location, EndEventTime);
                     if (_.configData.settings.useChat)
@@ -1686,6 +1682,25 @@ namespace Oxide.Plugins
                    totalWaves++; 
                    raidernewID = "";*/
                 stopSpawning();
+
+                // First wave only: spawn patrol heli after ground NPCs are out (StartEvent no longer spawns it immediately).
+                if (currentWave == 1 && config != null && config.attackCopter && heli == null && config.spawnCopter != null &&
+                    config.spawnCopter.Count > 0 && _ != null &&
+                    _.configData.copterSettings.copterProfile != null)
+                {
+                    string copterProfileKey = config.spawnCopter.GetRandom();
+                    if (_.configData.copterSettings.copterProfile.TryGetValue(copterProfileKey, out var copterCfg))
+                    {
+                        var mgr = this;
+                        _.timer.Once(6f, () =>
+                        {
+                            if (_ == null || mgr == null || mgr.isDestroyed || mgr.heli != null || mgr.config == null ||
+                                !mgr.config.attackCopter)
+                                return;
+                            mgr.heli = spawnHeli(mgr, mgr.location, copterCfg);
+                        });
+                    }
+                }
             }
 
             #region Spawning
