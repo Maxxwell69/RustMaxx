@@ -18,6 +18,9 @@ const PUBLIC_PATHS = [
   "/about",
   "/contact",
   "/maxxinvaders",      // marketing / character roster (public)
+  "/basebotch",         // BaseBotch product page (public)
+  "/rustchaos",         // RustChaos product page (public)
+  "/maxxraiders",       // MaxxRaiders product page (public)
   "/plugins",           // public plugin directory + detail pages
   "/api/plugins",       // public plugin directory JSON
   "/server-list",       // public list of opted-in Rust servers

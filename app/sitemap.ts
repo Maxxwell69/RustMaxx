@@ -26,6 +26,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: "weekly",
         priority: 0.65,
       });
+      const m = p.marketing_href?.trim();
+      if (m?.startsWith("/")) {
+        const url = new URL(m, BASE).toString();
+        entries.push({
+          url,
+          lastModified: now,
+          changeFrequency: "weekly",
+          priority: 0.68,
+        });
+      }
     }
   } catch {
     // DATABASE_URL may be unset during static generation

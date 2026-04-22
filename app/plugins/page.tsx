@@ -51,22 +51,43 @@ export default function PluginsDirectoryPage() {
             <p className="mt-8 text-sm text-zinc-500">No plugins are listed yet.</p>
           ) : (
             <ul className="mt-10 grid gap-4 sm:grid-cols-2">
-              {plugins.map((p) => (
-                <li key={p.id}>
-                  <Link
-                    href={`/plugins/${p.slug}`}
-                    className="flex flex-col rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 transition-colors hover:border-rust-cyan/40 hover:bg-zinc-900"
+              {plugins.map((p) => {
+                const primaryHref =
+                  p.marketing_href && p.marketing_href.trim().length > 0
+                    ? p.marketing_href.trim()
+                    : `/plugins/${p.slug}`;
+                const hasProductPage =
+                  Boolean(p.marketing_href?.trim()) && primaryHref !== `/plugins/${p.slug}`;
+                return (
+                  <li
+                    key={p.id}
+                    className="flex flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60 transition-colors hover:border-rust-cyan/40 hover:bg-zinc-900"
                   >
-                    <span className="font-medium text-zinc-100">{p.title}</span>
-                    {p.tagline ? (
-                      <span className="mt-1 text-sm text-zinc-500">{p.tagline}</span>
+                    <Link href={primaryHref} className="flex flex-1 flex-col p-4">
+                      <span className="font-medium text-zinc-100">{p.title}</span>
+                      {p.tagline ? (
+                        <span className="mt-1 text-sm text-zinc-500">{p.tagline}</span>
+                      ) : null}
+                      {p.description ? (
+                        <span className="mt-2 line-clamp-3 text-xs text-zinc-600">{p.description}</span>
+                      ) : null}
+                      {hasProductPage ? (
+                        <span className="mt-3 text-xs font-medium text-rust-cyan">Full page →</span>
+                      ) : null}
+                    </Link>
+                    {hasProductPage ? (
+                      <div className="border-t border-zinc-800/80 px-4 py-2.5">
+                        <Link
+                          href={`/plugins/${p.slug}`}
+                          className="text-xs text-zinc-500 transition-colors hover:text-zinc-300 hover:underline"
+                        >
+                          Short overview in directory
+                        </Link>
+                      </div>
                     ) : null}
-                    {p.description ? (
-                      <span className="mt-2 line-clamp-3 text-xs text-zinc-600">{p.description}</span>
-                    ) : null}
-                  </Link>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
