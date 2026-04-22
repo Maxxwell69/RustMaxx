@@ -3,8 +3,10 @@
 // Uses vanilla Scientist NPC prefabs + optional Kits. Behavior modes tune prefab + light tick steering.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using System.Linq;
 using System.Text;
 using Facepunch;
@@ -22,7 +24,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.56")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.57")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -1610,6 +1612,48 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// Resolves a single entry from <c>authorizedPlayers</c> (Facepunch <c>PlayerNameID</c>, <c>ulong</c>, etc.) to a Steam ID.
+        /// </summary>
+        private static ulong AuthEntryToUserId(object entry)
+        {
+            if (entry == null) return 0UL;
+            if (entry is ulong u) return u;
+            if (entry is long l && l >= 0) return (ulong)l;
+            if (entry is BasePlayer bp) return bp.userID;
+
+            var t = entry.GetType();
+            foreach (var name in new[] { "userid", "UserID", "UserId" })
+            {
+                var f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public);
+                if (f != null)
+                {
+                    var o = f.GetValue(entry);
+                    if (o is ulong ul) return ul;
+                    if (o is long ll && ll >= 0) return (ulong)ll;
+                }
+
+                var p = t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+                if (p == null) continue;
+                var o2 = p.GetValue(entry);
+                if (o2 is ulong ul2) return ul2;
+                if (o2 is long ll2 && ll2 >= 0) return (ulong)ll2;
+            }
+
+            return 0UL;
+        }
+
+        private static bool AuthEnumerableContainsSteam(IEnumerable list, ulong steamId)
+        {
+            if (list == null || steamId == 0UL) return false;
+            foreach (var entry in list)
+            {
+                if (AuthEntryToUserId(entry) == steamId) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// True if steamId appears on the deployable turret auth list or its current building privilege
         /// (same idea as players the turret is configured not to shoot).
         /// </summary>
@@ -1618,40 +1662,16 @@ namespace Oxide.Plugins
             if (initiator == null || steamId == 0UL) return false;
             if (initiator is AutoTurret at)
             {
-                foreach (var e in at.authorizedPlayers)
-                {
-                    if (e.userid == steamId) return true;
-                }
-
+                if (AuthEnumerableContainsSteam(at.authorizedPlayers, steamId)) return true;
                 var cup = at.GetBuildingPrivilege();
-                if (cup != null)
-                {
-                    foreach (var e in cup.authorizedPlayers)
-                    {
-                        if (e.userid == steamId) return true;
-                    }
-                }
-
-                return false;
+                return cup != null && AuthEnumerableContainsSteam(cup.authorizedPlayers, steamId);
             }
 
             if (initiator is FlameTurret ft)
             {
-                foreach (var e in ft.authorizedPlayers)
-                {
-                    if (e.userid == steamId) return true;
-                }
-
+                if (AuthEnumerableContainsSteam(ft.authorizedPlayers, steamId)) return true;
                 var cup2 = ft.GetBuildingPrivilege();
-                if (cup2 != null)
-                {
-                    foreach (var e in cup2.authorizedPlayers)
-                    {
-                        if (e.userid == steamId) return true;
-                    }
-                }
-
-                return false;
+                return cup2 != null && AuthEnumerableContainsSteam(cup2.authorizedPlayers, steamId);
             }
 
             return false;
