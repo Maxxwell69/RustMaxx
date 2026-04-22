@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("RandomRaids", "Razor", "2.0.5")]
+    [Info("RandomRaids", "Razor", "2.0.6")]
     [Description("Npc's that randomly raid bases")]
     public class RandomRaids : RustPlugin
     {
@@ -997,8 +997,8 @@ namespace Oxide.Plugins
             surrenderAnchorMin = settings.AnchorMin2 ?? "0.56 0.778";
             surrenderAnchorMax = settings.AnchorMax2 ?? "0.998 0.852";
 
-            if (TryParseHudAnchor(settings.AnchorMin, out _, out float ymin) &&
-                TryParseHudAnchor(settings.AnchorMax, out _, out float ymax))
+            if (TryParseHudAnchor(settings.AnchorMin, out float minX, out float ymin) &&
+                TryParseHudAnchor(settings.AnchorMax, out float maxX, out float ymax))
             {
                 if (ymax - ymin >= 0.075f)
                     return;
