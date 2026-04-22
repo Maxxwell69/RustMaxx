@@ -22,7 +22,7 @@ import {
   clampSoloSpawnRepeatCount,
 } from "@/lib/tikfinity";
 import { parseNpcTemplateKey } from "@/lib/tikfinity-connections";
-import { ensureConnection, runAndWait } from "@/lib/rcon-manager";
+import { ensureConnection, runAndWait, sendCommand } from "@/lib/rcon-manager";
 import { audit } from "@/lib/audit";
 import { insertRnpcSpawnEvent } from "@/lib/rnpc-spawn-events";
 import {
@@ -79,6 +79,16 @@ function tikfinityRconCommandTimeoutMs(): number {
     if (Number.isFinite(n) && n >= 5000 && n <= 300000) return n;
   }
   return 60_000;
+}
+
+/**
+ * When true (default), TikFinity sends RCON via WebRCON without waiting for the command reply.
+ * Avoids HTTP 504 when chaos raids exceed Railway/host timeouts (~60s). Set TIKFINITY_RCON_ASYNC=0 to wait for RCON text (debugging).
+ */
+function tikfinityRconAsync(): boolean {
+  const v = process.env.TIKFINITY_RCON_ASYNC?.trim().toLowerCase();
+  if (v === "0" || v === "false" || v === "no") return false;
+  return true;
 }
 
 /** Single source for MaxxInvaders anchor resolution on every path (npcmaxx→MI, maxxinvaders, crew). */
@@ -1257,6 +1267,89 @@ export async function runTikfinityWebhook(
   const soloSpawnRepeats = isRustChaosSoloScrapSpawnAction(action)
     ? parseSoloSpawnRepeatCount(q, body, ruleSpawnDefault)
     : 1;
+
+  /** Default on: chaos / raids can exceed Railway (~60s) HTTP limits—send RCON without awaiting reply. */
+  if (tikfinityRconAsync()) {
+    for (let iter = 0; iter < soloSpawnRepeats; iter++) {
+      const sent = sendCommand(server.id, command);
+      if (!sent.ok) {
+        audit("tikfinity", "webhook.failed", {
+          reason: "RCON send failed (async)",
+          error: sent.error,
+          viewerName: payload.viewerName,
+          giftName: payload.giftName,
+          action,
+          serverId: server.id,
+          command,
+        }).catch(() => {});
+        return withCors(
+          NextResponse.json(
+            {
+              ok: false,
+              error: sent.error ?? "RCON send failed",
+              debug:
+                "Could not send command over WebRCON. For synchronous errors from RustChaos, set TIKFINITY_RCON_ASYNC=0 (may hit proxy timeouts).",
+              step: "rcon_send",
+              command,
+            },
+            { status: 502 }
+          )
+        );
+      }
+    }
+
+    console.log("[tikfinity webhook] async OK", {
+      action,
+      command,
+      serverId: server.id,
+      spawnRepeats: soloSpawnRepeats,
+    });
+    audit("tikfinity", "webhook.trigger", {
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+      action,
+      serverId: server.id,
+      command,
+      scrapAmount: isRustChaosStatusEffectAction(action)
+        ? undefined
+        : giftValue
+          ? giftValue
+          : undefined,
+      statusDurationSeconds: isRustChaosStatusEffectAction(action)
+        ? rustChaosFourthArg
+        : undefined,
+      rconResponse: "(async — reply not awaited)",
+    }).catch(() => {});
+
+    fireSquawkAfterTikfinityEvent({
+      kind: "rustchaos",
+      action,
+      viewerName: payload.viewerName,
+      giftName: payload.giftName,
+    });
+
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        action: action as TikTriggerAction,
+        viewerName: payload.viewerName,
+        giftName: payload.giftName,
+        command,
+        spawnRepeats: soloSpawnRepeats > 1 ? soloSpawnRepeats : undefined,
+        scrapAmount: isRustChaosStatusEffectAction(action)
+          ? undefined
+          : giftValue > 0
+            ? giftValue
+            : undefined,
+        statusDurationSeconds: isRustChaosStatusEffectAction(action)
+          ? rustChaosFourthArg
+          : undefined,
+        rconAsync: true,
+        debug:
+          "RCON command sent without waiting for the plugin reply (default). Long chaos raids no longer block the HTTP response—check [RustChaos] on the game server. Set TIKFINITY_RCON_ASYNC=0 to wait for RCON text (debug; may 504 behind CDNs).",
+      })
+    );
+  }
 
   const rconCmdTimeoutMs = tikfinityRconCommandTimeoutMs();
   let rconResponse = "";
