@@ -12,12 +12,13 @@ using System.Collections.Generic;
 using System.Globalization;
 using Newtonsoft.Json;
 using Oxide.Core;
+using Rust;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.0")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.2")]
     [Description("Spawn crew NPCs on player-built boats at fixed deck stations (naval update).")]
     public class MaxxCrew : RustPlugin
     {
@@ -48,7 +49,13 @@ namespace Oxide.Plugins
             public int MaxCrewPerBoat { get; set; } = 8;
 
             [JsonProperty("Ray distance to register boat (m)")]
-            public float RegisterRayDistance { get; set; } = 12f;
+            public float RegisterRayDistance { get; set; } = 24f;
+
+            [JsonProperty("Overlap fallback radius (m) — samples along your look to find hulls thin raycasts miss")]
+            public float RegisterOverlapRadius { get; set; } = 8f;
+
+            [JsonProperty("Overlap fallback step along look (m)")]
+            public float RegisterOverlapStep { get; set; } = 3f;
 
             [JsonProperty("Scientist prefab (empty = first default that works)")]
             public string ScientistPrefab { get; set; } = "";
@@ -169,6 +176,9 @@ namespace Oxide.Plugins
             }
 
             _cfg.MaxCrewPerBoat = Mathf.Clamp(_cfg.MaxCrewPerBoat, 1, 32);
+            _cfg.RegisterRayDistance = Mathf.Clamp(_cfg.RegisterRayDistance, 4f, 80f);
+            _cfg.RegisterOverlapRadius = Mathf.Clamp(_cfg.RegisterOverlapRadius, 2f, 24f);
+            _cfg.RegisterOverlapStep = Mathf.Clamp(_cfg.RegisterOverlapStep, 1f, 15f);
             if (_cfg.Stations == null || _cfg.Stations.Count == 0)
                 _cfg.Stations = DefaultStations();
         }
@@ -397,29 +407,59 @@ namespace Oxide.Plugins
             boat = null;
             error = null;
             var ray = player.eyes.HeadRay();
-            var mask = LayerMask.GetMask("Construction", "Deployed", "Default", "Vehicle_world", "Vehicle Detailed", "World");
-            if (!Physics.Raycast(ray, out var hit, _cfg.RegisterRayDistance, mask, QueryTriggerInteraction.Ignore))
+            // Layers.Solid matches Rust world + construction + vehicles (avoids wrong layer names like "Vehicle_world").
+            var solidMask = Layers.Solid;
+
+            if (Physics.Raycast(ray, out var hit, _cfg.RegisterRayDistance, solidMask, QueryTriggerInteraction.Ignore))
             {
-                error = "Nothing hit — look at the boat (deck, hull, or helm) and try again.";
-                return false;
+                var hitEnt = hit.GetEntity();
+                if (hitEnt != null)
+                {
+                    boat = ResolveBoatRoot(hitEnt);
+                    if (boat != null)
+                        return true;
+                }
             }
 
-            var hitEnt = hit.GetEntity();
-            if (hitEnt == null)
+            if (TryFindBoatOverlapAlongLook(player, ray, solidMask, out boat))
+                return true;
+
+            error =
+                "No boat found along your aim. Stand closer to the deck/hull, look at solid parts (not open water), try again, or increase <color=#7ec8e3>RegisterRayDistance</color> / overlap settings in MaxxCrew.json.";
+            return false;
+        }
+
+        /// <summary>When raycast misses thin colliders or wrong layer, sample spheres along look for any boat root.</summary>
+        private bool TryFindBoatOverlapAlongLook(BasePlayer player, Ray ray, int solidMask, out BaseEntity boat)
+        {
+            boat = null;
+            var best = (BaseEntity)null;
+            var bestSqr = float.MaxValue;
+            var maxDist = _cfg.RegisterRayDistance;
+            var step = Mathf.Max(1f, _cfg.RegisterOverlapStep);
+            var rad = _cfg.RegisterOverlapRadius;
+
+            for (var d = 1f; d <= maxDist; d += step)
             {
-                error = "Hit block has no entity. Aim at the boat itself.";
-                return false;
+                var center = ray.origin + ray.direction * d;
+                var cols = Physics.OverlapSphere(center, rad, solidMask, QueryTriggerInteraction.Ignore);
+                foreach (var col in cols)
+                {
+                    var ent = col.ToBaseEntity();
+                    if (ent == null) continue;
+                    var root = ResolveBoatRoot(ent);
+                    if (root == null) continue;
+                    var sqr = (root.transform.position - player.eyes.position).sqrMagnitude;
+                    if (sqr < bestSqr)
+                    {
+                        bestSqr = sqr;
+                        best = root;
+                    }
+                }
             }
 
-            boat = ResolveBoatRoot(hitEnt);
-            if (boat == null)
-            {
-                error =
-                    "Could not resolve a boat root from that hit. Aim at a player-built boat hull or steering (naval <color=#7ec8e3>BaseBoat</color> / rowboat).";
-                return false;
-            }
-
-            return true;
+            boat = best;
+            return boat != null;
         }
 
         /// <summary>Walk parents to find a supported boat entity (naval BaseBoat or legacy rowboat).</summary>
@@ -442,6 +482,8 @@ namespace Oxide.Plugins
             if (ent == null) return false;
             if (ent is BaseBoat) return true;
             if (ent is MotorRowboat) return true;
+            // Naval player-built modular boat — if it does not inherit BaseBoat on some builds, name still matches.
+            if (ent.GetType().Name == "PlayerBoat") return true;
             return false;
         }
 
