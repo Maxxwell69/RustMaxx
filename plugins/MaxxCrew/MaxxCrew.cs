@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.8")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.9")]
     [Description("Spawn crew on boats; cannoneers use RoamingNPCs bridge bodies + Kits (MaxxInvaders-style).")]
     public class MaxxCrew : RustPlugin
     {
@@ -140,7 +140,7 @@ namespace Oxide.Plugins
             public string CannoneerRoamingTemplateKey { get; set; } = "auto";
 
             [JsonProperty("Cannoneer fallback to scientist prefabs if RoamingNPCs spawn fails")]
-            public bool CannoneerFallbackToScientistPrefabs { get; set; } = false;
+            public bool CannoneerFallbackToScientistPrefabs { get; set; } = true;
         }
 
         private sealed class StationConfig
@@ -361,9 +361,13 @@ namespace Oxide.Plugins
                 case "bots":
                     CmdRoamingTemplates(player);
                     break;
+                case "diagnose":
+                case "diag":
+                    CmdDiagnose(player);
+                    break;
                 default:
                     Reply(player,
-                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.8)\n" +
+                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.9)\n" +
                         "<color=#aaa>/maxxcrew register</color> — look at your boat (deck/helm) and save it\n" +
                         "<color=#aaa>Boat wheel</color> — hold Use on helm/lock: choose <color=#7ec8e3>Register boat (MaxxCrew)</color> when available\n" +
                         "<color=#aaa>/maxxcrew add [station]</color> — spawn crew at station index (0-based); omit = first free\n" +
@@ -371,7 +375,8 @@ namespace Oxide.Plugins
                         "<color=#aaa>/maxxcrew clear</color> — remove all crew on your last registered boat\n" +
                         "<color=#aaa>/maxxcrew stations</color> — list station slots from config\n" +
                         "<color=#aaa>/maxxcrew templates</color> — list RoamingNPCs bot keys (for cannoneer template)\n" +
-                        "<color=#aaa>/maxxcrew status</color> — show registered boat + crew count");
+                        "<color=#aaa>/maxxcrew status</color> — show registered boat + crew count\n" +
+                        "<color=#aaa>/maxxcrew diagnose</color> — Roaming readiness + boat type (when crew does not appear)");
                     break;
             }
         }
@@ -438,6 +443,91 @@ namespace Oxide.Plugins
             {
                 Reply(player, $"Could not read RoamingNPCs summary: {ex.Message}");
             }
+        }
+
+        /// <summary>When crew never appears, use this to see Roaming template readiness, boat type, and tracked entities.</summary>
+        private void CmdDiagnose(BasePlayer player)
+        {
+            Reply(player, "<color=#7ec8e3>MaxxCrew diagnose</color> (v0.1.9)");
+            Reply(player,
+                $"Config: cannoneer Roaming bodies={_cfg.CannoneerUseRoamingNpcBodies}, scientist fallback if Roaming fails={_cfg.CannoneerFallbackToScientistPrefabs}, template key={_cfg.CannoneerRoamingTemplateKey ?? "auto"}");
+
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+            {
+                Reply(player, "RoamingNPCs: <color=#ff8866>not loaded</color> — cannoneer Roaming bodies unavailable (scientist fallback still works if enabled).");
+            }
+            else
+            {
+                Reply(player, "RoamingNPCs: loaded");
+                if (TryResolveCannoneerRoamingTemplateKey(out var resolvedKey, out var resolveErr))
+                    Reply(player, $"Resolved cannoneer template: <color=#7ec8e3>{resolvedKey}</color>");
+                else
+                    Reply(player, $"Template resolve: <color=#ff8866>{resolveErr ?? "?"}</color>");
+
+                var okList = new List<string>();
+                foreach (var c in CannoneerRoamingTemplateCandidates)
+                {
+                    try
+                    {
+                        var st = RoamingNPCs.Call("IsBridgeTemplateReady", c) as string;
+                        if (st == "ok") okList.Add(c);
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+                }
+
+                Reply(player,
+                    okList.Count > 0
+                        ? $"Auto candidates ready ({okList.Count}): <color=#7ec8e3>{string.Join(", ", okList)}</color>"
+                        : "<color=#ff8866>No auto candidates ready</color> — enable at least one bot under RoamingNPCs → Bots settings, or set an exact template key.");
+            }
+
+            if (!TryGetLastBoat(player, out var boat, out var boatId, out var boatErr))
+            {
+                Reply(player, $"Registered boat: {boatErr}");
+                return;
+            }
+
+            var pb = boat as PlayerBoat;
+            Reply(player,
+                $"Boat netId=<color=#7ec8e3>{boatId}</color> type={boat.GetType().Name} prefab={boat.ShortPrefabName}");
+            if (pb != null)
+            {
+                var depN = pb.Deployables?.Cached?.Count ?? 0;
+                var cannons = 0;
+                if (pb.Deployables?.Cached != null)
+                {
+                    foreach (var e in pb.Deployables.Cached)
+                    {
+                        if (e is Cannon) cannons++;
+                    }
+                }
+
+                Reply(player,
+                    $"Naval <color=#7ec8e3>PlayerBoat</color>: deployables={depN}, cannons ~{cannons} (cannoneer needs a free cannon).");
+            }
+            else
+            {
+                Reply(player,
+                    "<color=#ff8866>Not a modular PlayerBoat</color> — deck crew works; <color=#ff8866>cannoneer</color> requires a naval hull + deployable cannon.");
+            }
+
+            var n = CountCrewOnBoat(boatId);
+            Reply(player, $"Tracked crew records for this boat: <color=#7ec8e3>{n}</color>");
+            foreach (var kv in _crewByNpcNetId)
+            {
+                if (kv.Value.BoatNetId != boatId) continue;
+                var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(kv.Key));
+                var alive = ent != null && !ent.IsDestroyed;
+                var bp = ent as BasePlayer;
+                Reply(player,
+                    $"  station {kv.Value.StationIndex} job={kv.Value.Job ?? ""} entityAlive={alive} netId={kv.Key} isNpc={(bp != null ? bp.IsNpc.ToString() : "?")}");
+            }
+
+            Reply(player,
+                "If spawn claims success but you see nobody: check the server console for [MaxxCrew] Spawn OK lines, oxide.reload MaxxCrew, then /maxxcrew clear and add again.");
         }
 
         private void CmdStatus(BasePlayer player)
@@ -731,7 +821,8 @@ namespace Oxide.Plugins
             {
                 if (kv.Value.BoatNetId != boatId) continue;
                 var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(kv.Key)) as BaseEntity;
-                if (ent is BasePlayer bp && !bp.IsDestroyed && bp.IsNpc)
+                // Do not rely on bp.IsNpc — Roaming bridge bodies / some builds vary; these net ids are only ours.
+                if (ent is BasePlayer bp && !bp.IsDestroyed)
                     toKill.Add(bp);
             }
 
@@ -813,6 +904,8 @@ namespace Oxide.Plugins
                 scientist.transform.localPosition = localPos;
                 scientist.transform.localRotation = localRot;
 
+                TryWakeCrewNpc(scientist);
+
                 if (_cfg.DisableNavMeshAgent)
                 {
                     var agent = scientist.GetComponent<UnityEngine.AI.NavMeshAgent>();
@@ -849,6 +942,8 @@ namespace Oxide.Plugins
                 return false;
             }
 
+            Puts(
+                $"[MaxxCrew] Spawn OK: deck station={stationIndex} boat={boatId} npc={(scientist?.net.ID.Value ?? 0UL)} prefab={scientist?.ShortPrefabName ?? "?"}");
             return true;
         }
 
@@ -906,6 +1001,7 @@ namespace Oxide.Plugins
                         return false;
                     }
 
+                    PrintWarning($"[MaxxCrew] Cannoneer roaming spawn failed ({roamErr}); trying scientist prefab fallback.");
                     if (!TryCreateScientistFromPaths(ResolveCannoneerPrefabPaths(), spawnPos, spawnRot, out var sci, out createdForCleanup))
                     {
                         error = roamErr + " (scientist fallback also failed.)";
@@ -960,6 +1056,8 @@ namespace Oxide.Plugins
                     }
                 }
 
+                TryWakeCrewNpc(gunner);
+
                 if (cannon.IsMounted())
                 {
                     error = "That cannon already has a gunner.";
@@ -1007,6 +1105,9 @@ namespace Oxide.Plugins
 
                 if (!string.IsNullOrWhiteSpace(_cfg.CannoneerKitName))
                     timer.Once(1f, () => ApplyCannoneerKitDelayed(npcNet));
+
+                Puts(
+                    $"[MaxxCrew] Spawn OK: cannoneer station={stationIndex} boat={boatId} npc={npcNet} roaming={fromRoaming} cannon={cannon.net.ID.Value}");
             }
             catch (Exception ex)
             {
@@ -1156,7 +1257,7 @@ namespace Oxide.Plugins
         private void ApplyCannoneerKitDelayed(ulong npcNetId)
         {
             var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcNetId)) as BasePlayer;
-            if (npc == null || npc.IsDestroyed || !npc.IsNpc) return;
+            if (npc == null || npc.IsDestroyed) return;
             ApplyKitIfPossible(npc, _cfg.CannoneerKitName, "cannoneer");
         }
 
@@ -1226,7 +1327,7 @@ namespace Oxide.Plugins
             List<string> paths,
             Vector3 worldPos,
             Quaternion worldRot,
-            out ScientistNPC scientist,
+            out HumanNPC scientist,
             out BaseEntity created)
         {
             scientist = null;
@@ -1240,9 +1341,10 @@ namespace Oxide.Plugins
                 var ent = GameManager.server.CreateEntity(path.Trim(), worldPos, worldRot, true);
                 if (ent == null) continue;
                 var sci = ent as ScientistNPC;
-                if (sci != null)
+                var hum = sci ?? ent as global::HumanNPC;
+                if (hum != null)
                 {
-                    scientist = sci;
+                    scientist = hum;
                     created = ent;
                     return true;
                 }
@@ -1258,6 +1360,23 @@ namespace Oxide.Plugins
             }
 
             return false;
+        }
+
+        /// <summary>Roaming bridge spawns sometimes come up sleeping; mounting usually wakes, but this avoids invisible crew.</summary>
+        private static void TryWakeCrewNpc(BasePlayer p)
+        {
+            if (p == null || p.IsDestroyed) return;
+            try
+            {
+                if (!p.IsSleeping()) return;
+                var mi = typeof(BasePlayer).GetMethod("EndSleeping",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                mi?.Invoke(p, null);
+            }
+            catch
+            {
+                /* ignore */
+            }
         }
 
         private bool TryPickUnclaimedCannon(PlayerBoat boat, ulong boatNetId, Vector3 nearWorld, out Cannon cannon, out string error)
@@ -1338,7 +1457,7 @@ namespace Oxide.Plugins
                 var npcId = kv.Key;
                 var rec = kv.Value;
                 var gunner = BaseNetworkable.serverEntities.Find(new NetworkableId(npcId)) as BasePlayer;
-                if (gunner == null || gunner.IsDestroyed || !gunner.IsNpc)
+                if (gunner == null || gunner.IsDestroyed)
                 {
                     _crewByNpcNetId.Remove(npcId);
                     continue;
