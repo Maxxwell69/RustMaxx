@@ -2988,6 +2988,7 @@ namespace Oxide.Plugins
             EnsureStreamerMedicTemplate();
             EnsureStreamerMinerTemplate();
             EnsureStreamerLumberjackTemplate();
+            EnsureStreamerMacTemplate();
             MigrateStreamerRockyTerrainBridgeHintsOnce();
             MigrateStreamerMedicEscortPersonalityOnce();
             MigrateStreamerLumberjackPythonDefenseOnce();
@@ -3755,12 +3756,91 @@ namespace Oxide.Plugins
             }
         }
 
+        /// <summary>Creates <c>streamer_mac</c> once — heavy plate + backpack, LR300, jackhammer/pickaxe + hatchet (general gather + defense).</summary>
+        private void EnsureStreamerMacTemplate()
+        {
+            if (config?.bots == null) return;
+            const string macKey = "streamer_mac";
+            if (config.bots.ContainsKey(macKey)) return;
+            if (!config.bots.TryGetValue("streamer_patrol", out var src) || src == null)
+            {
+                if (!config.bots.TryGetValue("alfred_hunter", out src) || src == null) return;
+            }
+
+            try
+            {
+                var json = JsonConvert.SerializeObject(src, settingsSerializer);
+                var clone = JsonConvert.DeserializeObject<BotSetup>(json, settingsSerializer);
+                if (clone == null) return;
+
+                clone.Name = "Mac";
+                clone.Personality = PersonalityBot.Friendly;
+                clone.HunterState.CanHunt = false;
+
+                clone.MinerState ??= new SetupMining();
+                clone.MinerState.CanMiningWood = true;
+                clone.MinerState.CanMiningOre = true;
+                clone.MinerState.CanMiningBarrel = false;
+                clone.MinerState.CanMiningRoadSign = false;
+                clone.MinerState.CanPickupCollectibleItems = true;
+                clone.MinerState.CanPickupDroppedItems = false;
+                clone.MinerState.CanLootedContainer = false;
+                clone.MinerState.CanLootedCorpse = false;
+                clone.MinerState.CanButcherCorpse = false;
+                clone.MinerState.CanFuelUseFromChainsaw = false;
+                clone.MinerState.OreGatherYieldMultiplier = 1f;
+                clone.MinerState.TreeMiningStrikeDelayMultiplier = 1f;
+
+                clone.Wear.items = new List<ItemSetup>
+                {
+                    new ItemSetup("heavy.plate.helmet", 0),
+                    new ItemSetup("heavy.plate.jacket", 0),
+                    new ItemSetup("heavy.plate.pants", 0),
+                    new ItemSetup("largebackpack", 0),
+                };
+
+                clone.ItemsMiningOre.Items = new List<ItemBot>
+                {
+                    new ItemBot(true, true, new ItemSetup("jackhammer", 0)),
+                    new ItemBot(false, false, new ItemSetup("pickaxe", 0)),
+                    new ItemBot(true, true, new ItemSetup("pickaxe", 0)),
+                };
+
+                clone.ItemsMiningTree.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, false, new ItemSetup("hatchet", 0)),
+                    new ItemBot(true, true, new ItemSetup("hatchet", 0)),
+                };
+
+                clone.ItemsButcher.Items = new List<ItemBot>();
+
+                clone.ItemsWeapon.CanUseAmmo = true;
+                clone.ItemsWeapon.AmountAmmo = 128;
+                clone.ItemsWeapon.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, true, new ItemSetup("rifle.lr300", 0)) { ammoShortname = "ammo.rifle" },
+                };
+
+                clone.Controller ??= new ControllerSetup();
+                clone.Controller.ApplyStreamerRockyTerrainBridgeHints();
+                clone.Init();
+                config.bots[macKey] = clone;
+                SaveConfig();
+                PrintWarning(
+                    "[RoamingNPCs] Added default bot template 'streamer_mac' (heavy plate + backpack + LR300 + tools). Use ?template=streamer_mac or MaxxInvaders spawn slot 5.");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[RoamingNPCs] Could not add streamer_mac template: {ex.Message}");
+            }
+        }
+
         /// <summary>Existing servers: upgrade streamer bridge templates once for rocky terrain navigation.</summary>
         private void MigrateStreamerRockyTerrainBridgeHintsOnce()
         {
             if (config?.bots == null) return;
             if (config.StreamerRockyTerrainBridgeApplied) return;
-            foreach (var key in new[] { "streamer_patrol", "streamer_medic", "streamer_miner", "streamer_lumberjack" })
+            foreach (var key in new[] { "streamer_patrol", "streamer_medic", "streamer_miner", "streamer_lumberjack", "streamer_mac" })
             {
                 if (!config.bots.TryGetValue(key, out var bot) || bot?.Controller == null) continue;
                 bot.Controller.ApplyStreamerRockyTerrainBridgeHints();

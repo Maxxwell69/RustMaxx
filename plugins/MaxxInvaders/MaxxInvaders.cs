@@ -24,7 +24,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("MaxxInvaders", "RustMaxx", "1.7.58")]
+    [Info("MaxxInvaders", "RustMaxx", "1.7.59")]
     [Description("Viewer-linked NPCs: admin GUI (Invaders / Maxx / Roaming), RoamingNPCs bridge, RCON.")]
     public class MaxxInvaders : RustPlugin
     {
@@ -35,6 +35,9 @@ namespace Oxide.Plugins
         private const string PermDebug = "maxxinvaders.debug";
         /// <summary>Right INVADERS HUD, deposit box overlay, middle-mouse box assign — without full admin GUI.</summary>
         private const string PermApprovedStreamer = "maxxinvaders.approvedstreamer";
+
+        /// <summary>Spawn form Roaming template buttons / draft slot index (0-based). Five slots in <see cref="GuiSettings.SpawnRoamingTemplateKeys"/>.</summary>
+        private const int SpawnRoamingTemplateSlotMaxIndex = 4;
 
         private const string LogPrefix = "[MaxxInvaders]";
         private const string DataFile = "MaxxInvaders/MaxxInvadersData";
@@ -406,13 +409,14 @@ namespace Oxide.Plugins
             /// <summary>Version text (<c>v{Version}</c>) font-size markup used in the main GUI.</summary>
             public int InvadersVersionSize { get; set; } = 11;
 
-            /// <summary>Four RoamingNPCs.json bot keys for the Invaders spawn form selector (slots 1–4).</summary>
+            /// <summary>RoamingNPCs.json bot keys for the Invaders spawn form selector (slots 1–5).</summary>
             public List<string> SpawnRoamingTemplateKeys { get; set; } = new()
             {
                 "streamer_patrol",
                 "streamer_miner",
                 "streamer_lumberjack",
                 "streamer_medic",
+                "streamer_mac",
             };
 
             /// <summary>Legacy config key; 3D overhead tags are disabled (HP/distance use INVADERS panel only).</summary>
@@ -478,7 +482,7 @@ namespace Oxide.Plugins
                 _cfg.PrefabByBehaviorMode = new Dictionary<string, string>(d.PrefabByBehaviorMode);
             if (_cfg.Gui.SpawnRoamingTemplateKeys == null || _cfg.Gui.SpawnRoamingTemplateKeys.Count == 0)
                 _cfg.Gui.SpawnRoamingTemplateKeys = new List<string>(d.Gui.SpawnRoamingTemplateKeys);
-            while (_cfg.Gui.SpawnRoamingTemplateKeys.Count < 4)
+            while (_cfg.Gui.SpawnRoamingTemplateKeys.Count < 5)
                 _cfg.Gui.SpawnRoamingTemplateKeys.Add(
                     string.IsNullOrWhiteSpace(_cfg.DefaultRoamingTemplateKey)
                         ? "bob_resources_farmer"
@@ -527,7 +531,7 @@ namespace Oxide.Plugins
             if (keys == null || keys.Count == 0) return;
 
             var d = defaults.Gui?.SpawnRoamingTemplateKeys;
-            if (d == null || d.Count < 4) return;
+            if (d == null || d.Count < 5) return;
 
             bool SeqEqual(List<string> a, List<string> b)
             {
@@ -551,11 +555,24 @@ namespace Oxide.Plugins
                 return;
             }
 
+            var streamerFourPreMac = new List<string>
+            {
+                "streamer_patrol",
+                "streamer_miner",
+                "streamer_lumberjack",
+                "streamer_medic",
+            };
+            if (keys.Count == 4 && SeqEqual(keys, streamerFourPreMac))
+            {
+                keys.Add("streamer_mac");
+                return;
+            }
+
             if (keys.Any(k => string.Equals(k?.Trim(), "streamer_patrol", StringComparison.OrdinalIgnoreCase)))
                 return;
 
             keys.Insert(0, "streamer_patrol");
-            while (keys.Count > 4)
+            while (keys.Count > 5)
                 keys.RemoveAt(keys.Count - 1);
         }
 
@@ -4703,7 +4720,7 @@ namespace Oxide.Plugins
             public string RenameTarget = "";
             public string RenameName = "";
 
-            /// <summary>0–3: index into <see cref="GuiSettings.SpawnRoamingTemplateKeys"/>.</summary>
+            /// <summary>0–4: index into <see cref="GuiSettings.SpawnRoamingTemplateKeys"/> (five slots).</summary>
             public int RoamingTemplateSlot;
 
             public SpawnDraft()
@@ -5528,7 +5545,7 @@ namespace Oxide.Plugins
             var keys = _cfg.Gui?.SpawnRoamingTemplateKeys;
             if (keys == null || keys.Count == 0)
                 return fallback;
-            var i = Mathf.Clamp(d?.RoamingTemplateSlot ?? 0, 0, 3);
+            var i = Mathf.Clamp(d?.RoamingTemplateSlot ?? 0, 0, SpawnRoamingTemplateSlotMaxIndex);
             while (keys.Count <= i)
                 keys.Add(fallback);
             var k = keys[i]?.Trim();
@@ -6857,12 +6874,12 @@ namespace Oxide.Plugins
                 TextAnchor.MiddleLeft,
                 "0.75 0.82 0.95 1");
 
-            for (var si = 0; si < 4; si++)
+            for (var si = 0; si <= SpawnRoamingTemplateSlotMaxIndex; si++)
             {
                 var k = si < tmplKeys.Count ? tmplKeys[si] : _cfg.DefaultRoamingTemplateKey;
-                var slotSel = Mathf.Clamp(draft.RoamingTemplateSlot, 0, 3) == si;
-                var x0 = 0.03f + si * 0.105f;
-                var x1 = x0 + 0.098f;
+                var slotSel = Mathf.Clamp(draft.RoamingTemplateSlot, 0, SpawnRoamingTemplateSlotMaxIndex) == si;
+                var x0 = 0.03f + si * 0.086f;
+                var x1 = x0 + 0.078f;
                 var col = slotSel ? _cfg.Gui.AccentColor : "0.18 0.22 0.28 0.95";
                 AddCuiButtonWithText(
                     container,
@@ -7434,7 +7451,7 @@ namespace Oxide.Plugins
                 int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var tmplSlot))
             {
                 var dSlot = GetSpawnDraft(player.userID);
-                dSlot.RoamingTemplateSlot = Mathf.Clamp(tmplSlot, 0, 3);
+                dSlot.RoamingTemplateSlot = Mathf.Clamp(tmplSlot, 0, SpawnRoamingTemplateSlotMaxIndex);
                 OpenGui(player, GetGuiPage(player.userID));
                 return;
             }
