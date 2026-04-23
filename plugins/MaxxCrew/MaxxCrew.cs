@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.6")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.7")]
     [Description("Spawn crew on boats; cannoneers use RoamingNPCs bridge bodies + Kits (MaxxInvaders-style).")]
     public class MaxxCrew : RustPlugin
     {
@@ -122,8 +122,8 @@ namespace Oxide.Plugins
             [JsonProperty("Cannoneer use RoamingNPCs bridge bodies (same API as MaxxInvaders — needs RoamingNPCs plugin + template key)")]
             public bool CannoneerUseRoamingNpcBodies { get; set; } = true;
 
-            [JsonProperty("Cannoneer RoamingNPCs template key (Bots key in oxide/config/RoamingNPCs.json)")]
-            public string CannoneerRoamingTemplateKey { get; set; } = "";
+            [JsonProperty("Cannoneer RoamingNPCs template key (Bots settings child key in RoamingNPCs.json; empty = austin_fighter)")]
+            public string CannoneerRoamingTemplateKey { get; set; } = "austin_fighter";
 
             [JsonProperty("Cannoneer fallback to scientist prefabs if RoamingNPCs spawn fails")]
             public bool CannoneerFallbackToScientistPrefabs { get; set; } = false;
@@ -277,6 +277,10 @@ namespace Oxide.Plugins
                 _cfg.Stations = DefaultStations();
             if (_cfg.CannoneerScientistPrefabs == null)
                 _cfg.CannoneerScientistPrefabs = new List<string>();
+
+            // Older MaxxCrew.json had an empty key; pick a combat bot that exists in RustMaxx's bundled RoamingNPCs.json.
+            if (_cfg.CannoneerUseRoamingNpcBodies && string.IsNullOrWhiteSpace(_cfg.CannoneerRoamingTemplateKey))
+                _cfg.CannoneerRoamingTemplateKey = "austin_fighter";
         }
 
         private void LoadData()
@@ -341,11 +345,11 @@ namespace Oxide.Plugins
                     break;
                 default:
                     Reply(player,
-                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.6)\n" +
+                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.7)\n" +
                         "<color=#aaa>/maxxcrew register</color> — look at your boat (deck/helm) and save it\n" +
                         "<color=#aaa>Boat wheel</color> — hold Use on helm/lock: choose <color=#7ec8e3>Register boat (MaxxCrew)</color> when available\n" +
                         "<color=#aaa>/maxxcrew add [station]</color> — spawn crew at station index (0-based); omit = first free\n" +
-                        "<color=#aaa>Jobs</color> — <color=#7ec8e3>cannoneer</color> = RoamingNPCs bot (MaxxInvaders body) + <color=#7ec8e3>CannoneerKitName</color>; set <color=#7ec8e3>Cannoneer RoamingNPCs template key</color> in JSON\n" +
+                        "<color=#aaa>Jobs</color> — <color=#7ec8e3>cannoneer</color> = RoamingNPCs bot + optional Kits (default template <color=#7ec8e3>austin_fighter</color> if key left empty)\n" +
                         "<color=#aaa>/maxxcrew clear</color> — remove all crew on your last registered boat\n" +
                         "<color=#aaa>/maxxcrew stations</color> — list station slots from config\n" +
                         "<color=#aaa>/maxxcrew status</color> — show registered boat + crew count");
