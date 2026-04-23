@@ -15,13 +15,14 @@ using System.Reflection;
 using HarmonyLib;
 using Newtonsoft.Json;
 using Oxide.Core;
+using Oxide.Core.Plugins;
 using Rust;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.4")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.5")]
     [Description("Spawn crew NPCs on player-built boats at fixed deck stations + naval jobs (cannoneer).")]
     public class MaxxCrew : RustPlugin
     {
@@ -44,9 +45,21 @@ namespace Oxide.Plugins
             "assets/prefabs/npc/scientist/scientist.prefab",
         };
 
+        /// <summary>Combat-first scientist order (aligned with MaxxInvaders / naval gunners).</summary>
+        private static readonly string[] DefaultCannoneerCombatPrefabs =
+        {
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_heavy.prefab",
+            "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
+            "assets/prefabs/npc/scientist/scientist.prefab",
+            "assets/content/npc/scientist/scientist.prefab",
+        };
+
         private ConfigData _cfg;
         private StoredData _data;
         private Timer _crewJobTimer;
+
+        [PluginReference] private Plugin Kits;
 
         /// <summary>Active crew keyed by NPC net id (for cleanup).</summary>
         private readonly Dictionary<ulong, CrewRecord> _crewByNpcNetId = new();
@@ -97,6 +110,12 @@ namespace Oxide.Plugins
 
             [JsonProperty("Cannoneer min dot(product) between barrel forward and target direction to fire")]
             public float CannoneerMinFireDot { get; set; } = 0.35f;
+
+            [JsonProperty("Cannoneer scientist prefabs (try in order; empty = LR300/heavy/roam defaults like MaxxInvaders)")]
+            public List<string> CannoneerScientistPrefabs { get; set; } = new();
+
+            [JsonProperty("Cannoneer uMod Kits kit name (empty = none; applied ~1s after mount)")]
+            public string CannoneerKitName { get; set; } = "";
         }
 
         private sealed class StationConfig
@@ -245,6 +264,8 @@ namespace Oxide.Plugins
             _cfg.CannoneerMinFireDot = Mathf.Clamp(_cfg.CannoneerMinFireDot, 0.05f, 0.98f);
             if (_cfg.Stations == null || _cfg.Stations.Count == 0)
                 _cfg.Stations = DefaultStations();
+            if (_cfg.CannoneerScientistPrefabs == null)
+                _cfg.CannoneerScientistPrefabs = new List<string>();
         }
 
         private void LoadData()
@@ -309,11 +330,11 @@ namespace Oxide.Plugins
                     break;
                 default:
                     Reply(player,
-                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.4)\n" +
+                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.5)\n" +
                         "<color=#aaa>/maxxcrew register</color> — look at your boat (deck/helm) and save it\n" +
                         "<color=#aaa>Boat wheel</color> — hold Use on helm/lock: choose <color=#7ec8e3>Register boat (MaxxCrew)</color> when available\n" +
                         "<color=#aaa>/maxxcrew add [station]</color> — spawn crew at station index (0-based); omit = first free\n" +
-                        "<color=#aaa>Jobs</color> — set <color=#7ec8e3>Job</color> on a station in MaxxCrew.json (e.g. <color=#7ec8e3>cannoneer</color> on a PlayerBoat with deployable cannons)\n" +
+                        "<color=#aaa>Jobs</color> — set <color=#7ec8e3>Job</color> on a station (e.g. <color=#7ec8e3>cannoneer</color> uses combat scientists + optional <color=#7ec8e3>CannoneerKitName</color> like MaxxInvaders)\n" +
                         "<color=#aaa>/maxxcrew clear</color> — remove all crew on your last registered boat\n" +
                         "<color=#aaa>/maxxcrew stations</color> — list station slots from config\n" +
                         "<color=#aaa>/maxxcrew status</color> — show registered boat + crew count");
@@ -711,40 +732,7 @@ namespace Oxide.Plugins
             if (job == "cannoneer")
                 return TrySpawnCannoneerAtStation(player, boat, boatId, stationIndex, station, worldPos, worldRot, out error);
 
-            ScientistNPC scientist = null;
-            BaseEntity created = null;
-            var prefabList = new List<string>();
-            if (!string.IsNullOrWhiteSpace(_cfg.ScientistPrefab))
-                prefabList.Add(_cfg.ScientistPrefab.Trim());
-            foreach (var p in DefaultScientistPrefabs)
-            {
-                if (!prefabList.Contains(p))
-                    prefabList.Add(p);
-            }
-
-            foreach (var path in prefabList)
-            {
-                var ent = GameManager.server.CreateEntity(path, worldPos, worldRot, true);
-                if (ent == null) continue;
-                var sci = ent as ScientistNPC;
-                if (sci != null)
-                {
-                    scientist = sci;
-                    created = ent;
-                    break;
-                }
-
-                try
-                {
-                    ent.Kill();
-                }
-                catch
-                {
-                    /* ignore */
-                }
-            }
-
-            if (scientist == null)
+            if (!TryCreateScientistFromPaths(ResolveDeckPrefabPaths(), worldPos, worldRot, out var scientist, out var created))
             {
                 error = "Could not spawn ScientistNPC (prefab list failed). Check Scientist prefab paths for your Rust build.";
                 return false;
@@ -839,42 +827,9 @@ namespace Oxide.Plugins
             var spawnPos = cannon.mountAnchor != null ? cannon.mountAnchor.position : deckWorldPos;
             var spawnRot = cannon.mountAnchor != null ? cannon.mountAnchor.rotation : deckWorldRot;
 
-            ScientistNPC scientist = null;
-            BaseEntity created = null;
-            var prefabList = new List<string>();
-            if (!string.IsNullOrWhiteSpace(_cfg.ScientistPrefab))
-                prefabList.Add(_cfg.ScientistPrefab.Trim());
-            foreach (var p in DefaultScientistPrefabs)
+            if (!TryCreateScientistFromPaths(ResolveCannoneerPrefabPaths(), spawnPos, spawnRot, out var scientist, out var created))
             {
-                if (!prefabList.Contains(p))
-                    prefabList.Add(p);
-            }
-
-            foreach (var path in prefabList)
-            {
-                var ent = GameManager.server.CreateEntity(path, spawnPos, spawnRot, true);
-                if (ent == null) continue;
-                var sci = ent as ScientistNPC;
-                if (sci != null)
-                {
-                    scientist = sci;
-                    created = ent;
-                    break;
-                }
-
-                try
-                {
-                    ent.Kill();
-                }
-                catch
-                {
-                    /* ignore */
-                }
-            }
-
-            if (scientist == null)
-            {
-                error = "Could not spawn ScientistNPC for cannoneer.";
+                error = "Could not spawn combat ScientistNPC for cannoneer (prefab list failed).";
                 return false;
             }
 
@@ -921,6 +876,9 @@ namespace Oxide.Plugins
                     CannonNetId = cannon.net.ID.Value,
                     NextFireTime = 0f,
                 };
+
+                if (!string.IsNullOrWhiteSpace(_cfg.CannoneerKitName))
+                    timer.Once(1f, () => ApplyCannoneerKitDelayed(npcNet));
             }
             catch (Exception ex)
             {
@@ -938,6 +896,113 @@ namespace Oxide.Plugins
             }
 
             return true;
+        }
+
+        private void ApplyCannoneerKitDelayed(ulong npcNetId)
+        {
+            var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcNetId)) as ScientistNPC;
+            if (npc == null || npc.IsDestroyed) return;
+            ApplyKitIfPossible(npc, _cfg.CannoneerKitName, "cannoneer");
+        }
+
+        /// <summary>Same pattern as MaxxInvaders: optional uMod <c>Kits</c> <c>GiveKit</c>.</summary>
+        private void ApplyKitIfPossible(BasePlayer npc, string kitName, string logTag)
+        {
+            if (string.IsNullOrWhiteSpace(kitName) || Kits == null || !Kits.IsLoaded)
+                return;
+
+            try
+            {
+                var result = Kits.Call("GiveKit", npc, kitName.Trim());
+                if (result is bool b && !b)
+                    PrintWarning($"[MaxxCrew] Kits returned false for kit={kitName} ({logTag}).");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[MaxxCrew] Kits GiveKit failed ({logTag}): {ex.Message}");
+            }
+        }
+
+        private List<string> ResolveDeckPrefabPaths()
+        {
+            var paths = new List<string>();
+            void Add(string p)
+            {
+                if (string.IsNullOrWhiteSpace(p)) return;
+                var t = p.Trim();
+                if (!paths.Contains(t)) paths.Add(t);
+            }
+
+            Add(_cfg.ScientistPrefab);
+            foreach (var p in DefaultScientistPrefabs)
+                Add(p);
+            return paths;
+        }
+
+        /// <summary>Combat scientists first (MaxxInvaders-style), then global Scientist prefab, then generic fallbacks.</summary>
+        private List<string> ResolveCannoneerPrefabPaths()
+        {
+            var paths = new List<string>();
+            void Add(string p)
+            {
+                if (string.IsNullOrWhiteSpace(p)) return;
+                var t = p.Trim();
+                if (!paths.Contains(t)) paths.Add(t);
+            }
+
+            if (_cfg.CannoneerScientistPrefabs != null && _cfg.CannoneerScientistPrefabs.Count > 0)
+            {
+                foreach (var p in _cfg.CannoneerScientistPrefabs)
+                    Add(p);
+            }
+            else
+            {
+                foreach (var p in DefaultCannoneerCombatPrefabs)
+                    Add(p);
+            }
+
+            Add(_cfg.ScientistPrefab);
+            foreach (var p in DefaultScientistPrefabs)
+                Add(p);
+            return paths;
+        }
+
+        private static bool TryCreateScientistFromPaths(
+            List<string> paths,
+            Vector3 worldPos,
+            Quaternion worldRot,
+            out ScientistNPC scientist,
+            out BaseEntity created)
+        {
+            scientist = null;
+            created = null;
+            if (paths == null || paths.Count == 0)
+                return false;
+
+            foreach (var path in paths)
+            {
+                if (string.IsNullOrWhiteSpace(path)) continue;
+                var ent = GameManager.server.CreateEntity(path.Trim(), worldPos, worldRot, true);
+                if (ent == null) continue;
+                var sci = ent as ScientistNPC;
+                if (sci != null)
+                {
+                    scientist = sci;
+                    created = ent;
+                    return true;
+                }
+
+                try
+                {
+                    ent.Kill();
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            }
+
+            return false;
         }
 
         private bool TryPickUnclaimedCannon(PlayerBoat boat, ulong boatNetId, Vector3 nearWorld, out Cannon cannon, out string error)
