@@ -21,8 +21,8 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.3")]
-    [Description("Spawn crew NPCs on player-built boats at fixed deck stations (naval update).")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.4")]
+    [Description("Spawn crew NPCs on player-built boats at fixed deck stations + naval jobs (cannoneer).")]
     public class MaxxCrew : RustPlugin
     {
         private const string HarmonyId = "com.rustmaxx.maxxcrew.entitymenu";
@@ -46,6 +46,7 @@ namespace Oxide.Plugins
 
         private ConfigData _cfg;
         private StoredData _data;
+        private Timer _crewJobTimer;
 
         /// <summary>Active crew keyed by NPC net id (for cleanup).</summary>
         private readonly Dictionary<ulong, CrewRecord> _crewByNpcNetId = new();
@@ -84,6 +85,18 @@ namespace Oxide.Plugins
 
             [JsonProperty("Add \"Register boat (MaxxCrew)\" to the naval boat entity wheel (Harmony; requires compatible Rust build)")]
             public bool RegisterFromEntityWheel { get; set; } = true;
+
+            [JsonProperty("Crew job tick interval (sec) — cannoneer aim/fire scan")]
+            public float CrewJobTickSeconds { get; set; } = 1.25f;
+
+            [JsonProperty("Cannoneer scan radius (m)")]
+            public float CannoneerScanRadius { get; set; } = 90f;
+
+            [JsonProperty("Cannoneer min time between shots (sec)")]
+            public float CannoneerFireCooldownSeconds { get; set; } = 4f;
+
+            [JsonProperty("Cannoneer min dot(product) between barrel forward and target direction to fire")]
+            public float CannoneerMinFireDot { get; set; } = 0.35f;
         }
 
         private sealed class StationConfig
@@ -99,6 +112,10 @@ namespace Oxide.Plugins
 
             [JsonProperty("Yaw degrees (local, around Y)")]
             public float YawDegrees { get; set; }
+
+            /// <summary>Deck job id: empty = stand at offset; "cannoneer" = mount a naval boat Cannon and engage hostiles.</summary>
+            [JsonProperty("Job (empty = deck, cannoneer = naval cannon)")]
+            public string Job { get; set; } = "";
         }
 
         private sealed class StoredData
@@ -115,6 +132,9 @@ namespace Oxide.Plugins
             public ulong BoatNetId;
             public int StationIndex;
             public ulong OwnerSteamId;
+            public string Job = "";
+            public ulong CannonNetId;
+            public float NextFireTime;
         }
 
         private static List<StationConfig> DefaultStations()
@@ -125,6 +145,8 @@ namespace Oxide.Plugins
                 new() { LocalX = -1f, LocalY = 1.2f, LocalZ = -1f, YawDegrees = 0f },
                 new() { LocalX = 1f, LocalY = 1.2f, LocalZ = -1f, YawDegrees = 0f },
                 new() { LocalX = 0f, LocalY = 1.2f, LocalZ = -3f, YawDegrees = 0f },
+                // Example naval job: spawn with `/maxxcrew add 4` after registering a PlayerBoat with deployable cannons.
+                new() { LocalX = 0f, LocalY = 1.4f, LocalZ = -6f, YawDegrees = 0f, Job = "cannoneer" },
             };
         }
 
@@ -141,10 +163,15 @@ namespace Oxide.Plugins
             LoadData();
             if (_cfg.RegisterFromEntityWheel)
                 TryApplyEntityWheelMenuPatch();
+
+            _crewJobTimer?.Destroy();
+            _crewJobTimer = timer.Every(_cfg.CrewJobTickSeconds, CrewJobTick);
         }
 
         private void Unload()
         {
+            _crewJobTimer?.Destroy();
+            _crewJobTimer = null;
             try
             {
                 _harmony?.UnpatchAll(HarmonyId);
@@ -171,6 +198,12 @@ namespace Oxide.Plugins
             if (IsBoatEntity(net as BaseEntity))
             {
                 KillCrewForBoat(id, "boat_killed");
+                return;
+            }
+
+            if (net is Cannon)
+            {
+                RemoveCrewForDestroyedCannon(id);
                 return;
             }
 
@@ -206,6 +239,10 @@ namespace Oxide.Plugins
             _cfg.RegisterRayDistance = Mathf.Clamp(_cfg.RegisterRayDistance, 4f, 80f);
             _cfg.RegisterOverlapRadius = Mathf.Clamp(_cfg.RegisterOverlapRadius, 2f, 24f);
             _cfg.RegisterOverlapStep = Mathf.Clamp(_cfg.RegisterOverlapStep, 1f, 15f);
+            _cfg.CrewJobTickSeconds = Mathf.Clamp(_cfg.CrewJobTickSeconds, 0.5f, 5f);
+            _cfg.CannoneerScanRadius = Mathf.Clamp(_cfg.CannoneerScanRadius, 20f, 200f);
+            _cfg.CannoneerFireCooldownSeconds = Mathf.Clamp(_cfg.CannoneerFireCooldownSeconds, 1f, 30f);
+            _cfg.CannoneerMinFireDot = Mathf.Clamp(_cfg.CannoneerMinFireDot, 0.05f, 0.98f);
             if (_cfg.Stations == null || _cfg.Stations.Count == 0)
                 _cfg.Stations = DefaultStations();
         }
@@ -272,10 +309,11 @@ namespace Oxide.Plugins
                     break;
                 default:
                     Reply(player,
-                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.3)\n" +
+                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.4)\n" +
                         "<color=#aaa>/maxxcrew register</color> — look at your boat (deck/helm) and save it\n" +
                         "<color=#aaa>Boat wheel</color> — hold Use on helm/lock: choose <color=#7ec8e3>Register boat (MaxxCrew)</color> when available\n" +
                         "<color=#aaa>/maxxcrew add [station]</color> — spawn crew at station index (0-based); omit = first free\n" +
+                        "<color=#aaa>Jobs</color> — set <color=#7ec8e3>Job</color> on a station in MaxxCrew.json (e.g. <color=#7ec8e3>cannoneer</color> on a PlayerBoat with deployable cannons)\n" +
                         "<color=#aaa>/maxxcrew clear</color> — remove all crew on your last registered boat\n" +
                         "<color=#aaa>/maxxcrew stations</color> — list station slots from config\n" +
                         "<color=#aaa>/maxxcrew status</color> — show registered boat + crew count");
@@ -310,8 +348,9 @@ namespace Oxide.Plugins
             for (var i = 0; i < _cfg.Stations.Count; i++)
             {
                 var s = _cfg.Stations[i];
+                var job = string.IsNullOrWhiteSpace(s.Job) ? "deck" : s.Job.Trim();
                 Reply(player,
-                    $"  [{i}] local ({s.LocalX:0.##}, {s.LocalY:0.##}, {s.LocalZ:0.##}) yaw {s.YawDegrees:0.#}°");
+                    $"  [{i}] job=<color=#7ec8e3>{job}</color> local ({s.LocalX:0.##}, {s.LocalY:0.##}, {s.LocalZ:0.##}) yaw {s.YawDegrees:0.#}°");
             }
         }
 
@@ -417,7 +456,8 @@ namespace Oxide.Plugins
                 return;
             }
 
-            Reply(player, $"Crew placed at station [{stationIndex}].");
+            var jobLabel = string.IsNullOrWhiteSpace(station.Job) ? "deck" : station.Job.Trim();
+            Reply(player, $"Crew placed at station [{stationIndex}] (job: {jobLabel}).");
         }
 
         private void CmdClear(BasePlayer player)
@@ -667,6 +707,10 @@ namespace Oxide.Plugins
             var worldPos = boat.transform.TransformPoint(localPos);
             var worldRot = boat.transform.rotation * localRot;
 
+            var job = NormalizeStationJob(station.Job);
+            if (job == "cannoneer")
+                return TrySpawnCannoneerAtStation(player, boat, boatId, stationIndex, station, worldPos, worldRot, out error);
+
             ScientistNPC scientist = null;
             BaseEntity created = null;
             var prefabList = new List<string>();
@@ -732,6 +776,9 @@ namespace Oxide.Plugins
                     BoatNetId = boatId,
                     StationIndex = stationIndex,
                     OwnerSteamId = player.userID,
+                    Job = "",
+                    CannonNetId = 0UL,
+                    NextFireTime = 0f,
                 };
             }
             catch (Exception ex)
@@ -750,6 +797,375 @@ namespace Oxide.Plugins
             }
 
             return true;
+        }
+
+        private static string NormalizeStationJob(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "";
+            return raw.Trim().ToLowerInvariant();
+        }
+
+        private bool TrySpawnCannoneerAtStation(
+            BasePlayer player,
+            BaseEntity boat,
+            ulong boatId,
+            int stationIndex,
+            StationConfig station,
+            Vector3 deckWorldPos,
+            Quaternion deckWorldRot,
+            out string error)
+        {
+            error = null;
+            var playerBoat = boat as PlayerBoat;
+            if (playerBoat == null)
+            {
+                error =
+                    "Cannoneer stations only work on a modular <color=#7ec8e3>PlayerBoat</color> (naval build). Rowboats / non-modular hulls have no deployable cannons.";
+                return false;
+            }
+
+            if (playerBoat.Deployables == null || playerBoat.Deployables.Cached == null)
+            {
+                error = "This boat has no deployables cache yet (try again after modules finish spawning).";
+                return false;
+            }
+
+            if (!TryPickUnclaimedCannon(playerBoat, boatId, deckWorldPos, out var cannon, out var pickErr))
+            {
+                error = pickErr;
+                return false;
+            }
+
+            var spawnPos = cannon.mountAnchor != null ? cannon.mountAnchor.position : deckWorldPos;
+            var spawnRot = cannon.mountAnchor != null ? cannon.mountAnchor.rotation : deckWorldRot;
+
+            ScientistNPC scientist = null;
+            BaseEntity created = null;
+            var prefabList = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_cfg.ScientistPrefab))
+                prefabList.Add(_cfg.ScientistPrefab.Trim());
+            foreach (var p in DefaultScientistPrefabs)
+            {
+                if (!prefabList.Contains(p))
+                    prefabList.Add(p);
+            }
+
+            foreach (var path in prefabList)
+            {
+                var ent = GameManager.server.CreateEntity(path, spawnPos, spawnRot, true);
+                if (ent == null) continue;
+                var sci = ent as ScientistNPC;
+                if (sci != null)
+                {
+                    scientist = sci;
+                    created = ent;
+                    break;
+                }
+
+                try
+                {
+                    ent.Kill();
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            }
+
+            if (scientist == null)
+            {
+                error = "Could not spawn ScientistNPC for cannoneer.";
+                return false;
+            }
+
+            try
+            {
+                scientist.enableSaving = false;
+                scientist.displayName = $"{_cfg.CrewNamePrefix} {stationIndex} (cannoneer)";
+                scientist.Spawn();
+
+                if (cannon.IsMounted())
+                {
+                    error = "That cannon already has a gunner.";
+                    scientist.Kill();
+                    return false;
+                }
+
+                cannon.MountPlayer(scientist);
+                try
+                {
+                    cannon.AdminReload(1);
+                }
+                catch
+                {
+                    /* ignore */
+                }
+
+                if (_cfg.DisableNavMeshAgent)
+                {
+                    var agent = scientist.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                    if (agent != null)
+                        agent.enabled = false;
+                }
+
+                var hp = 100f;
+                scientist.InitializeHealth(hp, hp);
+
+                var npcNet = scientist.net.ID.Value;
+                _crewByNpcNetId[npcNet] = new CrewRecord
+                {
+                    BoatNetId = boatId,
+                    StationIndex = stationIndex,
+                    OwnerSteamId = player.userID,
+                    Job = "cannoneer",
+                    CannonNetId = cannon.net.ID.Value,
+                    NextFireTime = 0f,
+                };
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    created?.Kill();
+                }
+                catch
+                {
+                    /* ignore */
+                }
+
+                error = $"Cannoneer spawn failed: {ex.Message}";
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool TryPickUnclaimedCannon(PlayerBoat boat, ulong boatNetId, Vector3 nearWorld, out Cannon cannon, out string error)
+        {
+            cannon = null;
+            error = null;
+            Cannon best = null;
+            var bestSqr = float.MaxValue;
+
+            foreach (var ent in boat.Deployables.Cached)
+            {
+                var c = ent as Cannon;
+                if (c == null || c.IsDestroyed) continue;
+                var parentBoat = c.GetParentEntity() as PlayerBoat;
+                if (parentBoat != null && parentBoat != boat) continue;
+                if (IsCannonClaimedByCrew(c.net.ID.Value)) continue;
+
+                var anchorPos = c.mountAnchor != null ? c.mountAnchor.position : c.transform.position;
+                var sqr = (anchorPos - nearWorld).sqrMagnitude;
+                if (sqr < bestSqr)
+                {
+                    bestSqr = sqr;
+                    best = c;
+                }
+            }
+
+            if (best == null)
+            {
+                error =
+                    "No free <color=#7ec8e3>Cannon</color> found on this boat (place a deployable cannon, or clear crew that already claimed one).";
+                return false;
+            }
+
+            cannon = best;
+            return true;
+        }
+
+        private bool IsCannonClaimedByCrew(ulong cannonNetId)
+        {
+            foreach (var kv in _crewByNpcNetId)
+            {
+                if (kv.Value.CannonNetId == cannonNetId)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void RemoveCrewForDestroyedCannon(ulong cannonNetId)
+        {
+            foreach (var kv in new List<KeyValuePair<ulong, CrewRecord>>(_crewByNpcNetId))
+            {
+                if (kv.Value.CannonNetId != cannonNetId) continue;
+                var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(kv.Key)) as BaseEntity;
+                try
+                {
+                    ent?.Kill();
+                }
+                catch
+                {
+                    /* ignore */
+                }
+
+                _crewByNpcNetId.Remove(kv.Key);
+            }
+        }
+
+        private void CrewJobTick()
+        {
+            if (_cfg == null || !_cfg.EnablePlugin) return;
+
+            foreach (var kv in new List<KeyValuePair<ulong, CrewRecord>>(_crewByNpcNetId))
+            {
+                if (string.IsNullOrEmpty(kv.Value.Job) ||
+                    !kv.Value.Job.Equals("cannoneer", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var npcId = kv.Key;
+                var rec = kv.Value;
+                var scientist = BaseNetworkable.serverEntities.Find(new NetworkableId(npcId)) as ScientistNPC;
+                if (scientist == null || scientist.IsDestroyed)
+                {
+                    _crewByNpcNetId.Remove(npcId);
+                    continue;
+                }
+
+                var cannon = BaseNetworkable.serverEntities.Find(new NetworkableId(rec.CannonNetId)) as Cannon;
+                if (cannon == null || cannon.IsDestroyed)
+                {
+                    try
+                    {
+                        scientist.Kill();
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+
+                    _crewByNpcNetId.Remove(npcId);
+                    continue;
+                }
+
+                var owner = BasePlayer.FindByID(rec.OwnerSteamId);
+                if (owner == null || !owner.IsConnected)
+                    continue;
+
+                if (!scientist.isMounted && !cannon.IsMounted())
+                {
+                    try
+                    {
+                        cannon.MountPlayer(scientist);
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+                }
+
+                if (Time.time < rec.NextFireTime)
+                    continue;
+
+                try
+                {
+                    if (!cannon.IsLoaded())
+                    {
+                        cannon.AdminReload(1);
+                        continue;
+                    }
+
+                    if (cannon.FirePoint == null || cannon.AmmoPrefab == null)
+                        continue;
+
+                    var target = FindCannoneerHostile(scientist, cannon, owner);
+                    if (target == null)
+                        continue;
+
+                    var aimFrom = cannon.FirePoint.position;
+                    var aimTo = target.eyes.position;
+                    var dir = (aimTo - aimFrom).normalized;
+                    if (dir.sqrMagnitude < 0.001f)
+                        continue;
+                    if (Vector3.Dot(dir, cannon.FirePoint.forward) < _cfg.CannoneerMinFireDot)
+                        continue;
+
+                    if (!CannoneerHasLoS(aimFrom, aimTo, scientist, cannon))
+                        continue;
+
+                    if (cannon.FireProjectile(cannon.AmmoPrefab, aimFrom, dir, owner, 0.25f, 100f, out _))
+                    {
+                        try
+                        {
+                            cannon.SERVER_OnProjectileFired(owner.Connection, owner);
+                        }
+                        catch
+                        {
+                            /* ignore */
+                        }
+                    }
+
+                    try
+                    {
+                        cannon.AdminReload(1);
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+
+                    rec.NextFireTime = Time.time + _cfg.CannoneerFireCooldownSeconds;
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            }
+        }
+
+        private BasePlayer FindCannoneerHostile(ScientistNPC gunner, Cannon cannon, BasePlayer owner)
+        {
+            var origin = cannon.transform.position;
+            var rad = _cfg.CannoneerScanRadius;
+            var radSqr = rad * rad;
+
+            BasePlayer best = null;
+            var bestSqr = float.MaxValue;
+
+            foreach (var pl in BasePlayer.activePlayerList)
+            {
+                if (pl == null || pl.IsDestroyed || !pl.IsConnected) continue;
+                if (pl == gunner || pl == owner) continue;
+                if (pl.IsNpc || pl.IsSleeping()) continue;
+
+                if (IsFriendly(owner, pl))
+                    continue;
+
+                var sqr = (pl.transform.position - origin).sqrMagnitude;
+                if (sqr > radSqr || sqr >= bestSqr)
+                    continue;
+
+                bestSqr = sqr;
+                best = pl;
+            }
+
+            return best;
+        }
+
+        private static bool IsFriendly(BasePlayer owner, BasePlayer other)
+        {
+            if (owner == null || other == null) return true;
+            if (other.userID == owner.userID) return true;
+            if (owner.currentTeam != 0UL && owner.currentTeam == other.currentTeam)
+                return true;
+            return false;
+        }
+
+        private static bool CannoneerHasLoS(Vector3 from, Vector3 to, ScientistNPC gunner, Cannon cannon)
+        {
+            var dist = Vector3.Distance(from, to);
+            if (dist < 0.1f) return true;
+            var dir = (to - from).normalized;
+            if (!Physics.Raycast(from, dir, out var hit, dist + 0.25f, Layers.Solid, QueryTriggerInteraction.Ignore))
+                return true;
+
+            var ent = hit.GetEntity();
+            if (ent == null) return false;
+            if (ent == gunner || ent == cannon) return true;
+            if (ent is BasePlayer bp && bp.IsConnected) return true;
+            return false;
         }
 
         private static void Reply(BasePlayer player, string msg)
