@@ -3,7 +3,7 @@
 //
 // Setup: copy to oxide/plugins, then `oxide.reload MaxxCrew`
 // Permissions: oxide.grant user <Steam64> maxxcrew.use   (or maxxcrew.admin for owner bypass)
-// Config: oxide/config/MaxxCrew.json — tune "Deck stations" local offsets for your typical hull layout.
+// Config: oxide/config/MaxxCrew.json — deck stations + cannoneer: RoamingNPCs template key + Kits (MaxxInvaders-style bodies).
 
 #nullable disable
 
@@ -22,8 +22,8 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.5")]
-    [Description("Spawn crew NPCs on player-built boats at fixed deck stations + naval jobs (cannoneer).")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.6")]
+    [Description("Spawn crew on boats; cannoneers use RoamingNPCs bridge bodies + Kits (MaxxInvaders-style).")]
     public class MaxxCrew : RustPlugin
     {
         private const string HarmonyId = "com.rustmaxx.maxxcrew.entitymenu";
@@ -60,6 +60,8 @@ namespace Oxide.Plugins
         private Timer _crewJobTimer;
 
         [PluginReference] private Plugin Kits;
+
+        [PluginReference] private Plugin RoamingNPCs;
 
         /// <summary>Active crew keyed by NPC net id (for cleanup).</summary>
         private readonly Dictionary<ulong, CrewRecord> _crewByNpcNetId = new();
@@ -111,11 +113,20 @@ namespace Oxide.Plugins
             [JsonProperty("Cannoneer min dot(product) between barrel forward and target direction to fire")]
             public float CannoneerMinFireDot { get; set; } = 0.35f;
 
-            [JsonProperty("Cannoneer scientist prefabs (try in order; empty = LR300/heavy/roam defaults like MaxxInvaders)")]
+            [JsonProperty("Cannoneer scientist prefabs (only if fallback enabled; try in order)")]
             public List<string> CannoneerScientistPrefabs { get; set; } = new();
 
             [JsonProperty("Cannoneer uMod Kits kit name (empty = none; applied ~1s after mount)")]
             public string CannoneerKitName { get; set; } = "";
+
+            [JsonProperty("Cannoneer use RoamingNPCs bridge bodies (same API as MaxxInvaders — needs RoamingNPCs plugin + template key)")]
+            public bool CannoneerUseRoamingNpcBodies { get; set; } = true;
+
+            [JsonProperty("Cannoneer RoamingNPCs template key (Bots key in oxide/config/RoamingNPCs.json)")]
+            public string CannoneerRoamingTemplateKey { get; set; } = "";
+
+            [JsonProperty("Cannoneer fallback to scientist prefabs if RoamingNPCs spawn fails")]
+            public bool CannoneerFallbackToScientistPrefabs { get; set; } = false;
         }
 
         private sealed class StationConfig
@@ -330,11 +341,11 @@ namespace Oxide.Plugins
                     break;
                 default:
                     Reply(player,
-                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.5)\n" +
+                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.6)\n" +
                         "<color=#aaa>/maxxcrew register</color> — look at your boat (deck/helm) and save it\n" +
                         "<color=#aaa>Boat wheel</color> — hold Use on helm/lock: choose <color=#7ec8e3>Register boat (MaxxCrew)</color> when available\n" +
                         "<color=#aaa>/maxxcrew add [station]</color> — spawn crew at station index (0-based); omit = first free\n" +
-                        "<color=#aaa>Jobs</color> — set <color=#7ec8e3>Job</color> on a station (e.g. <color=#7ec8e3>cannoneer</color> uses combat scientists + optional <color=#7ec8e3>CannoneerKitName</color> like MaxxInvaders)\n" +
+                        "<color=#aaa>Jobs</color> — <color=#7ec8e3>cannoneer</color> = RoamingNPCs bot (MaxxInvaders body) + <color=#7ec8e3>CannoneerKitName</color>; set <color=#7ec8e3>Cannoneer RoamingNPCs template key</color> in JSON\n" +
                         "<color=#aaa>/maxxcrew clear</color> — remove all crew on your last registered boat\n" +
                         "<color=#aaa>/maxxcrew stations</color> — list station slots from config\n" +
                         "<color=#aaa>/maxxcrew status</color> — show registered boat + crew count");
@@ -661,13 +672,13 @@ namespace Oxide.Plugins
 
         private int KillCrewForBoat(ulong boatId, string reason)
         {
-            var toKill = new List<ScientistNPC>();
+            var toKill = new List<BasePlayer>();
             foreach (var kv in _crewByNpcNetId)
             {
                 if (kv.Value.BoatNetId != boatId) continue;
                 var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(kv.Key)) as BaseEntity;
-                if (ent is ScientistNPC s && !s.IsDestroyed)
-                    toKill.Add(s);
+                if (ent is BasePlayer bp && !bp.IsDestroyed && bp.IsNpc)
+                    toKill.Add(bp);
             }
 
             foreach (var s in toKill)
@@ -827,26 +838,82 @@ namespace Oxide.Plugins
             var spawnPos = cannon.mountAnchor != null ? cannon.mountAnchor.position : deckWorldPos;
             var spawnRot = cannon.mountAnchor != null ? cannon.mountAnchor.rotation : deckWorldRot;
 
-            if (!TryCreateScientistFromPaths(ResolveCannoneerPrefabPaths(), spawnPos, spawnRot, out var scientist, out var created))
+            BasePlayer gunner = null;
+            BaseEntity createdForCleanup = null;
+            var fromRoaming = false;
+
+            if (_cfg.CannoneerUseRoamingNpcBodies)
             {
-                error = "Could not spawn combat ScientistNPC for cannoneer (prefab list failed).";
-                return false;
+                if (!TrySpawnRoamingBridgeBodyForCannoneer(player, stationIndex, spawnPos, spawnRot, out gunner, out var roamErr))
+                {
+                    if (!_cfg.CannoneerFallbackToScientistPrefabs)
+                    {
+                        error = roamErr;
+                        return false;
+                    }
+
+                    if (!TryCreateScientistFromPaths(ResolveCannoneerPrefabPaths(), spawnPos, spawnRot, out var sci, out createdForCleanup))
+                    {
+                        error = roamErr + " (scientist fallback also failed.)";
+                        return false;
+                    }
+
+                    gunner = sci;
+                }
+                else
+                {
+                    fromRoaming = true;
+                }
+            }
+            else
+            {
+                if (!TryCreateScientistFromPaths(ResolveCannoneerPrefabPaths(), spawnPos, spawnRot, out var sci, out createdForCleanup))
+                {
+                    error = "Could not spawn ScientistNPC for cannoneer (prefab list failed). Enable Roaming bodies or fix prefabs.";
+                    return false;
+                }
+
+                gunner = sci;
             }
 
             try
             {
-                scientist.enableSaving = false;
-                scientist.displayName = $"{_cfg.CrewNamePrefix} {stationIndex} (cannoneer)";
-                scientist.Spawn();
+                gunner.enableSaving = false;
+                gunner.displayName = $"{_cfg.CrewNamePrefix} {stationIndex} (cannoneer)";
+
+                if (!fromRoaming)
+                {
+                    gunner.Spawn();
+                }
+                else
+                {
+                    try
+                    {
+                        gunner.Teleport(spawnPos);
+                    }
+                    catch
+                    {
+                        gunner.transform.position = spawnPos;
+                    }
+
+                    try
+                    {
+                        gunner.transform.rotation = spawnRot;
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+                }
 
                 if (cannon.IsMounted())
                 {
                     error = "That cannon already has a gunner.";
-                    scientist.Kill();
+                    gunner.Kill();
                     return false;
                 }
 
-                cannon.MountPlayer(scientist);
+                cannon.MountPlayer(gunner);
                 try
                 {
                     cannon.AdminReload(1);
@@ -858,15 +925,22 @@ namespace Oxide.Plugins
 
                 if (_cfg.DisableNavMeshAgent)
                 {
-                    var agent = scientist.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                    var agent = gunner.GetComponent<UnityEngine.AI.NavMeshAgent>();
                     if (agent != null)
                         agent.enabled = false;
                 }
 
                 var hp = 100f;
-                scientist.InitializeHealth(hp, hp);
+                try
+                {
+                    gunner.InitializeHealth(hp, hp);
+                }
+                catch
+                {
+                    /* ignore */
+                }
 
-                var npcNet = scientist.net.ID.Value;
+                var npcNet = gunner.net.ID.Value;
                 _crewByNpcNetId[npcNet] = new CrewRecord
                 {
                     BoatNetId = boatId,
@@ -884,7 +958,8 @@ namespace Oxide.Plugins
             {
                 try
                 {
-                    created?.Kill();
+                    createdForCleanup?.Kill();
+                    gunner?.Kill();
                 }
                 catch
                 {
@@ -898,10 +973,61 @@ namespace Oxide.Plugins
             return true;
         }
 
+        /// <summary>Same bridge call as MaxxInvaders: <c>SpawnFromTemplateForBridge(template, viewerName, viewerId, anchorSteam)</c>.</summary>
+        private bool TrySpawnRoamingBridgeBodyForCannoneer(
+            BasePlayer ownerPlayer,
+            int stationIndex,
+            Vector3 teleportPos,
+            Quaternion teleportRot,
+            out BasePlayer npc,
+            out string error)
+        {
+            npc = null;
+            error = null;
+
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+            {
+                error =
+                    "<color=#7ec8e3>RoamingNPCs</color> is not loaded. Add the RoamingNPCs plugin (MaxxInvaders bridge) for invader-style bodies.";
+                return false;
+            }
+
+            var templateKey = (_cfg.CannoneerRoamingTemplateKey ?? "").Trim();
+            if (string.IsNullOrEmpty(templateKey))
+            {
+                error =
+                    "Set <color=#7ec8e3>Cannoneer RoamingNPCs template key</color> in MaxxCrew.json to a Bots key from oxide/config/RoamingNPCs.json (same keys MaxxInvaders uses).";
+                return false;
+            }
+
+            var viewerName = $"{_cfg.CrewNamePrefix} {stationIndex} (cannoneer)".Trim();
+            var viewerId = "maxxcrew_" + Guid.NewGuid().ToString("N");
+
+            try
+            {
+                var raw = RoamingNPCs.Call("SpawnFromTemplateForBridge", templateKey, viewerName, viewerId, ownerPlayer.userID);
+                npc = raw as BasePlayer;
+            }
+            catch (Exception ex)
+            {
+                error = $"RoamingNPCs.SpawnFromTemplateForBridge failed: {ex.Message}";
+                return false;
+            }
+
+            if (npc == null || npc.IsDestroyed)
+            {
+                error =
+                    "RoamingNPCs returned no bot for that template. Check <color=#7ec8e3>Cannoneer RoamingNPCs template key</color> and server console.";
+                return false;
+            }
+
+            return true;
+        }
+
         private void ApplyCannoneerKitDelayed(ulong npcNetId)
         {
-            var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcNetId)) as ScientistNPC;
-            if (npc == null || npc.IsDestroyed) return;
+            var npc = BaseNetworkable.serverEntities.Find(new NetworkableId(npcNetId)) as BasePlayer;
+            if (npc == null || npc.IsDestroyed || !npc.IsNpc) return;
             ApplyKitIfPossible(npc, _cfg.CannoneerKitName, "cannoneer");
         }
 
@@ -1082,8 +1208,8 @@ namespace Oxide.Plugins
 
                 var npcId = kv.Key;
                 var rec = kv.Value;
-                var scientist = BaseNetworkable.serverEntities.Find(new NetworkableId(npcId)) as ScientistNPC;
-                if (scientist == null || scientist.IsDestroyed)
+                var gunner = BaseNetworkable.serverEntities.Find(new NetworkableId(npcId)) as BasePlayer;
+                if (gunner == null || gunner.IsDestroyed || !gunner.IsNpc)
                 {
                     _crewByNpcNetId.Remove(npcId);
                     continue;
@@ -1094,7 +1220,7 @@ namespace Oxide.Plugins
                 {
                     try
                     {
-                        scientist.Kill();
+                        gunner.Kill();
                     }
                     catch
                     {
@@ -1109,11 +1235,11 @@ namespace Oxide.Plugins
                 if (owner == null || !owner.IsConnected)
                     continue;
 
-                if (!scientist.isMounted && !cannon.IsMounted())
+                if (!gunner.isMounted && !cannon.IsMounted())
                 {
                     try
                     {
-                        cannon.MountPlayer(scientist);
+                        cannon.MountPlayer(gunner);
                     }
                     catch
                     {
@@ -1135,7 +1261,7 @@ namespace Oxide.Plugins
                     if (cannon.FirePoint == null || cannon.AmmoPrefab == null)
                         continue;
 
-                    var target = FindCannoneerHostile(scientist, cannon, owner);
+                    var target = FindCannoneerHostile(gunner, cannon, owner);
                     if (target == null)
                         continue;
 
@@ -1147,7 +1273,7 @@ namespace Oxide.Plugins
                     if (Vector3.Dot(dir, cannon.FirePoint.forward) < _cfg.CannoneerMinFireDot)
                         continue;
 
-                    if (!CannoneerHasLoS(aimFrom, aimTo, scientist, cannon))
+                    if (!CannoneerHasLoS(aimFrom, aimTo, gunner, cannon))
                         continue;
 
                     if (cannon.FireProjectile(cannon.AmmoPrefab, aimFrom, dir, owner, 0.25f, 100f, out _))
@@ -1180,7 +1306,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private BasePlayer FindCannoneerHostile(ScientistNPC gunner, Cannon cannon, BasePlayer owner)
+        private BasePlayer FindCannoneerHostile(BasePlayer gunner, Cannon cannon, BasePlayer owner)
         {
             var origin = cannon.transform.position;
             var rad = _cfg.CannoneerScanRadius;
@@ -1218,7 +1344,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private static bool CannoneerHasLoS(Vector3 from, Vector3 to, ScientistNPC gunner, Cannon cannon)
+        private static bool CannoneerHasLoS(Vector3 from, Vector3 to, BasePlayer gunner, Cannon cannon)
         {
             var dist = Vector3.Distance(from, to);
             if (dist < 0.1f) return true;
