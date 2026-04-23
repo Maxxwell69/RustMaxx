@@ -1,9 +1,9 @@
 {
   "Random settings": {
-    "GUI AnchorMin": "0.807 0.96",
-    "GUI AnchorMax": "0.996 0.99",
-    "GUI2 AnchorMin": "0.807 0.92",
-    "GUI2 AnchorMax": "0.996 0.95",
+    "GUI AnchorMin": "0.20 0.16",
+    "GUI AnchorMax": "0.80 0.24",
+    "GUI2 AnchorMin": "0.24 0.09",
+    "GUI2 AnchorMax": "0.76 0.15",
     "GameTip display time in seconds": 2.0,
     "Total raids allowed at once": 2,
     "A player on the tc must be online": true,
