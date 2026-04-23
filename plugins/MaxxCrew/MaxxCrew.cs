@@ -154,7 +154,7 @@ namespace Oxide.Plugins
         private void LoadConfigValues()
         {
             if (!Config.Exists())
-                SaveDefaultConfig();
+                LoadDefaultConfig();
 
             try
             {
