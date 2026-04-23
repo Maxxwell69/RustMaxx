@@ -95,6 +95,10 @@ namespace Oxide.Plugins
             [JsonProperty("RustMaxx streamer medic escort personality applied", Order = 6)]
             public bool StreamerMedicEscortPersonalityApplied { get; set; }
 
+            /// <summary>One-time migration: streamer_lumberjack sidearm (Python + pistol ammo) when weapon list was empty.</summary>
+            [JsonProperty("RustMaxx streamer lumberjack python defense applied", Order = 7)]
+            public bool StreamerLumberjackPythonDefenseApplied { get; set; }
+
             [JsonProperty(RU ? "Укажите для генератора ID ботов (от 8 - 15)" : "Specify the ID of the bot generator (8 - 15)")]
             private int digits = 9;
 
@@ -2986,6 +2990,7 @@ namespace Oxide.Plugins
             EnsureStreamerLumberjackTemplate();
             MigrateStreamerRockyTerrainBridgeHintsOnce();
             MigrateStreamerMedicEscortPersonalityOnce();
+            MigrateStreamerLumberjackPythonDefenseOnce();
             foreach (var bot in config.bots)
             {
                 bot.Value.Init();
@@ -3651,7 +3656,34 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>Creates <c>streamer_lumberjack</c> once — Lumberjack hazmat, chainsaw + fuel, ~2× chop speed vs default.</summary>
+        /// <summary>Existing servers: add Python revolver + ammo to <c>streamer_lumberjack</c> when it had no weapon (legacy default).</summary>
+        private void MigrateStreamerLumberjackPythonDefenseOnce()
+        {
+            if (config?.bots == null) return;
+            if (config.StreamerLumberjackPythonDefenseApplied) return;
+
+            var needsApply = config.bots.TryGetValue("streamer_lumberjack", out var lj) && lj != null &&
+                             (lj.ItemsWeapon == null || !lj.ItemsWeapon.CanUseAmmo || lj.ItemsWeapon.Items == null ||
+                              lj.ItemsWeapon.Items.Count == 0);
+
+            if (needsApply && lj != null)
+            {
+                lj.ItemsWeapon ??= new ListWeapons();
+                lj.ItemsWeapon.CanUseAmmo = true;
+                lj.ItemsWeapon.AmountAmmo = 128;
+                lj.ItemsWeapon.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, true, new ItemSetup("pistol.python", 0)) { ammoShortname = "ammo.pistol" },
+                };
+                PrintWarning(
+                    "[RoamingNPCs] streamer_lumberjack: added Python revolver + pistol ammo (defense). Edit RoamingNPCs.json → Bots settings → streamer_lumberjack if you want a different sidearm.");
+            }
+
+            config.StreamerLumberjackPythonDefenseApplied = true;
+            SaveConfig();
+        }
+
+        /// <summary>Creates <c>streamer_lumberjack</c> once — Lumberjack hazmat, chainsaw + fuel, Python sidearm, ~2× chop speed vs default.</summary>
         private void EnsureStreamerLumberjackTemplate()
         {
             if (config?.bots == null) return;
@@ -3697,9 +3729,13 @@ namespace Oxide.Plugins
                     new ItemBot(false, false, new ItemSetup("hatchet", 0)),
                 };
 
-                clone.ItemsWeapon.CanUseAmmo = false;
-                clone.ItemsWeapon.AmountAmmo = 0;
-                clone.ItemsWeapon.Items = new List<ItemBot>();
+                // Sidearm: same pattern as streamer_miner (pistol.revolver), but Python per MaxxInvaders lumberjack unit request.
+                clone.ItemsWeapon.CanUseAmmo = true;
+                clone.ItemsWeapon.AmountAmmo = 128;
+                clone.ItemsWeapon.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, true, new ItemSetup("pistol.python", 0)) { ammoShortname = "ammo.pistol" },
+                };
 
                 clone.ItemsOnSpawn = new List<ItemSetup>();
                 for (var i = 0; i < 80; i++)
@@ -3711,7 +3747,7 @@ namespace Oxide.Plugins
                 config.bots[ljKey] = clone;
                 SaveConfig();
                 PrintWarning(
-                    "[RoamingNPCs] Added default bot template 'streamer_lumberjack' (Lumberjack hazmat + chainsaw; ~2× wood chop speed). Use ?template=streamer_lumberjack.");
+                    "[RoamingNPCs] Added default bot template 'streamer_lumberjack' (Lumberjack hazmat + chainsaw + Python revolver; ~2× wood chop speed). Use ?template=streamer_lumberjack.");
             }
             catch (Exception ex)
             {
