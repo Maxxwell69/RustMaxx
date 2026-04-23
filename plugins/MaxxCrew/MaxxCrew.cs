@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.7")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.8")]
     [Description("Spawn crew on boats; cannoneers use RoamingNPCs bridge bodies + Kits (MaxxInvaders-style).")]
     public class MaxxCrew : RustPlugin
     {
@@ -43,6 +43,20 @@ namespace Oxide.Plugins
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_roam.prefab",
             "assets/rust.ai/agents/npcplayer/humannpc/scientist/scientistnpc_full_lr300.prefab",
             "assets/prefabs/npc/scientist/scientist.prefab",
+        };
+
+        /// <summary>Tried in order when <see cref="ConfigData.CannoneerRoamingTemplateKey"/> is <c>auto</c> or empty (first bot that RoamingNPCs reports as ready).</summary>
+        private static readonly string[] CannoneerRoamingTemplateCandidates =
+        {
+            "austin_fighter",
+            "alfred_hunter",
+            "vamp",
+            "john_looter",
+            "snipemb",
+            "bob_resources_farmer",
+            "bunny1",
+            "gingy",
+            "egg",
         };
 
         /// <summary>Combat-first scientist order (aligned with MaxxInvaders / naval gunners).</summary>
@@ -122,8 +136,8 @@ namespace Oxide.Plugins
             [JsonProperty("Cannoneer use RoamingNPCs bridge bodies (same API as MaxxInvaders — needs RoamingNPCs plugin + template key)")]
             public bool CannoneerUseRoamingNpcBodies { get; set; } = true;
 
-            [JsonProperty("Cannoneer RoamingNPCs template key (Bots settings child key in RoamingNPCs.json; empty = austin_fighter)")]
-            public string CannoneerRoamingTemplateKey { get; set; } = "austin_fighter";
+            [JsonProperty("Cannoneer RoamingNPCs template key — use \"auto\" to pick first enabled bot, or an exact Bots settings key")]
+            public string CannoneerRoamingTemplateKey { get; set; } = "auto";
 
             [JsonProperty("Cannoneer fallback to scientist prefabs if RoamingNPCs spawn fails")]
             public bool CannoneerFallbackToScientistPrefabs { get; set; } = false;
@@ -278,9 +292,9 @@ namespace Oxide.Plugins
             if (_cfg.CannoneerScientistPrefabs == null)
                 _cfg.CannoneerScientistPrefabs = new List<string>();
 
-            // Older MaxxCrew.json had an empty key; pick a combat bot that exists in RustMaxx's bundled RoamingNPCs.json.
-            if (_cfg.CannoneerUseRoamingNpcBodies && string.IsNullOrWhiteSpace(_cfg.CannoneerRoamingTemplateKey))
-                _cfg.CannoneerRoamingTemplateKey = "austin_fighter";
+            var tk = (_cfg.CannoneerRoamingTemplateKey ?? "").Trim();
+            if (_cfg.CannoneerUseRoamingNpcBodies && string.IsNullOrWhiteSpace(tk))
+                _cfg.CannoneerRoamingTemplateKey = "auto";
         }
 
         private void LoadData()
@@ -343,15 +357,20 @@ namespace Oxide.Plugins
                 case "stations":
                     CmdStations(player);
                     break;
+                case "templates":
+                case "bots":
+                    CmdRoamingTemplates(player);
+                    break;
                 default:
                     Reply(player,
-                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.7)\n" +
+                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.8)\n" +
                         "<color=#aaa>/maxxcrew register</color> — look at your boat (deck/helm) and save it\n" +
                         "<color=#aaa>Boat wheel</color> — hold Use on helm/lock: choose <color=#7ec8e3>Register boat (MaxxCrew)</color> when available\n" +
                         "<color=#aaa>/maxxcrew add [station]</color> — spawn crew at station index (0-based); omit = first free\n" +
-                        "<color=#aaa>Jobs</color> — <color=#7ec8e3>cannoneer</color> = RoamingNPCs bot + optional Kits (default template <color=#7ec8e3>austin_fighter</color> if key left empty)\n" +
+                        "<color=#aaa>Jobs</color> — <color=#7ec8e3>cannoneer</color> = RoamingNPCs bot + optional Kits; template <color=#7ec8e3>auto</color> picks first working bot\n" +
                         "<color=#aaa>/maxxcrew clear</color> — remove all crew on your last registered boat\n" +
                         "<color=#aaa>/maxxcrew stations</color> — list station slots from config\n" +
+                        "<color=#aaa>/maxxcrew templates</color> — list RoamingNPCs bot keys (for cannoneer template)\n" +
                         "<color=#aaa>/maxxcrew status</color> — show registered boat + crew count");
                     break;
             }
@@ -387,6 +406,37 @@ namespace Oxide.Plugins
                 var job = string.IsNullOrWhiteSpace(s.Job) ? "deck" : s.Job.Trim();
                 Reply(player,
                     $"  [{i}] job=<color=#7ec8e3>{job}</color> local ({s.LocalX:0.##}, {s.LocalY:0.##}, {s.LocalZ:0.##}) yaw {s.YawDegrees:0.#}°");
+            }
+        }
+
+        /// <summary>Lists RoamingNPCs <c>Bots settings</c> keys (same bridge MaxxInvaders uses).</summary>
+        private void CmdRoamingTemplates(BasePlayer player)
+        {
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+            {
+                Reply(player, "<color=#7ec8e3>RoamingNPCs</color> is not loaded — install it to see bot template keys.");
+                return;
+            }
+
+            try
+            {
+                var summary = RoamingNPCs.Call("GetMaxxInvadersGuiSummary") as string;
+                if (string.IsNullOrEmpty(summary))
+                {
+                    Reply(player, "RoamingNPCs did not return a summary (check console).");
+                    return;
+                }
+
+                Reply(player,
+                    "<color=#7ec8e3>RoamingNPCs</color> bot keys — paste one into MaxxCrew.json → Cannoneer RoamingNPCs template key, or keep <color=#7ec8e3>auto</color>:");
+                const int chunkSize = 420;
+                var clipped = summary.Length > 4800 ? summary.Substring(0, 4800) + "\n… (truncated)" : summary;
+                for (var i = 0; i < clipped.Length; i += chunkSize)
+                    Reply(player, clipped.Substring(i, Math.Min(chunkSize, clipped.Length - i)));
+            }
+            catch (Exception ex)
+            {
+                Reply(player, $"Could not read RoamingNPCs summary: {ex.Message}");
             }
         }
 
@@ -996,11 +1046,9 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            var templateKey = (_cfg.CannoneerRoamingTemplateKey ?? "").Trim();
-            if (string.IsNullOrEmpty(templateKey))
+            if (!TryResolveCannoneerRoamingTemplateKey(out var templateKey, out var resolveErr))
             {
-                error =
-                    "Set <color=#7ec8e3>Cannoneer RoamingNPCs template key</color> in MaxxCrew.json to a Bots key from oxide/config/RoamingNPCs.json (same keys MaxxInvaders uses).";
+                error = resolveErr;
                 return false;
             }
 
@@ -1026,6 +1074,83 @@ namespace Oxide.Plugins
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Resolves <see cref="ConfigData.CannoneerRoamingTemplateKey"/>: <c>auto</c> or empty picks the first candidate that
+        /// <c>IsBridgeTemplateReady</c> reports as <c>ok</c>. An explicit key that fails falls back to the same auto scan with a warning.
+        /// </summary>
+        private bool TryResolveCannoneerRoamingTemplateKey(out string templateKey, out string errorDetail)
+        {
+            templateKey = null;
+            errorDetail = null;
+
+            if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
+            {
+                errorDetail =
+                    "<color=#7ec8e3>RoamingNPCs</color> is not loaded. Install RoamingNPCs for bridge bodies, or disable cannons Roaming bodies and use scientist fallback.";
+                return false;
+            }
+
+            bool IsReady(string k)
+            {
+                if (string.IsNullOrWhiteSpace(k)) return false;
+                try
+                {
+                    return RoamingNPCs.Call("IsBridgeTemplateReady", k.Trim()) as string == "ok";
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            bool TryAutoPick(out string picked)
+            {
+                picked = null;
+                foreach (var c in CannoneerRoamingTemplateCandidates)
+                {
+                    if (!IsReady(c)) continue;
+                    picked = c;
+                    return true;
+                }
+
+                return false;
+            }
+
+            var configured = (_cfg.CannoneerRoamingTemplateKey ?? "").Trim();
+
+            if (string.Equals(configured, "auto", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(configured))
+            {
+                if (TryAutoPick(out var picked))
+                {
+                    templateKey = picked;
+                    return true;
+                }
+
+                errorDetail =
+                    "<color=#7ec8e3>auto</color> found no enabled bot. Enable at least one bot under RoamingNPCs <color=#7ec8e3>Bots settings</color>, or run <color=#7ec8e3>/maxxcrew templates</color> and set an exact key.";
+                return false;
+            }
+
+            var status = RoamingNPCs.Call("IsBridgeTemplateReady", configured) as string;
+            if (status == "ok")
+            {
+                templateKey = configured;
+                return true;
+            }
+
+            if (TryAutoPick(out var fallback))
+            {
+                templateKey = fallback;
+                PrintWarning(
+                    $"[MaxxCrew] Cannoneer template \"{configured}\" not usable ({status ?? "?"}). Using \"{fallback}\" instead. Fix MaxxCrew.json or RoamingNPCs.json.");
+                return true;
+            }
+
+            errorDetail =
+                $"Template <color=#7ec8e3>{configured}</color> is not usable ({status ?? "missing"}). Run <color=#7ec8e3>/maxxcrew templates</color> or set <color=#7ec8e3>Cannoneer RoamingNPCs template key</color> to <color=#7ec8e3>auto</color>.";
+            return false;
         }
 
         private void ApplyCannoneerKitDelayed(ulong npcNetId)
