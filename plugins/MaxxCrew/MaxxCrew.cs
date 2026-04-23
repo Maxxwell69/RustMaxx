@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.9")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.10")]
     [Description("Spawn crew on boats; cannoneers use RoamingNPCs bridge bodies + Kits (MaxxInvaders-style).")]
     public class MaxxCrew : RustPlugin
     {
@@ -133,14 +133,16 @@ namespace Oxide.Plugins
             [JsonProperty("Cannoneer uMod Kits kit name (empty = none; applied ~1s after mount)")]
             public string CannoneerKitName { get; set; } = "";
 
-            [JsonProperty("Cannoneer use RoamingNPCs bridge bodies (same API as MaxxInvaders — needs RoamingNPCs plugin + template key)")]
+            [JsonProperty(
+                "Cannoneer use RoamingNPCs bridge bodies (MaxxInvaders API; gives streamer/anchor protection). If false, cannoneers are vanilla scientists only — not streamer-safe.")]
             public bool CannoneerUseRoamingNpcBodies { get; set; } = true;
 
             [JsonProperty("Cannoneer RoamingNPCs template key — use \"auto\" to pick first enabled bot, or an exact Bots settings key")]
             public string CannoneerRoamingTemplateKey { get; set; } = "auto";
 
-            [JsonProperty("Cannoneer fallback to scientist prefabs if RoamingNPCs spawn fails")]
-            public bool CannoneerFallbackToScientistPrefabs { get; set; } = true;
+            [JsonProperty(
+                "Cannoneer fallback to vanilla scientist prefabs if Roaming spawn fails (default off — they use default combat AI and are NOT given MaxxInvaders bridge protection, so they may attack the boat owner / streamer. Use RoamingNPCs + auto template instead.)")]
+            public bool CannoneerFallbackToScientistPrefabs { get; set; } = false;
         }
 
         private sealed class StationConfig
@@ -367,7 +369,7 @@ namespace Oxide.Plugins
                     break;
                 default:
                     Reply(player,
-                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.9)\n" +
+                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.10)\n" +
                         "<color=#aaa>/maxxcrew register</color> — look at your boat (deck/helm) and save it\n" +
                         "<color=#aaa>Boat wheel</color> — hold Use on helm/lock: choose <color=#7ec8e3>Register boat (MaxxCrew)</color> when available\n" +
                         "<color=#aaa>/maxxcrew add [station]</color> — spawn crew at station index (0-based); omit = first free\n" +
@@ -448,9 +450,9 @@ namespace Oxide.Plugins
         /// <summary>When crew never appears, use this to see Roaming template readiness, boat type, and tracked entities.</summary>
         private void CmdDiagnose(BasePlayer player)
         {
-            Reply(player, "<color=#7ec8e3>MaxxCrew diagnose</color> (v0.1.9)");
+            Reply(player, "<color=#7ec8e3>MaxxCrew diagnose</color> (v0.1.10)");
             Reply(player,
-                $"Config: cannoneer Roaming bodies={_cfg.CannoneerUseRoamingNpcBodies}, scientist fallback if Roaming fails={_cfg.CannoneerFallbackToScientistPrefabs}, template key={_cfg.CannoneerRoamingTemplateKey ?? "auto"}");
+                $"Config: cannoneer Roaming bodies={_cfg.CannoneerUseRoamingNpcBodies}, scientist fallback if Roaming fails={_cfg.CannoneerFallbackToScientistPrefabs} (fallback scientists may attack the streamer — keep off unless you accept vanilla AI), template key={_cfg.CannoneerRoamingTemplateKey ?? "auto"}");
 
             if (RoamingNPCs == null || !RoamingNPCs.IsLoaded)
             {
@@ -1001,7 +1003,8 @@ namespace Oxide.Plugins
                         return false;
                     }
 
-                    PrintWarning($"[MaxxCrew] Cannoneer roaming spawn failed ({roamErr}); trying scientist prefab fallback.");
+                    PrintWarning(
+                        $"[MaxxCrew] Cannoneer roaming spawn failed ({roamErr}); using scientist prefab fallback — vanilla scientists lack bridge anchor protection and may attack the boat owner. Set Cannoneer fallback to false (default) and fix RoamingNPCs / template instead.");
                     if (!TryCreateScientistFromPaths(ResolveCannoneerPrefabPaths(), spawnPos, spawnRot, out var sci, out createdForCleanup))
                     {
                         error = roamErr + " (scientist fallback also failed.)";
