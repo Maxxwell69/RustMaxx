@@ -1000,17 +1000,17 @@ namespace Oxide.Plugins
                         if (!i.permission.UserHasPermission(p.UserIDString, PermUse) &&
                             !i.permission.UserHasPermission(p.UserIDString, PermAdmin))
                         {
-                            i.Reply(p, "You need permission maxxcrew.use (or maxxcrew.admin).");
+                            Reply(p, "You need permission maxxcrew.use (or maxxcrew.admin).");
                             return;
                         }
 
                         if (!i.TryRegisterBoat(p, contextEntity, out var boatId, out var err))
                         {
-                            i.Reply(p, err);
+                            Reply(p, err);
                             return;
                         }
 
-                        i.Reply(p,
+                        Reply(p,
                             $"Boat registered (netId {boatId}). Use <color=#7ec8e3>/maxxcrew add</color> to place crew at deck stations.");
                     };
 
