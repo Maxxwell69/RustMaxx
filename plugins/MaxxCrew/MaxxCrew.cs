@@ -8,8 +8,11 @@
 #nullable disable
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
+using HarmonyLib;
 using Newtonsoft.Json;
 using Oxide.Core;
 using Rust;
@@ -18,12 +21,19 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Maxx Crew", "RustMaxx", "0.1.2")]
+    [Info("Maxx Crew", "RustMaxx", "0.1.3")]
     [Description("Spawn crew NPCs on player-built boats at fixed deck stations (naval update).")]
     public class MaxxCrew : RustPlugin
     {
+        private const string HarmonyId = "com.rustmaxx.maxxcrew.entitymenu";
+        private const string EntityWheelOptionToken = "maxxcrew_register_boat";
+
         private const string PermUse = "maxxcrew.use";
         private const string PermAdmin = "maxxcrew.admin";
+
+        private static MaxxCrew _instance;
+        private Harmony _harmony;
+        private bool _entityMenuPatchLogged;
 
         private const string DataFile = "MaxxCrew/MaxxCrew";
 
@@ -71,6 +81,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("Deck stations (local space relative to boat root; Y up, Z typically forward)")]
             public List<StationConfig> Stations { get; set; } = DefaultStations();
+
+            [JsonProperty("Add \"Register boat (MaxxCrew)\" to the naval boat entity wheel (Harmony; requires compatible Rust build)")]
+            public bool RegisterFromEntityWheel { get; set; } = true;
         }
 
         private sealed class StationConfig
@@ -117,6 +130,7 @@ namespace Oxide.Plugins
 
         private void Init()
         {
+            _instance = this;
             permission.RegisterPermission(PermUse, this);
             permission.RegisterPermission(PermAdmin, this);
         }
@@ -125,10 +139,23 @@ namespace Oxide.Plugins
         {
             LoadConfigValues();
             LoadData();
+            if (_cfg.RegisterFromEntityWheel)
+                TryApplyEntityWheelMenuPatch();
         }
 
         private void Unload()
         {
+            try
+            {
+                _harmony?.UnpatchAll(HarmonyId);
+            }
+            catch
+            {
+                /* ignore */
+            }
+
+            _harmony = null;
+            _instance = null;
             if (_cfg != null && _cfg.DespawnOnUnload)
                 DespawnAllCrew("plugin_unload");
             SaveData();
@@ -245,14 +272,36 @@ namespace Oxide.Plugins
                     break;
                 default:
                     Reply(player,
-                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1)\n" +
+                        "<color=#7ec8e3>MaxxCrew</color> — boat crew (v0.1.3)\n" +
                         "<color=#aaa>/maxxcrew register</color> — look at your boat (deck/helm) and save it\n" +
+                        "<color=#aaa>Boat wheel</color> — hold Use on helm/lock: choose <color=#7ec8e3>Register boat (MaxxCrew)</color> when available\n" +
                         "<color=#aaa>/maxxcrew add [station]</color> — spawn crew at station index (0-based); omit = first free\n" +
                         "<color=#aaa>/maxxcrew clear</color> — remove all crew on your last registered boat\n" +
                         "<color=#aaa>/maxxcrew stations</color> — list station slots from config\n" +
                         "<color=#aaa>/maxxcrew status</color> — show registered boat + crew count");
                     break;
             }
+        }
+
+        [ConsoleCommand("maxxcrew.registerboat")]
+        private void CmdConsoleRegisterBoat(ConsoleSystem.Arg arg)
+        {
+            var player = arg?.Player();
+            if (player == null) return;
+            if (!_cfg.EnablePlugin)
+            {
+                Reply(player, "MaxxCrew is disabled in config.");
+                return;
+            }
+
+            if (!permission.UserHasPermission(player.UserIDString, PermUse) &&
+                !permission.UserHasPermission(player.UserIDString, PermAdmin))
+            {
+                Reply(player, "You need permission maxxcrew.use (or maxxcrew.admin).");
+                return;
+            }
+
+            CmdRegister(player);
         }
 
         private void CmdStations(BasePlayer player)
@@ -281,20 +330,40 @@ namespace Oxide.Plugins
 
         private void CmdRegister(BasePlayer player)
         {
-            if (!TryRaycastBoat(player, out var boat, out var fail))
+            if (!TryRegisterBoat(player, null, out var boatId, out var fail))
             {
                 Reply(player, fail);
                 return;
             }
 
-            var boatId = boat.net.ID.Value;
+            Reply(player,
+                $"Boat registered (netId {boatId}). Use <color=#7ec8e3>/maxxcrew add</color> to place crew at deck stations.");
+        }
+
+        /// <summary>Register boat for crew commands. If <paramref name="boatRootHint"/> is set, uses it instead of a look raycast.</summary>
+        private bool TryRegisterBoat(BasePlayer player, BaseEntity boatRootHint, out ulong boatId, out string error)
+        {
+            boatId = 0UL;
+            error = null;
+            BaseEntity boat;
+            if (boatRootHint != null)
+            {
+                boat = ResolveBoatRoot(boatRootHint);
+                if (boat == null)
+                {
+                    error = "That object is not part of a supported boat.";
+                    return false;
+                }
+            }
+            else if (!TryRaycastBoat(player, out boat, out error))
+                return false;
+
+            boatId = boat.net.ID.Value;
             var key = player.UserIDString;
             _data.LastBoatNetIdBySteam[key] = boatId;
             _data.LastBoatOwnerBySteam[key] = boat.OwnerID;
             SaveData();
-
-            Reply(player,
-                $"Boat registered (netId {boatId}). Use <color=#7ec8e3>/maxxcrew add</color> to place crew at deck stations.");
+            return true;
         }
 
         private void CmdAdd(BasePlayer player, string[] args)
@@ -687,6 +756,278 @@ namespace Oxide.Plugins
         {
             if (player == null || !player.IsConnected) return;
             player.ChatMessage(msg);
+        }
+
+        private void TryApplyEntityWheelMenuPatch()
+        {
+            try
+            {
+                var asm = typeof(BaseEntity).Assembly;
+                var playerBoat = asm.GetType("PlayerBoat");
+                MethodInfo target = null;
+                var listParamFirst = true;
+                if (playerBoat != null)
+                {
+                    var found = FindMenuOptionsListMethod(playerBoat);
+                    if (found.HasValue)
+                    {
+                        target = found.Value.method;
+                        listParamFirst = found.Value.listParamFirst;
+                    }
+                }
+
+                if (target == null)
+                {
+                    var found = FindMenuOptionsListMethod(typeof(BaseBoat));
+                    if (found.HasValue)
+                    {
+                        target = found.Value.method;
+                        listParamFirst = found.Value.listParamFirst;
+                    }
+                }
+
+                if (target == null)
+                {
+                    var found = FindMenuOptionsListMethod(typeof(BaseEntity));
+                    if (found.HasValue)
+                    {
+                        target = found.Value.method;
+                        listParamFirst = found.Value.listParamFirst;
+                    }
+                }
+
+                if (target == null)
+                {
+                    PrintWarning(
+                        "[MaxxCrew] Could not find a List+BasePlayer menu builder on PlayerBoat/BaseBoat/BaseEntity — entity wheel entry not injected. Chat/console register still works.");
+                    return;
+                }
+
+                var postfixName = listParamFirst
+                    ? nameof(EntityWheelMenuPostfixListThenPlayer)
+                    : nameof(EntityWheelMenuPostfixPlayerThenList);
+                var postfix = AccessTools.Method(typeof(MaxxCrew), postfixName);
+                _harmony = new Harmony(HarmonyId);
+                _harmony.Patch(target, postfix: new HarmonyMethod(postfix));
+                Puts($"[MaxxCrew] Patched entity menu builder: {target.DeclaringType?.Name}.{target.Name} (wheel register).");
+            }
+            catch (Exception ex)
+            {
+                PrintWarning($"[MaxxCrew] Entity wheel Harmony patch failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>Finds methods like <c>void Foo(List&lt;SomeOption&gt;, BasePlayer)</c> used to populate the hold-Use entity wheel.</summary>
+        private static (MethodInfo method, bool listParamFirst)? FindMenuOptionsListMethod(Type startType)
+        {
+            var type = startType;
+            while (type != null && type != typeof(object))
+            {
+                foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic |
+                                                 BindingFlags.DeclaredOnly))
+                {
+                    if (m.IsStatic || m.IsGenericMethodDefinition) continue;
+                    var mn = m.Name;
+                    if (!mn.Contains("Menu") && !mn.Contains("Option") && !mn.Contains("Radial"))
+                        continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length != 2) continue;
+
+                    if (ps[0].ParameterType != typeof(BasePlayer) && ps[1].ParameterType == typeof(BasePlayer))
+                    {
+                        var p0 = ps[0].ParameterType;
+                        if (!p0.IsGenericType || p0.GetGenericTypeDefinition() != typeof(List<>)) continue;
+                        var elem = p0.GetGenericArguments()[0];
+                        if (elem == null || !elem.Name.Contains("Option")) continue;
+                        return (m, true);
+                    }
+
+                    if (ps[0].ParameterType == typeof(BasePlayer) && ps[1].ParameterType != typeof(BasePlayer))
+                    {
+                        var p1 = ps[1].ParameterType;
+                        if (!p1.IsGenericType || p1.GetGenericTypeDefinition() != typeof(List<>)) continue;
+                        var elem = p1.GetGenericArguments()[0];
+                        if (elem == null || !elem.Name.Contains("Option")) continue;
+                        return (m, false);
+                    }
+                }
+
+                type = type.BaseType;
+            }
+
+            return null;
+        }
+
+        private static void EntityWheelMenuPostfixListThenPlayer(BaseEntity __instance, IList options, BasePlayer player)
+        {
+            EntityWheelMenuAppend(__instance, options, player);
+        }
+
+        private static void EntityWheelMenuPostfixPlayerThenList(BaseEntity __instance, BasePlayer player, IList options)
+        {
+            EntityWheelMenuAppend(__instance, options, player);
+        }
+
+        /// <summary>Harmony postfix: append a MaxxCrew register entry when the game builds entity-wheel options for a boat.</summary>
+        private static void EntityWheelMenuAppend(BaseEntity __instance, IList options, BasePlayer player)
+        {
+            var inst = _instance;
+            if (inst == null || inst._cfg == null || !inst._cfg.EnablePlugin || !inst._cfg.RegisterFromEntityWheel)
+                return;
+            if (__instance == null || player == null || options == null) return;
+            if (ResolveBoatRoot(__instance) == null)
+                return;
+            if (!inst.permission.UserHasPermission(player.UserIDString, PermUse) &&
+                !inst.permission.UserHasPermission(player.UserIDString, PermAdmin))
+                return;
+
+            if (ListAlreadyHasMaxxCrewToken(options))
+                return;
+
+            var optionType = options.GetType().IsGenericType
+                ? options.GetType().GetGenericArguments()[0]
+                : null;
+            if (optionType == null) return;
+
+            object entry;
+            try
+            {
+                entry = Activator.CreateInstance(optionType);
+            }
+            catch
+            {
+                if (!inst._entityMenuPatchLogged)
+                {
+                    inst._entityMenuPatchLogged = true;
+                    inst.PrintWarning("[MaxxCrew] Could not construct menu Option type — wheel register disabled for this build.");
+                }
+
+                return;
+            }
+
+            if (!TryPopulateMenuOptionFields(entry, optionType, __instance))
+            {
+                if (!inst._entityMenuPatchLogged)
+                {
+                    inst._entityMenuPatchLogged = true;
+                    inst.PrintWarning(
+                        "[MaxxCrew] Menu Option type has no Action<BasePlayer> field — wheel line may not appear or may not run on this Rust build.");
+                }
+
+                return;
+            }
+
+            try
+            {
+                options.Add(entry);
+            }
+            catch
+            {
+                /* ignore */
+            }
+        }
+
+        private static bool ListAlreadyHasMaxxCrewToken(IList options)
+        {
+            foreach (var o in options)
+            {
+                if (o == null) continue;
+                var t = o.GetType();
+                foreach (var f in t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    if (f.FieldType != typeof(string)) continue;
+                    var s = f.GetValue(o) as string;
+                    if (s == EntityWheelOptionToken)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <returns>True if a server-side click handler was assigned.</returns>
+        private static bool TryPopulateMenuOptionFields(object entry, Type optionType, BaseEntity contextEntity)
+        {
+            void AssignStringMember(string value, params string[] names)
+            {
+                foreach (var name in names)
+                {
+                    var f = optionType.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (f != null && f.FieldType == typeof(string))
+                    {
+                        try
+                        {
+                            f.SetValue(entry, value);
+                        }
+                        catch
+                        {
+                            /* ignore */
+                        }
+
+                        return;
+                    }
+
+                    var p = optionType.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (p != null && p.PropertyType == typeof(string) && p.CanWrite)
+                    {
+                        try
+                        {
+                            p.SetValue(entry, value, null);
+                        }
+                        catch
+                        {
+                            /* ignore */
+                        }
+
+                        return;
+                    }
+                }
+            }
+
+            AssignStringMember(EntityWheelOptionToken, "name", "Name", "token", "id", "api");
+            AssignStringMember("Register boat (MaxxCrew)", "english", "English", "title", "fullName", "text");
+            AssignStringMember("Save this hull for /maxxcrew crew placement.", "description", "Description", "desc", "subtitle");
+
+            foreach (var f in optionType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (f.FieldType == typeof(Action<BasePlayer>))
+                {
+                    Action<BasePlayer> handler = p =>
+                    {
+                        var i = _instance;
+                        if (i == null || p == null || !p.IsConnected) return;
+                        if (!i._cfg.EnablePlugin) return;
+                        if (!i.permission.UserHasPermission(p.UserIDString, PermUse) &&
+                            !i.permission.UserHasPermission(p.UserIDString, PermAdmin))
+                        {
+                            i.Reply(p, "You need permission maxxcrew.use (or maxxcrew.admin).");
+                            return;
+                        }
+
+                        if (!i.TryRegisterBoat(p, contextEntity, out var boatId, out var err))
+                        {
+                            i.Reply(p, err);
+                            return;
+                        }
+
+                        i.Reply(p,
+                            $"Boat registered (netId {boatId}). Use <color=#7ec8e3>/maxxcrew add</color> to place crew at deck stations.");
+                    };
+
+                    try
+                    {
+                        f.SetValue(entry, handler);
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }
