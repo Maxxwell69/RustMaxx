@@ -42,6 +42,47 @@ type BoardActivityRow = {
 
 type Tab = "requests" | "boards" | "members";
 
+function parseSuperfanRequestMessage(message: string | null): {
+  purchasedSubscription: string | null;
+  platform: string | null;
+  notes: string | null;
+  raw: string | null;
+} {
+  const raw = message?.trim() || null;
+  if (!raw) {
+    return { purchasedSubscription: null, platform: null, notes: null, raw: null };
+  }
+
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  let purchasedSubscription: string | null = null;
+  let platform: string | null = null;
+  let notes: string | null = null;
+  const unmatched: string[] = [];
+
+  for (const line of lines) {
+    if (line.toLowerCase().startsWith("purchased subscription:")) {
+      purchasedSubscription = line.slice("purchased subscription:".length).trim() || null;
+      continue;
+    }
+    if (line.toLowerCase().startsWith("platform:")) {
+      platform = line.slice("platform:".length).trim() || null;
+      continue;
+    }
+    if (line.toLowerCase().startsWith("notes:")) {
+      notes = line.slice("notes:".length).trim() || null;
+      continue;
+    }
+    unmatched.push(line);
+  }
+
+  if (!purchasedSubscription && !platform && !notes) {
+    return { purchasedSubscription: null, platform: null, notes: null, raw };
+  }
+
+  if (!notes && unmatched.length > 0) notes = unmatched.join("\n");
+  return { purchasedSubscription, platform, notes, raw: null };
+}
+
 export default function StreamerSuperfanIncomingPage() {
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("requests");
@@ -338,12 +379,36 @@ export default function StreamerSuperfanIncomingPage() {
             <ul className="mt-8 space-y-4">
               {rows.map((r) => (
                 <li key={r.id} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+                  {(() => {
+                    const requestInfo = parseSuperfanRequestMessage(r.message);
+                    return (
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium text-zinc-200">{r.viewer_display_name || r.viewer_email}</p>
                       <p className="text-xs text-zinc-500">{r.viewer_email}</p>
-                      {r.message ? (
-                        <p className="mt-2 text-sm text-zinc-400 whitespace-pre-wrap">{r.message}</p>
+                      {requestInfo.purchasedSubscription || requestInfo.platform || requestInfo.notes ? (
+                        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-3 text-sm">
+                          {requestInfo.purchasedSubscription ? (
+                            <p className="text-zinc-300">
+                              <span className="text-zinc-500">Purchased subscription:</span>{" "}
+                              <span className="font-medium text-zinc-200">{requestInfo.purchasedSubscription}</span>
+                            </p>
+                          ) : null}
+                          {requestInfo.platform ? (
+                            <p className="mt-1 text-zinc-300">
+                              <span className="text-zinc-500">Platform:</span>{" "}
+                              <span className="font-medium text-zinc-200">{requestInfo.platform}</span>
+                            </p>
+                          ) : null}
+                          {requestInfo.notes ? (
+                            <div className="mt-2">
+                              <p className="text-zinc-500">Notes</p>
+                              <p className="mt-1 whitespace-pre-wrap text-zinc-300">{requestInfo.notes}</p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : requestInfo.raw ? (
+                        <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-400">{requestInfo.raw}</p>
                       ) : null}
                       <p className="mt-2 text-xs text-zinc-600">
                         {r.status}
@@ -390,6 +455,8 @@ export default function StreamerSuperfanIncomingPage() {
                       </div>
                     )}
                   </div>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>
