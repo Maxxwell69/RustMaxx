@@ -235,6 +235,16 @@ function ProfilePageContent() {
     club_tier: string | null;
   };
   const [fanClubRows, setFanClubRows] = useState<FanClubRow[] | null>(null);
+  type StreamerFanClubMemberRow = {
+    id: string;
+    viewer_user_id: string;
+    viewer_email: string;
+    viewer_display_name: string | null;
+    club_tier: ClubTier | null;
+    created_at: string;
+  };
+  const [streamerFanClubMembers, setStreamerFanClubMembers] = useState<StreamerFanClubMemberRow[] | null>(null);
+  const [streamerFanClubBusy, setStreamerFanClubBusy] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -314,6 +324,27 @@ function ProfilePageContent() {
       cancelled = true;
     };
   }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+    if (streamerApp?.status !== "approved") {
+      setStreamerFanClubMembers(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/streamer/fan-club/members")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { members?: StreamerFanClubMemberRow[] } | null) => {
+        if (cancelled) return;
+        setStreamerFanClubMembers(Array.isArray(d?.members) ? d.members : []);
+      })
+      .catch(() => {
+        if (!cancelled) setStreamerFanClubMembers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, streamerApp?.status]);
 
   useEffect(() => {
     if (!twitch?.linked) {
@@ -455,6 +486,40 @@ function ProfilePageContent() {
       .finally(() => {
         setDisconnecting(false);
       });
+  }
+
+  async function updateStreamerFanClubMemberTier(id: string, club_tier: ClubTier) {
+    setStreamerFanClubBusy(id);
+    try {
+      const res = await fetch(`/api/streamer/fan-club/members/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ club_tier }),
+      });
+      if (!res.ok) return;
+      setStreamerFanClubMembers((prev) =>
+        prev
+          ? prev.map((member) => (member.id === id ? { ...member, club_tier } : member))
+          : prev
+      );
+    } finally {
+      setStreamerFanClubBusy(null);
+    }
+  }
+
+  async function revokeStreamerFanClubMember(id: string) {
+    setStreamerFanClubBusy(id);
+    try {
+      const res = await fetch(`/api/streamer/fan-club/members/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revoke: true }),
+      });
+      if (!res.ok) return;
+      setStreamerFanClubMembers((prev) => (prev ? prev.filter((member) => member.id !== id) : prev));
+    } finally {
+      setStreamerFanClubBusy(null);
+    }
   }
 
   if (loading) {
@@ -678,6 +743,69 @@ function ProfilePageContent() {
                       Manage requests
                     </Link>
                   </p>
+                </dd>
+              </div>
+            )}
+            {streamerApp?.status === "approved" && (
+              <div>
+                <dt className="text-sm text-zinc-500">Your fan club</dt>
+                <dd className="mt-2 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm">
+                    <div>
+                      <p className="text-zinc-200">
+                        Manage members, upgrade them, or remove them from your streamer fan club.
+                      </p>
+                      <p className="text-xs text-zinc-600">
+                        Open the full fan club page for requests, boards, and member tools.
+                      </p>
+                    </div>
+                    <Link href="/streamer/superfan" className="text-sm font-medium text-rust-cyan hover:underline">
+                      Open fan club →
+                    </Link>
+                  </div>
+                  {streamerFanClubMembers === null ? (
+                    <p className="text-sm text-zinc-500">Loading members…</p>
+                  ) : streamerFanClubMembers.length === 0 ? (
+                    <p className="text-sm text-zinc-500">No active fan club members yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {streamerFanClubMembers.map((member) => (
+                        <div
+                          key={member.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm"
+                        >
+                          <div>
+                            <p className="text-zinc-200">{member.viewer_display_name || member.viewer_email}</p>
+                            <p className="text-xs text-zinc-500">
+                              {member.viewer_email} · joined {new Date(member.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={member.club_tier ?? "fan"}
+                              disabled={streamerFanClubBusy === member.id}
+                              onChange={(e) =>
+                                void updateStreamerFanClubMemberTier(member.id, e.target.value as ClubTier)
+                              }
+                              className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200"
+                            >
+                              <option value="fan">Fan</option>
+                              <option value="superfan">Superfan</option>
+                              <option value="mod">Mod</option>
+                            </select>
+                            <button
+                              type="button"
+                              disabled={streamerFanClubBusy !== null}
+                              onClick={() => void revokeStreamerFanClubMember(member.id)}
+                              className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </dd>
               </div>
             )}
