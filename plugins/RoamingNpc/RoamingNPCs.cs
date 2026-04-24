@@ -99,6 +99,10 @@ namespace Oxide.Plugins
             [JsonProperty("RustMaxx streamer lumberjack python defense applied", Order = 7)]
             public bool StreamerLumberjackPythonDefenseApplied { get; set; }
 
+            /// <summary>One-time migration: streamer_miner gets a hatchet so bridge task "wood" does not fall back to pickaxe.</summary>
+            [JsonProperty("RustMaxx streamer miner hatchet bridge applied", Order = 8)]
+            public bool StreamerMinerHatchetBridgeApplied { get; set; }
+
             [JsonProperty(RU ? "Укажите для генератора ID ботов (от 8 - 15)" : "Specify the ID of the bot generator (8 - 15)")]
             private int digits = 9;
 
@@ -2991,6 +2995,7 @@ namespace Oxide.Plugins
             EnsureStreamerMacTemplate();
             MigrateStreamerRockyTerrainBridgeHintsOnce();
             MigrateStreamerMedicEscortPersonalityOnce();
+            MigrateStreamerMinerHatchetBridgeOnce();
             MigrateStreamerLumberjackPythonDefenseOnce();
             foreach (var bot in config.bots)
             {
@@ -3631,7 +3636,12 @@ namespace Oxide.Plugins
                     new ItemBot(true, true, new ItemSetup("pickaxe", 0)),
                 };
 
-                clone.ItemsMiningTree.Items = new List<ItemBot>();
+                // Wood task flips CanMiningWood on; give miner a proper hatchet so it obeys wood without falling back to pickaxe.
+                clone.ItemsMiningTree.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, false, new ItemSetup("hatchet", 0)),
+                    new ItemBot(true, true, new ItemSetup("hatchet", 0)),
+                };
 
                 // Patrol/hunter clones often carry a hunting knife — Knife and Pickaxe share belt slot index 0.
                 clone.ItemsButcher.Items = new List<ItemBot>();
@@ -3649,12 +3659,38 @@ namespace Oxide.Plugins
                 config.bots[minerKey] = clone;
                 SaveConfig();
                 PrintWarning(
-                    "[RoamingNPCs] Added default bot template 'streamer_miner' (Kick hazmat + backpack + revolver; ~2× ore gathering). Use ?template=streamer_miner.");
+                    "[RoamingNPCs] Added default bot template 'streamer_miner' (Kick hazmat + backpack + revolver + hatchet for wood task; ~2× ore gathering). Use ?template=streamer_miner.");
             }
             catch (Exception ex)
             {
                 PrintWarning($"[RoamingNPCs] Could not add streamer_miner template: {ex.Message}");
             }
+        }
+
+        /// <summary>Existing servers: add a hatchet to <c>streamer_miner</c> when tree tools were empty, so bridge task <c>wood</c> uses the right tool.</summary>
+        private void MigrateStreamerMinerHatchetBridgeOnce()
+        {
+            if (config?.bots == null) return;
+            if (config.StreamerMinerHatchetBridgeApplied) return;
+
+            var needsApply = config.bots.TryGetValue("streamer_miner", out var miner) && miner != null &&
+                             (miner.ItemsMiningTree == null || miner.ItemsMiningTree.Items == null ||
+                              miner.ItemsMiningTree.Items.Count == 0);
+
+            if (needsApply && miner != null)
+            {
+                miner.ItemsMiningTree ??= new ItemsList<ItemBot>();
+                miner.ItemsMiningTree.Items = new List<ItemBot>
+                {
+                    new ItemBot(false, false, new ItemSetup("hatchet", 0)),
+                    new ItemBot(true, true, new ItemSetup("hatchet", 0)),
+                };
+                PrintWarning(
+                    "[RoamingNPCs] streamer_miner: added hatchet so MaxxInvaders / bridge task wood uses the correct tool instead of pickaxe.");
+            }
+
+            config.StreamerMinerHatchetBridgeApplied = true;
+            SaveConfig();
         }
 
         /// <summary>Existing servers: add Python revolver + ammo to <c>streamer_lumberjack</c> when it had no weapon (legacy default).</summary>
